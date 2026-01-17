@@ -103,6 +103,8 @@ pub struct Padding {
     style: Style,
     /// Width to expand content to.
     width: usize,
+    /// Expand lines to the full inner width.
+    expand: bool,
 }
 
 impl Padding {
@@ -118,6 +120,7 @@ impl Padding {
             pad: pad.into(),
             style: Style::new(),
             width,
+            expand: true,
         }
     }
 
@@ -126,6 +129,18 @@ impl Padding {
     pub fn style(mut self, style: Style) -> Self {
         self.style = style;
         self
+    }
+
+    /// Set whether to expand lines to the full inner width.
+    #[must_use]
+    pub const fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
+    }
+
+    /// Get the width of a line in cells.
+    fn line_width(line: &[Segment]) -> usize {
+        line.iter().map(Segment::cell_length).sum()
     }
 
     /// Render with padding applied.
@@ -159,7 +174,18 @@ impl Padding {
                 line.push(Segment::new(&left_pad, Some(self.style.clone())));
             }
 
+            let content_width = Self::line_width(&content_line);
             line.extend(content_line);
+
+            if self.expand && content_width < inner_width {
+                let fill = inner_width.saturating_sub(content_width);
+                if fill > 0 {
+                    line.push(Segment::new(
+                        " ".repeat(fill),
+                        Some(self.style.clone()),
+                    ));
+                }
+            }
 
             if self.pad.right > 0 {
                 line.push(Segment::new(&right_pad, Some(self.style.clone())));
@@ -194,6 +220,7 @@ pub fn indent(level: usize) -> PaddingDimensions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cells::cell_len;
 
     #[test]
     fn test_padding_all() {
@@ -264,5 +291,56 @@ mod tests {
 
         // Should have 1 top + 1 content + 1 bottom = 3 lines
         assert_eq!(lines.len(), 3);
+    }
+
+    fn line_text(line: &[Segment]) -> String {
+        line.iter().map(|seg| seg.text.as_str()).collect::<String>()
+    }
+
+    fn line_width(line: &[Segment]) -> usize {
+        line.iter().map(|seg| cell_len(&seg.text)).sum()
+    }
+
+    #[test]
+    fn test_padding_left_right_expand() {
+        let content = vec![vec![Segment::new("Hi", None)]];
+        let padded = Padding::new(content, (0, 2, 0, 1), 6);
+        let lines = padded.render();
+
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_width(&lines[0]), 6);
+        assert_eq!(line_text(&lines[0]), " Hi   ");
+    }
+
+    #[test]
+    fn test_padding_no_expand() {
+        let content = vec![vec![Segment::new("Hi", None)]];
+        let padded = Padding::new(content, (0, 2, 0, 1), 6).expand(false);
+        let lines = padded.render();
+
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_width(&lines[0]), 5);
+        assert_eq!(line_text(&lines[0]), " Hi  ");
+    }
+
+    #[test]
+    fn test_padding_zero_noop() {
+        let content = vec![vec![Segment::new("Hi", None)]];
+        let padded = Padding::new(content.clone(), 0, 2).expand(false);
+        let lines = padded.render();
+
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_text(&lines[0]), "Hi");
+    }
+
+    #[test]
+    fn test_padding_nested_accumulates() {
+        let content = vec![vec![Segment::new("Hi", None)]];
+        let inner = Padding::new(content, 1, 4).render();
+        let outer = Padding::new(inner, 1, 6).render();
+
+        assert_eq!(outer.len(), 3);
+        assert_eq!(line_width(&outer[1]), 6);
+        assert_eq!(line_text(&outer[1]), "  Hi  ");
     }
 }
