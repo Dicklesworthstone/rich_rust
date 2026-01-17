@@ -1,0 +1,10 @@
+legacy_rich/
+legacy_rich/
+
+
+# Added by cargo
+
+/target
+
+# bv (beads viewer) local config and caches
+.bv/
