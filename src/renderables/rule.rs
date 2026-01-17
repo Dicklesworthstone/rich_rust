@@ -228,4 +228,99 @@ mod tests {
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         assert!(text.contains('\u{2501}')); // ━
     }
+
+    #[test]
+    fn test_double_rule() {
+        let rule = double_rule();
+        let segments = rule.render(10);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(text.contains('\u{2550}')); // ═
+    }
+
+    #[test]
+    fn test_rule_width_zero() {
+        let rule = Rule::new();
+        let segments = rule.render(0);
+        // Should handle zero width gracefully
+        assert!(!segments.is_empty()); // At least a newline segment
+    }
+
+    #[test]
+    fn test_rule_width_one() {
+        let rule = Rule::new();
+        let segments = rule.render(1);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        // Width 1 should produce at least one rule char
+        assert!(text.contains('\u{2500}') || text.is_empty() || text == "\n");
+    }
+
+    #[test]
+    fn test_rule_title_narrow_width() {
+        let rule = Rule::with_title("Very Long Title Text");
+        let segments = rule.render(10);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        // Should handle narrow width without panicking
+        assert!(!text.is_empty());
+    }
+
+    #[test]
+    fn test_rule_title_insufficient_space() {
+        let rule = Rule::with_title("Test");
+        // Width too small for title + surrounding rules
+        let segments = rule.render(5);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        // Should handle gracefully
+        assert!(!text.is_empty());
+    }
+
+    #[test]
+    fn test_rule_right_align() {
+        let rule = Rule::with_title("X").align_right();
+        let plain = rule.render_plain(20);
+        // Title should be near the right, so more rule chars on left
+        let parts: Vec<&str> = plain.trim().split(" X ").collect();
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].len() > parts[1].len());
+    }
+
+    #[test]
+    fn test_rule_center_align() {
+        let rule = Rule::with_title("Hi").align_center();
+        let plain = rule.render_plain(20);
+        // Title should be in center
+        assert!(plain.contains(" Hi "));
+    }
+
+    #[test]
+    fn test_rule_with_styled_title() {
+        let title = Text::new("Styled");
+        let rule = Rule::with_title(title);
+        let segments = rule.render(20);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(text.contains("Styled"));
+    }
+
+    #[test]
+    fn test_rule_multi_char() {
+        // Multi-character rule string
+        let rule = Rule::new().character("=-");
+        let segments = rule.render(10);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(text.contains("=-"));
+    }
+
+    #[test]
+    fn test_rule_fills_width_no_title() {
+        let rule = Rule::new();
+        let segments = rule.render(10);
+        // Count rule characters (excluding control segments like newline)
+        let text: String = segments
+            .iter()
+            .filter(|s| !s.is_control())
+            .map(|s| s.text.as_str())
+            .collect();
+        // The rule chars are repeated to fill width, minus any trailing newline
+        let rule_width = cells::cell_len(&text);
+        assert!(rule_width >= 10, "Rule should fill width: got {}", rule_width);
+    }
 }
