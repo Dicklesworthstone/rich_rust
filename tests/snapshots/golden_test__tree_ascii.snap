@@ -3,7 +3,7 @@ source: tests/golden_test.rs
 expression: plain
 ---
 Root
-    |-- Branch A
+    +-- Branch A
     |   `-- Leaf 1
     `-- Branch B
         `-- Leaf 2

@@ -39,7 +39,7 @@ impl TreeGuides {
     #[must_use]
     pub const fn branch(&self) -> &str {
         match self {
-            Self::Ascii => "|-- ",
+            Self::Ascii => "+-- ",
             Self::Unicode => "\u{251C}\u{2500}\u{2500} ",       // ├──
             Self::Bold => "\u{2523}\u{2501}\u{2501} ",          // ┣━━
             Self::Double => "\u{2560}\u{2550}\u{2550} ",        // ╠══
@@ -450,7 +450,7 @@ mod tests {
     fn test_tree_guides_ascii() {
         let guides = TreeGuides::Ascii;
         assert_eq!(guides.vertical(), "|   ");
-        assert_eq!(guides.branch(), "|-- ");
+        assert_eq!(guides.branch(), "+-- ");
         assert_eq!(guides.last(), "`-- ");
         assert_eq!(guides.space(), "    ");
     }
@@ -541,7 +541,7 @@ mod tests {
         );
 
         let plain = tree.render_plain();
-        assert!(plain.contains("|--") || plain.contains("`--"));
+        assert!(plain.contains("+--") || plain.contains("`--"));
     }
 
     #[test]
@@ -598,5 +598,76 @@ mod tests {
         assert!(plain.contains("leaf3"));
         assert!(plain.contains("sub-branch"));
         assert!(plain.contains("deep-leaf"));
+    }
+
+    #[test]
+    fn test_tree_empty_root() {
+        // Tree with just an empty root
+        let tree = Tree::with_label("");
+        let plain = tree.render_plain();
+        // Should render without panic
+        assert!(!plain.is_empty() || plain.len() >= 0); // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_tree_single_node() {
+        let tree = Tree::with_label("single");
+        let plain = tree.render_plain();
+        assert!(plain.contains("single"));
+        // Should have no guide characters at root
+        assert!(!plain.contains("├──"));
+        assert!(!plain.contains("└──"));
+    }
+
+    #[test]
+    fn test_tree_wide_unicode_labels() {
+        // Test with CJK characters (each is 2 cells wide)
+        let tree = Tree::with_label("项目")  // "project" in Chinese
+            .child(TreeNode::new("源代码"))  // "source code"
+            .child(TreeNode::new("文档"));   // "documentation"
+
+        let plain = tree.render_plain();
+        assert!(plain.contains("项目"));
+        assert!(plain.contains("源代码"));
+        assert!(plain.contains("文档"));
+    }
+
+    #[test]
+    fn test_tree_emoji_labels() {
+        let tree = Tree::with_label("📁 Root")
+            .child(TreeNode::new("📄 File"))
+            .child(TreeNode::new("🔧 Config"));
+
+        let plain = tree.render_plain();
+        assert!(plain.contains("📁"));
+        assert!(plain.contains("📄"));
+        assert!(plain.contains("🔧"));
+    }
+
+    #[test]
+    fn test_tree_guides_bold() {
+        let guides = TreeGuides::Bold;
+        assert_eq!(guides.vertical(), "┃   ");
+        assert_eq!(guides.branch(), "┣━━ ");
+        assert_eq!(guides.last(), "┗━━ ");
+        assert_eq!(guides.space(), "    ");
+    }
+
+    #[test]
+    fn test_tree_guides_double() {
+        let guides = TreeGuides::Double;
+        assert_eq!(guides.vertical(), "║   ");
+        assert_eq!(guides.branch(), "╠══ ");
+        assert_eq!(guides.last(), "╚══ ");
+        assert_eq!(guides.space(), "    ");
+    }
+
+    #[test]
+    fn test_tree_guides_rounded() {
+        let guides = TreeGuides::Rounded;
+        assert_eq!(guides.vertical(), "│   ");
+        assert_eq!(guides.branch(), "├── ");
+        assert_eq!(guides.last(), "╰── ");  // Rounded uses ╰
+        assert_eq!(guides.space(), "    ");
     }
 }
