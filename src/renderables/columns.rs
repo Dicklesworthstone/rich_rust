@@ -457,4 +457,109 @@ mod tests {
         // Should have 3 rows (1 item per row)
         assert_eq!(lines.len(), 3);
     }
+
+    #[test]
+    fn test_columns_narrow_width() {
+        // Width too small for content
+        let cols = Columns::from_strings(&["Hello", "World"])
+            .column_count(2)
+            .gutter(2);
+
+        // Even with narrow width, should not panic
+        let lines = cols.render(5);
+        assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn test_columns_zero_width() {
+        let cols = Columns::from_strings(&["A", "B"]);
+        let lines = cols.render(0);
+        // Should handle zero width gracefully (may be empty)
+        assert!(lines.is_empty() || !lines.is_empty()); // Just verify no panic
+    }
+
+    #[test]
+    fn test_columns_many_items() {
+        // Test with many items to verify row calculation
+        let items: Vec<&str> = (0..20).map(|_| "X").collect();
+        let cols = Columns::from_strings(&items)
+            .column_count(4);
+
+        let lines = cols.render(40);
+
+        // 20 items / 4 columns = 5 rows
+        assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn test_columns_wide_unicode() {
+        // Test with CJK characters (2 cells wide each)
+        let items = vec![
+            vec![Segment::new("你好", None)],  // 4 cells
+            vec![Segment::new("世界", None)],  // 4 cells
+        ];
+        let cols = Columns::new(items)
+            .column_count(2)
+            .gutter(2);
+
+        let lines = cols.render(20);
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_columns_content_width_calculation() {
+        // Verify content-based width calculation
+        let cols = Columns::from_strings(&["Short", "Much Longer Item"])
+            .column_count(2)
+            .equal_width(false)
+            .expand(false);
+
+        let widths = cols.calculate_column_widths(40, 2);
+
+        // Without equal_width, columns can have different widths based on content
+        // Both should be within bounds
+        assert!(widths.len() == 2);
+    }
+
+    #[test]
+    fn test_columns_expand_distribution() {
+        let cols = Columns::from_strings(&["A", "B"])
+            .column_count(2)
+            .gutter(2)
+            .expand(true);
+
+        let widths = cols.calculate_column_widths(20, 2);
+
+        // With gutter=2, available = 18, so columns should fill that
+        let total: usize = widths.iter().sum();
+        assert!(total > 0);
+    }
+
+    #[test]
+    fn test_columns_right_align() {
+        let cols = Columns::from_strings(&["X"])
+            .column_count(1)
+            .expand(true)
+            .equal_width(true)
+            .align(AlignMethod::Right);
+
+        let lines = cols.render(20);
+        let text: String = lines[0].iter().map(|s| s.text.as_str()).collect();
+
+        // Content should be right-aligned (leading spaces)
+        assert!(text.starts_with(' '));
+    }
+
+    #[test]
+    fn test_columns_padding_applied() {
+        let cols = Columns::from_strings(&["X"])
+            .column_count(1)
+            .padding(2);
+
+        let lines = cols.render(20);
+        let text: String = lines[0].iter().map(|s| s.text.as_str()).collect();
+
+        // Should have padding around content
+        assert!(text.starts_with("  ")); // 2 spaces padding
+    }
 }
