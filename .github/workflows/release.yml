@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  CRATE_NAME: rich_rust
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: rich_rust-linux-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: rich_rust-linux-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_name: rich_rust-macos-x64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_name: rich_rust-macos-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: rich_rust-windows-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry and build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release library
+        run: cargo build --release --all-features --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          # Copy static library if it exists
+          if [ -f "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.a" ]; then
+            cp "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.a" "dist/${{ matrix.artifact_name }}.a"
+          fi
+          # Copy dynamic library if it exists
+          if [ -f "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.so" ]; then
+            cp "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.so" "dist/${{ matrix.artifact_name }}.so"
+          fi
+          if [ -f "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.dylib" ]; then
+            cp "target/${{ matrix.target }}/release/lib${{ env.CRATE_NAME }}.dylib" "dist/${{ matrix.artifact_name }}.dylib"
+          fi
+          # Create tarball of the rlib
+          tar -czvf "dist/${{ matrix.artifact_name }}.tar.gz" -C "target/${{ matrix.target }}/release" .
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          # Copy lib file if exists
+          $libPath = "target/${{ matrix.target }}/release/${{ env.CRATE_NAME }}.lib"
+          if (Test-Path $libPath) {
+            Copy-Item $libPath "dist/${{ matrix.artifact_name }}.lib"
+          }
+          # Copy dll if exists
+          $dllPath = "target/${{ matrix.target }}/release/${{ env.CRATE_NAME }}.dll"
+          if (Test-Path $dllPath) {
+            Copy-Item $dllPath "dist/${{ matrix.artifact_name }}.dll"
+          }
+          # Create zip of release directory
+          Compress-Archive -Path "target/${{ matrix.target }}/release/*" -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*
+          if-no-files-found: warn
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          # Move all artifacts to release directory
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.a" -o -name "*.so" -o -name "*.dylib" -o -name "*.lib" -o -name "*.dll" \) -exec mv {} release/ \;
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          if ls * 1> /dev/null 2>&1; then
+            sha256sum * > SHA256SUMS.txt
+            cat SHA256SUMS.txt
+          else
+            echo "No release files found"
+          fi
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+          generate_release_notes: true
+          files: |
+            release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
