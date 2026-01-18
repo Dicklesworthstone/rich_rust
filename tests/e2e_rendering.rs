@@ -389,7 +389,7 @@ fn e2e_snapshot_complex_markup() {
 fn e2e_snapshot_color_palette() {
     init_test_logging();
 
-    let colors = vec![
+    let colors = [
         "[red]red[/]",
         "[green]green[/]",
         "[blue]blue[/]",

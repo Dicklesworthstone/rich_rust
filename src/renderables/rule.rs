@@ -320,8 +320,7 @@ mod tests {
         let rule_width = cells::cell_len(&text);
         assert!(
             rule_width >= 10,
-            "Rule should fill width: got {}",
-            rule_width
+            "Rule should fill width: got {rule_width}"
         );
     }
 }

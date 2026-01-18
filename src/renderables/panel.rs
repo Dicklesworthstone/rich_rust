@@ -348,7 +348,7 @@ impl Panel {
 
         // Left corner
         segments.push(Segment::new(
-            &box_chars.top[0].to_string(),
+            box_chars.top[0].to_string(),
             Some(self.border_style.clone()),
         ));
 
@@ -362,13 +362,13 @@ impl Panel {
                 let available = inner_width.saturating_sub(2);
                 let truncated = truncate_str(&title_text, available);
                 segments.push(Segment::new(
-                    &box_chars.top[1].to_string(),
+                    box_chars.top[1].to_string(),
                     Some(self.border_style.clone()),
                 ));
-                segments.push(Segment::new(&truncated, Some(title.style().clone())));
+                segments.push(Segment::new(truncated.clone(), Some(title.style().clone())));
                 let remaining = inner_width.saturating_sub(cells::cell_len(&truncated) + 1);
                 segments.push(Segment::new(
-                    &box_chars.top[1].to_string().repeat(remaining),
+                    box_chars.top[1].to_string().repeat(remaining),
                     Some(self.border_style.clone()),
                 ));
             } else {
@@ -387,30 +387,30 @@ impl Panel {
 
                 // Left rule section
                 segments.push(Segment::new(
-                    &box_chars.top[1].to_string().repeat(left_rule),
+                    box_chars.top[1].to_string().repeat(left_rule),
                     Some(self.border_style.clone()),
                 ));
 
                 // Title
-                segments.push(Segment::new(&title_text, Some(title.style().clone())));
+                segments.push(Segment::new(title_text, Some(title.style().clone())));
 
                 // Right rule section
                 segments.push(Segment::new(
-                    &box_chars.top[1].to_string().repeat(right_rule),
+                    box_chars.top[1].to_string().repeat(right_rule),
                     Some(self.border_style.clone()),
                 ));
             }
         } else {
             // No title, just a line
             segments.push(Segment::new(
-                &box_chars.top[1].to_string().repeat(inner_width),
+                box_chars.top[1].to_string().repeat(inner_width),
                 Some(self.border_style.clone()),
             ));
         }
 
         // Right corner
         segments.push(Segment::new(
-            &box_chars.top[3].to_string(),
+            box_chars.top[3].to_string(),
             Some(self.border_style.clone()),
         ));
 
@@ -423,7 +423,7 @@ impl Panel {
 
         // Left corner
         segments.push(Segment::new(
-            &box_chars.bottom[0].to_string(),
+            box_chars.bottom[0].to_string(),
             Some(self.border_style.clone()),
         ));
 
@@ -437,13 +437,13 @@ impl Panel {
                 let available = inner_width.saturating_sub(2);
                 let truncated = truncate_str(&subtitle_text, available);
                 segments.push(Segment::new(
-                    &box_chars.bottom[1].to_string(),
+                    box_chars.bottom[1].to_string(),
                     Some(self.border_style.clone()),
                 ));
-                segments.push(Segment::new(&truncated, Some(subtitle.style().clone())));
+                segments.push(Segment::new(truncated.clone(), Some(subtitle.style().clone())));
                 let remaining = inner_width.saturating_sub(cells::cell_len(&truncated) + 1);
                 segments.push(Segment::new(
-                    &box_chars.bottom[1].to_string().repeat(remaining),
+                    box_chars.bottom[1].to_string().repeat(remaining),
                     Some(self.border_style.clone()),
                 ));
             } else {
@@ -462,30 +462,30 @@ impl Panel {
 
                 // Left rule section
                 segments.push(Segment::new(
-                    &box_chars.bottom[1].to_string().repeat(left_rule),
+                    box_chars.bottom[1].to_string().repeat(left_rule),
                     Some(self.border_style.clone()),
                 ));
 
                 // Subtitle
-                segments.push(Segment::new(&subtitle_text, Some(subtitle.style().clone())));
+                segments.push(Segment::new(subtitle_text, Some(subtitle.style().clone())));
 
                 // Right rule section
                 segments.push(Segment::new(
-                    &box_chars.bottom[1].to_string().repeat(right_rule),
+                    box_chars.bottom[1].to_string().repeat(right_rule),
                     Some(self.border_style.clone()),
                 ));
             }
         } else {
             // No subtitle, just a line
             segments.push(Segment::new(
-                &box_chars.bottom[1].to_string().repeat(inner_width),
+                box_chars.bottom[1].to_string().repeat(inner_width),
                 Some(self.border_style.clone()),
             ));
         }
 
         // Right corner
         segments.push(Segment::new(
-            &box_chars.bottom[3].to_string(),
+            box_chars.bottom[3].to_string(),
             Some(self.border_style.clone()),
         ));
 
