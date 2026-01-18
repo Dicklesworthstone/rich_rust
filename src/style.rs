@@ -3,13 +3,13 @@
 //! This module provides the `Style` struct for representing visual attributes
 //! including colors, text decorations (bold, italic, etc.), and hyperlinks.
 
-use std::fmt;
-use std::str::FromStr;
-use std::sync::LazyLock;
 use bitflags::bitflags;
 use lru::LruCache;
-use std::sync::Mutex;
+use std::fmt;
 use std::num::NonZeroUsize;
+use std::str::FromStr;
+use std::sync::LazyLock;
+use std::sync::Mutex;
 
 use crate::color::{Color, ColorParseError, ColorSystem, ColorTriplet};
 
@@ -103,6 +103,12 @@ pub struct Style {
     pub set_attributes: Attributes,
     /// URL for hyperlinks.
     pub link: Option<String>,
+    /// Hyperlink ID for OSC 8 tracking/deduplication.
+    /// If set, the OSC 8 sequence will include `id={link_id}`.
+    pub link_id: Option<String>,
+    /// Arbitrary metadata attached to this style.
+    /// Used for storing custom data that doesn't affect rendering.
+    pub meta: Option<Vec<u8>>,
     /// Whether this is a null/empty style.
     null: bool,
 }
@@ -246,6 +252,37 @@ impl Style {
         self
     }
 
+    /// Set a hyperlink URL with an explicit ID for tracking/deduplication.
+    ///
+    /// The ID is included in the OSC 8 sequence: `\x1b]8;id={link_id};{url}\x1b\\`
+    #[must_use]
+    pub fn link_with_id(mut self, url: impl Into<String>, id: impl Into<String>) -> Self {
+        self.link = Some(url.into());
+        self.link_id = Some(id.into());
+        self.null = false;
+        self
+    }
+
+    /// Set the hyperlink ID for OSC 8 tracking.
+    ///
+    /// This is useful when you want to set the ID separately from the URL.
+    #[must_use]
+    pub fn link_id(mut self, id: impl Into<String>) -> Self {
+        self.link_id = Some(id.into());
+        self.null = false;
+        self
+    }
+
+    /// Set arbitrary metadata attached to this style.
+    ///
+    /// Metadata does not affect rendering and is used for storing custom data.
+    #[must_use]
+    pub fn meta(mut self, data: impl Into<Vec<u8>>) -> Self {
+        self.meta = Some(data.into());
+        self.null = false;
+        self
+    }
+
     /// Disable a specific attribute.
     #[must_use]
     pub fn not(mut self, attr: Attributes) -> Self {
@@ -272,6 +309,8 @@ impl Style {
                 | (other.attributes & other.set_attributes),
             set_attributes: self.set_attributes | other.set_attributes,
             link: other.link.clone().or_else(|| self.link.clone()),
+            link_id: other.link_id.clone().or_else(|| self.link_id.clone()),
+            meta: other.meta.clone().or_else(|| self.meta.clone()),
             null: false,
         }
     }
@@ -319,8 +358,13 @@ impl Style {
         let mut result = String::with_capacity(text.len() + codes.len() + 50);
 
         // Handle hyperlinks (OSC 8)
+        // Format: \x1b]8;{params};{url}\x1b\\ where params can include id={link_id}
         if let Some(link) = &self.link {
-            result.push_str(&format!("\x1b]8;;{link}\x1b\\"));
+            let params = self
+                .link_id
+                .as_ref()
+                .map_or(String::new(), |id| format!("id={id}"));
+            result.push_str(&format!("\x1b]8;{params};{link}\x1b\\"));
         }
 
         // Apply style (only if there are codes)
@@ -351,7 +395,7 @@ impl Style {
         }
 
         let codes = self.make_ansi_codes(color_system);
-        if codes.is_empty() {
+        if codes.is_empty() && self.link.is_none() {
             return (String::new(), String::new());
         }
 
@@ -359,16 +403,27 @@ impl Style {
         let suffix;
 
         // Handle hyperlinks (OSC 8)
+        // Format: \x1b]8;{params};{url}\x1b\\ where params can include id={link_id}
         if let Some(link) = &self.link {
-            prefix.push_str(&format!("\x1b]8;;{link}\x1b\\"));
+            let params = self
+                .link_id
+                .as_ref()
+                .map_or(String::new(), |id| format!("id={id}"));
+            prefix.push_str(&format!("\x1b]8;{params};{link}\x1b\\"));
         }
 
-        // Apply style
-        prefix.push_str(&format!("\x1b[{codes}m"));
+        // Apply style (only if there are codes)
+        if !codes.is_empty() {
+            prefix.push_str(&format!("\x1b[{codes}m"));
+        }
 
         // Build suffix
         if self.link.is_some() {
-            suffix = String::from("\x1b[0m\x1b]8;;\x1b\\");
+            if codes.is_empty() {
+                suffix = String::from("\x1b]8;;\x1b\\");
+            } else {
+                suffix = String::from("\x1b[0m\x1b]8;;\x1b\\");
+            }
         } else {
             suffix = String::from("\x1b[0m");
         }
@@ -387,16 +442,16 @@ impl Style {
     /// - Link: `"link https://..."`
     /// - Combined: `"bold red on white"`
     pub fn parse(style: &str) -> Result<Self, StyleParseError> {
-        static CACHE: LazyLock<Mutex<LruCache<String, Style>>> = LazyLock::new(|| {
-            Mutex::new(LruCache::new(NonZeroUsize::new(512).expect("non-zero")))
-        });
+        static CACHE: LazyLock<Mutex<LruCache<String, Style>>> =
+            LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(512).expect("non-zero"))));
 
         let normalized = style.trim().to_lowercase();
 
         if let Ok(mut cache) = CACHE.lock()
-            && let Some(cached) = cache.get(&normalized) {
-                return Ok(cached.clone());
-            }
+            && let Some(cached) = cache.get(&normalized)
+        {
+            return Ok(cached.clone());
+        }
 
         let result = Self::parse_uncached(&normalized)?;
 
@@ -572,9 +627,13 @@ impl fmt::Display for Style {
             parts.push(format!("on {bgcolor}"));
         }
 
-        // Add link
+        // Add link with optional id
         if let Some(link) = &self.link {
-            parts.push(format!("link {link}"));
+            if let Some(id) = &self.link_id {
+                parts.push(format!("link[{id}] {link}"));
+            } else {
+                parts.push(format!("link {link}"));
+            }
         }
 
         write!(f, "{}", parts.join(" "))
@@ -751,10 +810,7 @@ mod tests {
 
     #[test]
     fn test_style_builder() {
-        let style = Style::new()
-            .bold()
-            .italic()
-            .color(Color::from_ansi(1));
+        let style = Style::new().bold().italic().color(Color::from_ansi(1));
 
         assert!(style.attributes.contains(Attributes::BOLD));
         assert!(style.attributes.contains(Attributes::ITALIC));
@@ -959,8 +1015,8 @@ mod tests {
         let rendered = style.render("text", ColorSystem::TrueColor);
 
         // Should contain SGR codes for bold (1), italic (3)
-        assert!(rendered.contains("1"));
-        assert!(rendered.contains("3"));
+        assert!(rendered.contains('1'));
+        assert!(rendered.contains('3'));
         // Should contain reset at end
         assert!(rendered.contains("\x1b[0m"));
     }
@@ -1009,7 +1065,7 @@ mod tests {
     #[test]
     fn test_style_display() {
         let style = Style::new().bold().italic();
-        let display = format!("{}", style);
+        let display = format!("{style}");
         assert!(display.contains("bold"));
         assert!(display.contains("italic"));
     }
@@ -1017,7 +1073,7 @@ mod tests {
     #[test]
     fn test_style_display_null() {
         let style = Style::null();
-        assert_eq!(format!("{}", style), "none");
+        assert_eq!(format!("{style}"), "none");
     }
 
     #[test]
@@ -1131,11 +1187,36 @@ mod tests {
     #[test]
     fn test_style_parse_short_aliases() {
         // Test all short aliases
-        assert!(Style::parse("r").unwrap().attributes.contains(Attributes::REVERSE));
-        assert!(Style::parse("c").unwrap().attributes.contains(Attributes::CONCEAL));
-        assert!(Style::parse("s").unwrap().attributes.contains(Attributes::STRIKE));
-        assert!(Style::parse("o").unwrap().attributes.contains(Attributes::OVERLINE));
-        assert!(Style::parse("uu").unwrap().attributes.contains(Attributes::UNDERLINE2));
+        assert!(
+            Style::parse("r")
+                .unwrap()
+                .attributes
+                .contains(Attributes::REVERSE)
+        );
+        assert!(
+            Style::parse("c")
+                .unwrap()
+                .attributes
+                .contains(Attributes::CONCEAL)
+        );
+        assert!(
+            Style::parse("s")
+                .unwrap()
+                .attributes
+                .contains(Attributes::STRIKE)
+        );
+        assert!(
+            Style::parse("o")
+                .unwrap()
+                .attributes
+                .contains(Attributes::OVERLINE)
+        );
+        assert!(
+            Style::parse("uu")
+                .unwrap()
+                .attributes
+                .contains(Attributes::UNDERLINE2)
+        );
     }
 
     #[test]
@@ -1179,14 +1260,11 @@ mod tests {
 
     #[test]
     fn test_style_make_ansi_codes() {
-        let style = Style::new()
-            .bold()
-            .italic()
-            .color(Color::from_ansi(1));
+        let style = Style::new().bold().italic().color(Color::from_ansi(1));
 
         let codes = style.make_ansi_codes(ColorSystem::TrueColor);
-        assert!(codes.contains("1")); // Bold
-        assert!(codes.contains("3")); // Italic
+        assert!(codes.contains('1')); // Bold
+        assert!(codes.contains('3')); // Italic
     }
 
     #[test]
@@ -1275,7 +1353,7 @@ mod tests {
             .bgcolor(Color::from_ansi(4))
             .link("https://example.com");
 
-        let display = format!("{}", style);
+        let display = format!("{style}");
         assert!(display.contains("bold"));
         assert!(display.contains("on"));
         assert!(display.contains("link"));
@@ -1378,5 +1456,187 @@ mod tests {
         assert!(codes.contains(&2)); // DIM
         assert!(codes.contains(&3)); // ITALIC
         assert!(codes.contains(&9)); // STRIKE
+    }
+
+    // --- Tests for link_id (OSC 8 hyperlink tracking) ---
+
+    #[test]
+    fn test_style_link_with_id() {
+        let style = Style::new().link_with_id("https://example.com", "link-123");
+        assert_eq!(style.link, Some("https://example.com".to_string()));
+        assert_eq!(style.link_id, Some("link-123".to_string()));
+        assert!(!style.is_null());
+    }
+
+    #[test]
+    fn test_style_link_id_method() {
+        let style = Style::new().link("https://example.com").link_id("my-id");
+        assert_eq!(style.link, Some("https://example.com".to_string()));
+        assert_eq!(style.link_id, Some("my-id".to_string()));
+    }
+
+    #[test]
+    fn test_style_render_link_with_id() {
+        let style = Style::new().link_with_id("https://example.com", "test-id");
+        let rendered = style.render("click here", ColorSystem::TrueColor);
+
+        // Should contain OSC 8 with id parameter: \x1b]8;id={id};{url}\x1b\\
+        assert!(rendered.contains("\x1b]8;id=test-id;https://example.com\x1b\\"));
+        assert!(rendered.contains("click here"));
+        assert!(rendered.contains("\x1b]8;;\x1b\\")); // Close sequence
+    }
+
+    #[test]
+    fn test_style_render_link_without_id() {
+        let style = Style::new().link("https://example.com");
+        let rendered = style.render("click", ColorSystem::TrueColor);
+
+        // Should contain OSC 8 without id: \x1b]8;;{url}\x1b\\
+        assert!(rendered.contains("\x1b]8;;https://example.com\x1b\\"));
+        assert!(!rendered.contains("id="));
+    }
+
+    #[test]
+    fn test_style_render_ansi_link_with_id() {
+        let style = Style::new()
+            .bold()
+            .link_with_id("https://example.com", "my-link");
+        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+
+        // Prefix should contain OSC 8 with id
+        assert!(prefix.contains("\x1b]8;id=my-link;https://example.com\x1b\\"));
+        // Suffix should close the hyperlink
+        assert!(suffix.contains("\x1b]8;;\x1b\\"));
+    }
+
+    #[test]
+    fn test_style_render_ansi_link_only_with_id() {
+        // Link only (no other attributes) with id
+        let style = Style::new().link_with_id("https://test.com", "solo-id");
+        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+
+        assert!(prefix.contains("\x1b]8;id=solo-id;https://test.com\x1b\\"));
+        // No SGR codes, so prefix shouldn't have \x1b[...m
+        assert!(!prefix.contains("\x1b["));
+        // Suffix should just close hyperlink, no reset needed
+        assert_eq!(suffix, "\x1b]8;;\x1b\\");
+    }
+
+    #[test]
+    fn test_style_combine_link_id() {
+        let style1 = Style::new().link("https://a.com").link_id("id-a");
+        let style2 = Style::new().link("https://b.com").link_id("id-b");
+
+        // style2 should take precedence
+        let combined = style1.combine(&style2);
+        assert_eq!(combined.link, Some("https://b.com".to_string()));
+        assert_eq!(combined.link_id, Some("id-b".to_string()));
+    }
+
+    #[test]
+    fn test_style_combine_link_id_partial() {
+        // First style has link_id, second doesn't have link_id but has link
+        let style1 = Style::new().link_with_id("https://a.com", "id-a");
+        let style2 = Style::new().link("https://b.com"); // No link_id
+
+        let combined = style1.combine(&style2);
+        // Link from style2 takes precedence
+        assert_eq!(combined.link, Some("https://b.com".to_string()));
+        // link_id should fall back to style1's id
+        assert_eq!(combined.link_id, Some("id-a".to_string()));
+    }
+
+    #[test]
+    fn test_style_combine_preserves_link_id() {
+        // Second style has no link at all
+        let style1 = Style::new().link_with_id("https://a.com", "id-a");
+        let style2 = Style::new().bold();
+
+        let combined = style1.combine(&style2);
+        assert_eq!(combined.link, Some("https://a.com".to_string()));
+        assert_eq!(combined.link_id, Some("id-a".to_string()));
+    }
+
+    #[test]
+    fn test_style_display_with_link_id() {
+        let style = Style::new()
+            .bold()
+            .link_with_id("https://example.com", "disp-id");
+        let display = format!("{style}");
+
+        assert!(display.contains("bold"));
+        assert!(display.contains("link[disp-id] https://example.com"));
+    }
+
+    #[test]
+    fn test_style_display_link_without_id() {
+        let style = Style::new().link("https://example.com");
+        let display = format!("{style}");
+
+        assert!(display.contains("link https://example.com"));
+        assert!(!display.contains("link[")); // No id bracket
+    }
+
+    // --- Tests for meta field (serialized metadata) ---
+
+    #[test]
+    fn test_style_meta_set() {
+        let style = Style::new().meta(vec![1, 2, 3, 4]);
+        assert_eq!(style.meta, Some(vec![1, 2, 3, 4]));
+        assert!(!style.is_null());
+    }
+
+    #[test]
+    fn test_style_meta_from_slice() {
+        let data: &[u8] = &[10, 20, 30];
+        let style = Style::new().meta(data.to_vec());
+        assert_eq!(style.meta, Some(vec![10, 20, 30]));
+    }
+
+    #[test]
+    fn test_style_meta_empty() {
+        let style = Style::new().meta(Vec::new());
+        assert_eq!(style.meta, Some(Vec::new()));
+    }
+
+    #[test]
+    fn test_style_combine_meta() {
+        let style1 = Style::new().bold().meta(vec![1, 2, 3]);
+        let style2 = Style::new().italic().meta(vec![4, 5, 6]);
+
+        let combined = style1.combine(&style2);
+        // style2's meta should take precedence
+        assert_eq!(combined.meta, Some(vec![4, 5, 6]));
+    }
+
+    #[test]
+    fn test_style_combine_meta_fallback() {
+        let style1 = Style::new().meta(vec![1, 2, 3]);
+        let style2 = Style::new().italic(); // No meta
+
+        let combined = style1.combine(&style2);
+        // Should fall back to style1's meta
+        assert_eq!(combined.meta, Some(vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn test_style_combine_preserves_meta() {
+        let style1 = Style::new().meta(vec![7, 8, 9]);
+        let style2 = Style::new().bold();
+
+        let combined = style1.combine(&style2);
+        assert_eq!(combined.meta, Some(vec![7, 8, 9]));
+        assert!(combined.attributes.contains(Attributes::BOLD));
+    }
+
+    #[test]
+    fn test_style_meta_does_not_affect_rendering() {
+        let style1 = Style::new().bold().meta(vec![1, 2, 3]);
+        let style2 = Style::new().bold(); // Same attributes, no meta
+
+        // Rendering should be identical - meta doesn't affect output
+        let rendered1 = style1.render("test", ColorSystem::TrueColor);
+        let rendered2 = style2.render("test", ColorSystem::TrueColor);
+        assert_eq!(rendered1, rendered2);
     }
 }
