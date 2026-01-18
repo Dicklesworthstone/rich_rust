@@ -19,8 +19,8 @@ fn main() {
     }
 
     // Rule with title
-    let rule_titled = Rule::with_title("Section Title")
-        .style(Style::parse("cyan").unwrap_or_default());
+    let rule_titled =
+        Rule::with_title("Section Title").style(Style::parse("cyan").unwrap_or_default());
     for seg in rule_titled.render(width) {
         print!("{}", seg.text);
     }

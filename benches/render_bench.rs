@@ -51,9 +51,7 @@ fn benchmark_style_render(c: &mut Criterion) {
         .italic()
         .color(Color::from_rgb(255, 100, 50))
         .bgcolor(Color::from_rgb(0, 50, 100));
-    let link_style = Style::new()
-        .bold()
-        .link("https://example.com/page");
+    let link_style = Style::new().bold().link("https://example.com/page");
     let text = "Hello, World!";
 
     c.bench_function("style_render_simple", |b| {

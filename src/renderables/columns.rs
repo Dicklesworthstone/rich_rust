@@ -75,10 +75,8 @@ impl Columns {
     /// Create columns from strings.
     #[must_use]
     pub fn from_strings(items: &[&str]) -> Self {
-        let segments: Vec<Vec<Segment>> = items
-            .iter()
-            .map(|s| vec![Segment::new(*s, None)])
-            .collect();
+        let segments: Vec<Vec<Segment>> =
+            items.iter().map(|s| vec![Segment::new(*s, None)]).collect();
         Self::new(segments)
     }
 
@@ -194,7 +192,8 @@ impl Columns {
         }
 
         // Find the widest item
-        let max_item_width = self.items
+        let max_item_width = self
+            .items
             .iter()
             .map(|item| Self::item_width(item) + self.padding * 2)
             .max()
@@ -222,7 +221,9 @@ impl Columns {
             return vec![];
         }
 
-        let num_columns = self.column_count.unwrap_or_else(|| self.auto_column_count(total_width));
+        let num_columns = self
+            .column_count
+            .unwrap_or_else(|| self.auto_column_count(total_width));
         let column_widths = self.calculate_column_widths(total_width, num_columns);
 
         if column_widths.is_empty() {
@@ -299,10 +300,7 @@ mod tests {
 
     #[test]
     fn test_columns_new() {
-        let items = vec![
-            vec![Segment::new("A", None)],
-            vec![Segment::new("B", None)],
-        ];
+        let items = vec![vec![Segment::new("A", None)], vec![Segment::new("B", None)]];
         let cols = Columns::new(items);
         assert_eq!(cols.items.len(), 2);
     }
@@ -387,9 +385,7 @@ mod tests {
 
     #[test]
     fn test_columns_with_gutter() {
-        let cols = Columns::from_strings(&["A", "B"])
-            .column_count(2)
-            .gutter(4);
+        let cols = Columns::from_strings(&["A", "B"]).column_count(2).gutter(4);
 
         let lines = cols.render(20);
         let line = &lines[0];
@@ -417,8 +413,7 @@ mod tests {
 
     #[test]
     fn test_columns_render_flat() {
-        let cols = Columns::from_strings(&["A", "B", "C", "D"])
-            .column_count(2);
+        let cols = Columns::from_strings(&["A", "B", "C", "D"]).column_count(2);
 
         let segments = cols.render_flat(20);
 
@@ -430,8 +425,7 @@ mod tests {
     #[test]
     fn test_columns_uneven_items() {
         // 5 items in 2 columns = 3 rows (last row has 1 item + 1 empty)
-        let cols = Columns::from_strings(&["1", "2", "3", "4", "5"])
-            .column_count(2);
+        let cols = Columns::from_strings(&["1", "2", "3", "4", "5"]).column_count(2);
 
         let lines = cols.render(20);
         assert_eq!(lines.len(), 3);
@@ -449,8 +443,7 @@ mod tests {
 
     #[test]
     fn test_columns_single_column() {
-        let cols = Columns::from_strings(&["A", "B", "C"])
-            .column_count(1);
+        let cols = Columns::from_strings(&["A", "B", "C"]).column_count(1);
 
         let lines = cols.render(20);
 
@@ -482,8 +475,7 @@ mod tests {
     fn test_columns_many_items() {
         // Test with many items to verify row calculation
         let items: Vec<&str> = (0..20).map(|_| "X").collect();
-        let cols = Columns::from_strings(&items)
-            .column_count(4);
+        let cols = Columns::from_strings(&items).column_count(4);
 
         let lines = cols.render(40);
 
@@ -495,12 +487,10 @@ mod tests {
     fn test_columns_wide_unicode() {
         // Test with CJK characters (2 cells wide each)
         let items = vec![
-            vec![Segment::new("你好", None)],  // 4 cells
-            vec![Segment::new("世界", None)],  // 4 cells
+            vec![Segment::new("你好", None)], // 4 cells
+            vec![Segment::new("世界", None)], // 4 cells
         ];
-        let cols = Columns::new(items)
-            .column_count(2)
-            .gutter(2);
+        let cols = Columns::new(items).column_count(2).gutter(2);
 
         let lines = cols.render(20);
         assert_eq!(lines.len(), 1);
@@ -552,9 +542,7 @@ mod tests {
 
     #[test]
     fn test_columns_padding_applied() {
-        let cols = Columns::from_strings(&["X"])
-            .column_count(1)
-            .padding(2);
+        let cols = Columns::from_strings(&["X"]).column_count(1).padding(2);
 
         let lines = cols.render(20);
         let text: String = lines[0].iter().map(|s| s.text.as_str()).collect();

@@ -117,9 +117,29 @@ fn create_large_table(rows: usize, cols: usize) -> Table {
 /// Generate random-ish text for testing
 fn generate_text(length: usize) -> String {
     let words = [
-        "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
-        "Lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing",
-        "elit", "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore",
+        "the",
+        "quick",
+        "brown",
+        "fox",
+        "jumps",
+        "over",
+        "lazy",
+        "dog",
+        "Lorem",
+        "ipsum",
+        "dolor",
+        "sit",
+        "amet",
+        "consectetur",
+        "adipiscing",
+        "elit",
+        "sed",
+        "do",
+        "eiusmod",
+        "tempor",
+        "incididunt",
+        "ut",
+        "labore",
     ];
 
     let mut result = String::with_capacity(length);
@@ -253,7 +273,9 @@ fn perf_color_parse_10000_cached() {
     tracing::info!("Starting performance test: color parsing 10000 with cache hits");
 
     // Use a small set of colors repeatedly to test cache performance
-    let base_colors = ["red", "green", "blue", "yellow", "cyan", "magenta", "#ff0000", "#00ff00"];
+    let base_colors = [
+        "red", "green", "blue", "yellow", "cyan", "magenta", "#ff0000", "#00ff00",
+    ];
 
     // Warm up the cache
     for color in &base_colors {
@@ -472,25 +494,27 @@ fn perf_memory_stress_large_document() {
     tracing::info!("Starting performance test: memory stress with large document");
 
     // Create a large document with multiple elements
-    let _console = Console::new();  // For future use
+    let _console = Console::new(); // For future use
     let width = 120;
 
     // Multiple tables
     let mut all_segments: Vec<Segment> = Vec::new();
 
     for table_num in 0..10 {
-        let table = create_large_table(50, 5)
-            .title(format!("Table {}", table_num + 1));
+        let table = create_large_table(50, 5).title(format!("Table {}", table_num + 1));
 
         all_segments.extend(table.render(width));
     }
 
     // Multiple panels
     for panel_num in 0..20 {
-        let content = format!("Panel content {} with some longer text to make it interesting", panel_num + 1);
+        let content = format!(
+            "Panel content {} with some longer text to make it interesting",
+            panel_num + 1
+        );
         let title = format!("Panel {}", panel_num + 1);
         let panel = Panel::from_text(&content)
-            .title(title)  // Takes ownership
+            .title(title) // Takes ownership
             .width(60);
 
         all_segments.extend(panel.render(width));
@@ -499,7 +523,7 @@ fn perf_memory_stress_large_document() {
     // Multiple rules
     for rule_num in 0..30 {
         let title = format!("Section {}", rule_num + 1);
-        let rule = Rule::with_title(title);  // Takes ownership
+        let rule = Rule::with_title(title); // Takes ownership
         all_segments.extend(rule.render(width));
     }
 
@@ -519,10 +543,7 @@ fn perf_memory_stress_large_document() {
         all_segments.len() < 1_000_000,
         "Segment count should be bounded"
     );
-    assert!(
-        total_text_len < 10_000_000,
-        "Total text should be bounded"
-    );
+    assert!(total_text_len < 10_000_000, "Total text should be bounded");
 }
 
 // =============================================================================

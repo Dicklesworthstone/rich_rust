@@ -8,8 +8,8 @@
 mod common;
 
 use common::init_test_logging;
+use rich_rust::r#box::{DOUBLE, HEAVY, MINIMAL};
 use rich_rust::prelude::*;
-use rich_rust::r#box::{ROUNDED, SQUARE, ASCII, DOUBLE, HEAVY, MINIMAL};
 
 // =============================================================================
 // Scenario 1: Basic Panel
@@ -20,9 +20,7 @@ fn e2e_basic_panel_text() {
     init_test_logging();
     tracing::info!("Starting E2E basic panel text test");
 
-    let panel = Panel::from_text("Hello World")
-        .title("Greeting")
-        .width(30);
+    let panel = Panel::from_text("Hello World").title("Greeting").width(30);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Rendered panel");
@@ -49,8 +47,7 @@ fn e2e_panel_multiline() {
     init_test_logging();
     tracing::info!("Starting E2E panel multiline test");
 
-    let panel = Panel::from_text("Line 1\nLine 2\nLine 3")
-        .width(20);
+    let panel = Panel::from_text("Line 1\nLine 2\nLine 3").width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Multiline panel");
@@ -100,10 +97,7 @@ fn e2e_panel_styled_content() {
 
     let panel = Panel::new(segments).width(30);
     let output = panel.render(50);
-    tracing::debug!(
-        segment_count = output.len(),
-        "Panel with styled content"
-    );
+    tracing::debug!(segment_count = output.len(), "Panel with styled content");
 
     // Verify styled segments are present
     let has_styled = output.iter().any(|s| s.style.is_some());
@@ -149,9 +143,7 @@ fn e2e_panel_rounded_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel rounded box test");
 
-    let panel = Panel::from_text("Rounded")
-        .rounded()
-        .width(20);
+    let panel = Panel::from_text("Rounded").rounded().width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Rounded box");
@@ -169,9 +161,7 @@ fn e2e_panel_square_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel square box test");
 
-    let panel = Panel::from_text("Square")
-        .square()
-        .width(20);
+    let panel = Panel::from_text("Square").square().width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Square box");
@@ -189,9 +179,7 @@ fn e2e_panel_ascii_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel ASCII box test");
 
-    let panel = Panel::from_text("ASCII")
-        .ascii()
-        .width(20);
+    let panel = Panel::from_text("ASCII").ascii().width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "ASCII box");
@@ -212,9 +200,7 @@ fn e2e_panel_double_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel double box test");
 
-    let panel = Panel::from_text("Double")
-        .box_style(&DOUBLE)
-        .width(20);
+    let panel = Panel::from_text("Double").box_style(&DOUBLE).width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Double box");
@@ -234,9 +220,7 @@ fn e2e_panel_heavy_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel heavy box test");
 
-    let panel = Panel::from_text("Heavy")
-        .box_style(&HEAVY)
-        .width(20);
+    let panel = Panel::from_text("Heavy").box_style(&HEAVY).width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Heavy box");
@@ -256,9 +240,7 @@ fn e2e_panel_minimal_box() {
     init_test_logging();
     tracing::info!("Starting E2E panel minimal box test");
 
-    let panel = Panel::from_text("Minimal")
-        .box_style(&MINIMAL)
-        .width(20);
+    let panel = Panel::from_text("Minimal").box_style(&MINIMAL).width(20);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Minimal box");
@@ -336,18 +318,22 @@ fn e2e_panel_fixed_width() {
     init_test_logging();
     tracing::info!("Starting E2E panel fixed width test");
 
-    let panel = Panel::from_text("Short")
-        .width(40)
-        .expand(true);
+    let panel = Panel::from_text("Short").width(40).expand(true);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Fixed width panel");
 
     // First line should be exactly 40 characters (including box chars)
     let first_line = output.lines().next().unwrap_or("");
-    tracing::debug!(first_line_len = first_line.chars().count(), "First line length");
+    tracing::debug!(
+        first_line_len = first_line.chars().count(),
+        "First line length"
+    );
 
-    assert!(first_line.chars().count() >= 20, "Panel should have reasonable width");
+    assert!(
+        first_line.chars().count() >= 20,
+        "Panel should have reasonable width"
+    );
 
     tracing::info!("E2E panel fixed width test PASSED");
 }
@@ -357,8 +343,7 @@ fn e2e_panel_expand_false() {
     init_test_logging();
     tracing::info!("Starting E2E panel expand=false test");
 
-    let panel = Panel::from_text("Hi")
-        .expand(false);
+    let panel = Panel::from_text("Hi").expand(false);
 
     let output = panel.render_plain(80);
     tracing::debug!(output = %output, "Non-expanded panel");
@@ -404,9 +389,7 @@ fn e2e_panel_cjk_content() {
     init_test_logging();
     tracing::info!("Starting E2E panel with CJK content test");
 
-    let panel = Panel::from_text("你好世界")
-        .title("中文")
-        .width(25);
+    let panel = Panel::from_text("你好世界").title("中文").width(25);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "CJK panel");
@@ -422,9 +405,7 @@ fn e2e_panel_emoji_content() {
     init_test_logging();
     tracing::info!("Starting E2E panel with emoji content test");
 
-    let panel = Panel::from_text("Status: ✓ OK")
-        .title("Check")
-        .width(25);
+    let panel = Panel::from_text("Status: ✓ OK").title("Check").width(25);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Emoji panel");
@@ -456,9 +437,7 @@ fn e2e_panel_containing_table_content() {
     let table_output = table.render_plain(40);
 
     // Put table in panel
-    let panel = Panel::from_text(&table_output)
-        .title("User Data")
-        .width(45);
+    let panel = Panel::from_text(&table_output).title("User Data").width(45);
 
     let output = panel.render_plain(60);
     tracing::debug!(output = %output, "Panel with table");
@@ -514,8 +493,7 @@ fn e2e_panel_narrow_width() {
     init_test_logging();
     tracing::info!("Starting E2E narrow panel test");
 
-    let panel = Panel::from_text("Content")
-        .width(10);
+    let panel = Panel::from_text("Content").width(10);
 
     let output = panel.render_plain(10);
     tracing::debug!(output = %output, "Narrow panel");
@@ -531,8 +509,7 @@ fn e2e_panel_single_char_content() {
     init_test_logging();
     tracing::info!("Starting E2E single character panel test");
 
-    let panel = Panel::from_text("X")
-        .expand(false);
+    let panel = Panel::from_text("X").expand(false);
 
     let output = panel.render_plain(50);
     tracing::debug!(output = %output, "Single char panel");

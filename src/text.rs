@@ -282,7 +282,8 @@ impl Text {
         let clamped_start = start.min(self.length);
         let clamped_end = end.min(self.length);
         if clamped_start < clamped_end {
-            self.spans.push(Span::new(clamped_start, clamped_end, style));
+            self.spans
+                .push(Span::new(clamped_start, clamped_end, style));
         }
     }
 
@@ -308,7 +309,8 @@ impl Text {
             let char_end = self.plain[..byte_end].chars().count();
 
             if char_start < char_end && char_end <= chars.len() {
-                self.spans.push(Span::new(char_start, char_end, style.clone()));
+                self.spans
+                    .push(Span::new(char_start, char_end, style.clone()));
             }
         }
 
@@ -339,7 +341,8 @@ impl Text {
                 let char_start = self.plain[..byte_start].chars().count();
                 let char_end = self.plain[..byte_end].chars().count();
 
-                self.spans.push(Span::new(char_start, char_end, style.clone()));
+                self.spans
+                    .push(Span::new(char_start, char_end, style.clone()));
                 search_start = byte_end;
             }
         }
@@ -844,8 +847,7 @@ impl Text {
                         // Recalculate width from new start
                         for j in current_line_start..=i {
                             if j < chars.len() {
-                                current_width +=
-                                    crate::cells::get_character_cell_size(chars[j]);
+                                current_width += crate::cells::get_character_cell_size(chars[j]);
                             }
                         }
                     } else {
@@ -1080,10 +1082,7 @@ mod tests {
 
     #[test]
     fn test_assemble() {
-        let text = Text::assemble(&[
-            ("hello ", None),
-            ("world", Some(Style::new().bold())),
-        ]);
+        let text = Text::assemble(&[("hello ", None), ("world", Some(Style::new().bold()))]);
         assert_eq!(text.plain(), "hello world");
         assert_eq!(text.spans().len(), 1);
     }
@@ -1253,8 +1252,8 @@ mod tests {
     #[test]
     fn test_divide_multiple_spans() {
         let mut text = Text::new("hello world!");
-        text.stylize(0, 5, Style::new().bold());     // "hello"
-        text.stylize(6, 11, Style::new().italic());  // "world"
+        text.stylize(0, 5, Style::new().bold()); // "hello"
+        text.stylize(6, 11, Style::new().italic()); // "world"
 
         let parts = text.divide(&[6]);
 
@@ -1359,7 +1358,7 @@ mod tests {
 
     #[test]
     fn test_wrap_with_wide_chars() {
-        let text = Text::new("你好世界");  // 8 cells (4 chars * 2 cells each)
+        let text = Text::new("你好世界"); // 8 cells (4 chars * 2 cells each)
         let lines = text.wrap(6);
         // Should wrap CJK characters correctly
         assert!(lines.len() >= 2);
@@ -1516,7 +1515,7 @@ mod tests {
     #[test]
     fn test_expand_tabs_preserves_spans() {
         let mut text = Text::new("a\tb");
-        text.stylize(0, 1, Style::new().bold());  // Just "a"
+        text.stylize(0, 1, Style::new().bold()); // Just "a"
         let expanded = text.expand_tabs(4);
         // Span should still exist
         assert!(!expanded.spans().is_empty());
@@ -1570,7 +1569,7 @@ mod tests {
         // Stylize beyond text length - should clamp
         text.stylize(3, 100, Style::new().bold());
         assert_eq!(text.spans().len(), 1);
-        assert_eq!(text.spans()[0].end, 5);  // Clamped to text length
+        assert_eq!(text.spans()[0].end, 5); // Clamped to text length
     }
 
     #[test]

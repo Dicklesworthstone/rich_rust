@@ -28,9 +28,9 @@
 mod common;
 
 use common::{init_test_logging, log_test_context, test_phase};
-use rich_rust::prelude::*;
-use rich_rust::color::ColorSystem;
 use rich_rust::r#box::SQUARE;
+use rich_rust::color::ColorSystem;
+use rich_rust::prelude::*;
 
 // =============================================================================
 // PARSING REGRESSION TESTS
@@ -252,10 +252,7 @@ fn regression_parsing_whitespace_handling() {
 
     for case in cases {
         let result = Style::parse(case);
-        assert!(
-            result.is_ok(),
-            "'{case}' should parse despite whitespace"
-        );
+        assert!(result.is_ok(), "'{case}' should parse despite whitespace");
         tracing::debug!(input = case, "Whitespace case passed");
     }
 
@@ -443,9 +440,7 @@ fn regression_layout_table_empty_content() {
     table.add_row_cells(["", ""]);
 
     // Should render without panic
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        table.render_plain(40)
-    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| table.render_plain(40)));
 
     assert!(result.is_ok(), "Empty content should not panic");
     tracing::info!("Regression test PASSED: empty content handling");
@@ -508,9 +503,7 @@ fn regression_layout_table_very_narrow_width() {
     table.add_row_cells(["Test", "Data"]);
 
     // Render at very narrow width (might need to truncate)
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        table.render_plain(10)
-    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| table.render_plain(10)));
 
     assert!(result.is_ok(), "Narrow width should not panic");
     tracing::info!("Regression test PASSED: narrow width handling");
@@ -533,16 +526,17 @@ fn regression_layout_panel_multiline_content() {
     let _phase = test_phase("multiline_panel");
 
     let content = "Line 1\nLine 2\nLine 3";
-    let panel = Panel::from_text(content)
-        .title("Test")
-        .width(30);
+    let panel = Panel::from_text(content).title("Test").width(30);
 
     let segments = panel.render(40);
     let output: String = segments.into_iter().map(|s| s.text).collect();
 
     // Should have multiple lines
     let lines: Vec<&str> = output.lines().collect();
-    assert!(lines.len() >= 5, "Panel should have header, 3 content lines, and footer");
+    assert!(
+        lines.len() >= 5,
+        "Panel should have header, 3 content lines, and footer"
+    );
 
     tracing::info!("Regression test PASSED: multiline panel content");
 }
@@ -567,9 +561,7 @@ fn regression_layout_rule_long_title() {
     let rule = Rule::with_title(long_title);
 
     // Render at narrow width
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        rule.render(30)
-    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rule.render(30)));
 
     assert!(result.is_ok(), "Long title should not panic");
     tracing::info!("Regression test PASSED: long title handling");
@@ -601,9 +593,7 @@ fn regression_layout_tree_deep_nesting() {
 
     let tree = Tree::new(deepest);
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tree.render()
-    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tree.render()));
 
     assert!(result.is_ok(), "Deep nesting should not panic");
     tracing::info!("Regression test PASSED: deep tree nesting");
@@ -676,9 +666,7 @@ fn regression_rendering_hyperlink_with_attributes() {
 
     let _phase = test_phase("hyperlink_with_attrs");
 
-    let style = Style::new()
-        .bold()
-        .link("https://example.com");
+    let style = Style::new().bold().link("https://example.com");
 
     let (prefix, _suffix) = style.render_ansi(ColorSystem::TrueColor);
 
@@ -723,10 +711,7 @@ fn regression_rendering_style_combine_preserves_hyperlink() {
         combined.attributes.contains(Attributes::BOLD),
         "Combined should have bold"
     );
-    assert!(
-        combined.link.is_some(),
-        "Combined should have hyperlink"
-    );
+    assert!(combined.link.is_some(), "Combined should have hyperlink");
     assert_eq!(
         combined.link.as_deref(),
         Some("https://example.com"),
@@ -882,12 +867,11 @@ fn regression_rendering_segment_split_cjk() {
 
     let _phase = test_phase("segment_split");
 
-    let segment = Segment::new("中文", None);  // 4 cells total
+    let segment = Segment::new("中文", None); // 4 cells total
 
     // Split in the middle should handle 2-cell characters
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        segment.split_at_cell(2)
-    }));
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| segment.split_at_cell(2)));
 
     assert!(result.is_ok(), "Segment split should not panic");
 

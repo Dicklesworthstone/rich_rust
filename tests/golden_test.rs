@@ -94,9 +94,7 @@ fn golden_panel_simple() {
 #[test]
 fn golden_panel_with_title() {
     init_test_logging();
-    let panel = Panel::from_text("Content here")
-        .title("My Panel")
-        .width(30);
+    let panel = Panel::from_text("Content here").title("My Panel").width(30);
     let output = segments_to_string(panel.render(40));
     let plain = strip_ansi(&output);
     insta::assert_snapshot!("panel_with_title", plain);

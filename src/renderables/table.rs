@@ -351,7 +351,8 @@ pub struct Table {
     show_edge: bool,
     /// Show lines between rows.
     show_lines: bool,
-    /// Extra lines between rows.
+    /// Extra lines between rows (planned feature, not yet implemented).
+    #[allow(dead_code)]
     leading: usize,
     /// Table-level style.
     style: Style,

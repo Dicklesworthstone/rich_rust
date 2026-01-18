@@ -148,10 +148,7 @@ impl Rule {
     /// Render the rule as a string (for simple output).
     #[must_use]
     pub fn render_plain(&self, width: usize) -> String {
-        self.render(width)
-            .into_iter()
-            .map(|seg| seg.text)
-            .collect()
+        self.render(width).into_iter().map(|seg| seg.text).collect()
     }
 }
 
@@ -321,6 +318,10 @@ mod tests {
             .collect();
         // The rule chars are repeated to fill width, minus any trailing newline
         let rule_width = cells::cell_len(&text);
-        assert!(rule_width >= 10, "Rule should fill width: got {}", rule_width);
+        assert!(
+            rule_width >= 10,
+            "Rule should fill width: got {}",
+            rule_width
+        );
     }
 }

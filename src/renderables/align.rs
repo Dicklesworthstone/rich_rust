@@ -149,10 +149,7 @@ impl Align {
                 }
                 result.extend(self.content);
                 if right_pad > 0 {
-                    result.push(Segment::new(
-                        " ".repeat(right_pad),
-                        Some(self.pad_style),
-                    ));
+                    result.push(Segment::new(" ".repeat(right_pad), Some(self.pad_style)));
                 }
             }
             AlignMethod::Right => {

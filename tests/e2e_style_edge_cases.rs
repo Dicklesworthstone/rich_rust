@@ -37,7 +37,10 @@ fn test_style_parse_bold_only() {
     init_test_logging();
 
     let style = Style::parse("bold").unwrap();
-    assert!(style.attributes.contains(Attributes::BOLD), "Should have bold attribute");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "Should have bold attribute"
+    );
     assert!(style.color.is_none(), "Should have no foreground color");
     assert!(style.bgcolor.is_none(), "Should have no background color");
 }
@@ -48,7 +51,10 @@ fn test_style_parse_italic_only() {
     init_test_logging();
 
     let style = Style::parse("italic").unwrap();
-    assert!(style.attributes.contains(Attributes::ITALIC), "Should have italic attribute");
+    assert!(
+        style.attributes.contains(Attributes::ITALIC),
+        "Should have italic attribute"
+    );
 }
 
 /// Test: Single attribute "underline" should set underline only
@@ -57,7 +63,10 @@ fn test_style_parse_underline_only() {
     init_test_logging();
 
     let style = Style::parse("underline").unwrap();
-    assert!(style.attributes.contains(Attributes::UNDERLINE), "Should have underline attribute");
+    assert!(
+        style.attributes.contains(Attributes::UNDERLINE),
+        "Should have underline attribute"
+    );
 }
 
 /// Test: Named color "red" should set foreground only
@@ -87,8 +96,14 @@ fn test_style_parse_combined() {
     init_test_logging();
 
     let style = Style::parse("bold italic red on blue").unwrap();
-    assert!(style.attributes.contains(Attributes::BOLD), "Should have bold");
-    assert!(style.attributes.contains(Attributes::ITALIC), "Should have italic");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "Should have bold"
+    );
+    assert!(
+        style.attributes.contains(Attributes::ITALIC),
+        "Should have italic"
+    );
     assert!(style.color.is_some(), "Should have foreground color");
     assert!(style.bgcolor.is_some(), "Should have background color");
 }
@@ -99,8 +114,14 @@ fn test_style_parse_not_bold() {
     init_test_logging();
 
     let style = Style::parse("not bold").unwrap();
-    assert!(!style.attributes.contains(Attributes::BOLD), "Bold should not be set");
-    assert!(style.set_attributes.contains(Attributes::BOLD), "Bold should be in set_attributes");
+    assert!(
+        !style.attributes.contains(Attributes::BOLD),
+        "Bold should not be set"
+    );
+    assert!(
+        style.set_attributes.contains(Attributes::BOLD),
+        "Bold should be in set_attributes"
+    );
 }
 
 /// Test: Hex color "#ff0000" should set foreground color
@@ -152,7 +173,11 @@ fn test_style_parse_hyperlink() {
     init_test_logging();
 
     let style = Style::parse("link https://example.com").unwrap();
-    assert_eq!(style.link, Some("https://example.com".to_string()), "Should have hyperlink");
+    assert_eq!(
+        style.link,
+        Some("https://example.com".to_string()),
+        "Should have hyperlink"
+    );
 }
 
 /// Test: Short attribute aliases (b, i, u, etc.)
@@ -162,31 +187,52 @@ fn test_style_parse_short_aliases() {
 
     // b -> bold
     let style = Style::parse("b").unwrap();
-    assert!(style.attributes.contains(Attributes::BOLD), "'b' should map to bold");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "'b' should map to bold"
+    );
 
     // i -> italic
     let style = Style::parse("i").unwrap();
-    assert!(style.attributes.contains(Attributes::ITALIC), "'i' should map to italic");
+    assert!(
+        style.attributes.contains(Attributes::ITALIC),
+        "'i' should map to italic"
+    );
 
     // u -> underline
     let style = Style::parse("u").unwrap();
-    assert!(style.attributes.contains(Attributes::UNDERLINE), "'u' should map to underline");
+    assert!(
+        style.attributes.contains(Attributes::UNDERLINE),
+        "'u' should map to underline"
+    );
 
     // d -> dim
     let style = Style::parse("d").unwrap();
-    assert!(style.attributes.contains(Attributes::DIM), "'d' should map to dim");
+    assert!(
+        style.attributes.contains(Attributes::DIM),
+        "'d' should map to dim"
+    );
 
     // s -> strike
     let style = Style::parse("s").unwrap();
-    assert!(style.attributes.contains(Attributes::STRIKE), "'s' should map to strike");
+    assert!(
+        style.attributes.contains(Attributes::STRIKE),
+        "'s' should map to strike"
+    );
 
     // o -> overline
     let style = Style::parse("o").unwrap();
-    assert!(style.attributes.contains(Attributes::OVERLINE), "'o' should map to overline");
+    assert!(
+        style.attributes.contains(Attributes::OVERLINE),
+        "'o' should map to overline"
+    );
 
     // r -> reverse
     let style = Style::parse("r").unwrap();
-    assert!(style.attributes.contains(Attributes::REVERSE), "'r' should map to reverse");
+    assert!(
+        style.attributes.contains(Attributes::REVERSE),
+        "'r' should map to reverse"
+    );
 }
 
 /// Test: All supported attributes can be parsed
@@ -315,7 +361,10 @@ fn test_style_parse_incomplete_on() {
 
     match result {
         Err(StyleParseError::InvalidFormat(msg)) => {
-            assert!(msg.contains("requires a color"), "Error should mention 'requires a color'");
+            assert!(
+                msg.contains("requires a color"),
+                "Error should mention 'requires a color'"
+            );
         }
         Err(other) => panic!("Expected InvalidFormat error, got {:?}", other),
         Ok(_) => panic!("Expected error for 'on' alone"),
@@ -332,7 +381,10 @@ fn test_style_parse_incomplete_not() {
 
     match result {
         Err(StyleParseError::InvalidFormat(msg)) => {
-            assert!(msg.contains("requires an attribute"), "Error should mention 'requires an attribute'");
+            assert!(
+                msg.contains("requires an attribute"),
+                "Error should mention 'requires an attribute'"
+            );
         }
         Err(other) => panic!("Expected InvalidFormat error, got {:?}", other),
         Ok(_) => panic!("Expected error for 'not' alone"),
@@ -349,7 +401,10 @@ fn test_style_parse_incomplete_link() {
 
     match result {
         Err(StyleParseError::InvalidFormat(msg)) => {
-            assert!(msg.contains("requires a URL"), "Error should mention 'requires a URL'");
+            assert!(
+                msg.contains("requires a URL"),
+                "Error should mention 'requires a URL'"
+            );
         }
         Err(other) => panic!("Expected InvalidFormat error, got {:?}", other),
         Ok(_) => panic!("Expected error for 'link' alone"),
@@ -366,7 +421,10 @@ fn test_style_parse_not_invalid_attribute() {
 
     match result {
         Err(StyleParseError::UnknownAttribute(attr)) => {
-            assert_eq!(attr, "invalid", "Error should contain the unknown attribute");
+            assert_eq!(
+                attr, "invalid",
+                "Error should contain the unknown attribute"
+            );
         }
         Err(other) => panic!("Expected UnknownAttribute error, got {:?}", other),
         Ok(_) => panic!("Expected error for 'not invalid'"),
@@ -457,7 +515,10 @@ fn test_style_not_then_set() {
 
     // First not, then set - should be set
     let style = Style::parse("not bold bold").unwrap();
-    assert!(style.attributes.contains(Attributes::BOLD), "Second 'bold' should set the attribute");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "Second 'bold' should set the attribute"
+    );
 }
 
 /// Test: "bold" followed by "not bold" should result in bold being explicitly unset
@@ -467,8 +528,14 @@ fn test_style_set_then_not() {
 
     // First set, then not - should be unset
     let style = Style::parse("bold not bold").unwrap();
-    assert!(!style.attributes.contains(Attributes::BOLD), "'not bold' should unset the attribute");
-    assert!(style.set_attributes.contains(Attributes::BOLD), "Bold should still be in set_attributes");
+    assert!(
+        !style.attributes.contains(Attributes::BOLD),
+        "'not bold' should unset the attribute"
+    );
+    assert!(
+        style.set_attributes.contains(Attributes::BOLD),
+        "Bold should still be in set_attributes"
+    );
 }
 
 // =============================================================================

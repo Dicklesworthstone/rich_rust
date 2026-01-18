@@ -16,8 +16,8 @@
 mod common;
 
 use common::init_test_logging;
-use rich_rust::prelude::*;
 use rich_rust::r#box::SQUARE;
+use rich_rust::prelude::*;
 
 fn column_widths_from_top_border(line: &str, padding: usize) -> Vec<usize> {
     let mut widths = Vec::new();
@@ -73,12 +73,16 @@ fn test_expand_widths_with_ratios() {
         .box_style(&SQUARE)
         .padding(0, 0)
         // Content exactly 20 chars wide to establish base widths
-        .with_column(Column::new("12345678901234567890").ratio(1))  // 20 chars, ratio 1
-        .with_column(Column::new("12345678901234567890").ratio(2))  // 20 chars, ratio 2
+        .with_column(Column::new("12345678901234567890").ratio(1)) // 20 chars, ratio 1
+        .with_column(Column::new("12345678901234567890").ratio(2)) // 20 chars, ratio 2
         .with_column(Column::new("12345678901234567890").ratio(1)); // 20 chars, ratio 1
 
     // Add a single row with matching content
-    table.add_row_cells(["12345678901234567890", "12345678901234567890", "12345678901234567890"]);
+    table.add_row_cells([
+        "12345678901234567890",
+        "12345678901234567890",
+        "12345678901234567890",
+    ]);
 
     // Calculate available width for column content
     // Width 104: available=100 (3*20 base + 40 extra), overhead=4 with padding=0
@@ -87,7 +91,11 @@ fn test_expand_widths_with_ratios() {
 
     let top_border = output.lines().next().expect("top border line");
     let widths = column_widths_from_top_border(top_border, 0);
-    assert_eq!(widths, vec![30, 40, 30], "ratio expansion should follow 1:2:1");
+    assert_eq!(
+        widths,
+        vec![30, 40, 30],
+        "ratio expansion should follow 1:2:1"
+    );
 }
 
 // =============================================================================
@@ -114,7 +122,11 @@ fn test_collapse_widths_proportional_shrink() {
         .with_column(Column::new("Col2").min_width(10))
         .with_column(Column::new("Col3").min_width(10));
 
-    table.add_row_cells([padding_content.as_str(), padding_content.as_str(), padding_content.as_str()]);
+    table.add_row_cells([
+        padding_content.as_str(),
+        padding_content.as_str(),
+        padding_content.as_str(),
+    ]);
 
     // Render at constrained width to force collapse
     let output = table.render_plain(100);
@@ -149,7 +161,7 @@ fn test_expand_widths_minimal_ratio_case() {
         .expand(true)
         .box_style(&SQUARE)
         .padding(0, 0)
-        .with_column(Column::new("A").ratio(1))  // ratio 1
+        .with_column(Column::new("A").ratio(1)) // ratio 1
         .with_column(Column::new("B").ratio(3)); // ratio 3
 
     table.add_row_cells(["x", "y"]);
@@ -197,7 +209,7 @@ fn test_expand_widths_zero_ratios() {
         .expand(true)
         .box_style(&SQUARE)
         .padding(0, 0)
-        .with_column(Column::new("A"))  // No ratio = None = 0
+        .with_column(Column::new("A")) // No ratio = None = 0
         .with_column(Column::new("B")); // No ratio = None = 0
 
     table.add_row_cells(["x", "y"]);
@@ -210,7 +222,11 @@ fn test_expand_widths_zero_ratios() {
     let widths = column_widths_from_top_border(top_border, 0);
 
     // Both columns should stay at minimum width (1 char each for content)
-    assert_eq!(widths, vec![1, 1], "columns without ratio should not expand");
+    assert_eq!(
+        widths,
+        vec![1, 1],
+        "columns without ratio should not expand"
+    );
 }
 
 // =============================================================================
@@ -229,7 +245,7 @@ fn test_expand_widths_mixed_ratios() {
         .expand(true)
         .box_style(&SQUARE)
         .padding(0, 0)
-        .with_column(Column::new("A"))          // No ratio - won't expand
+        .with_column(Column::new("A")) // No ratio - won't expand
         .with_column(Column::new("B").ratio(1)) // ratio=1 - will expand
         .with_column(Column::new("C").ratio(2)); // ratio=2 - will expand more
 
@@ -253,10 +269,16 @@ fn test_expand_widths_mixed_ratios() {
     // Other columns should have expanded with 1:2 ratio
     // widths[1] + widths[2] should equal 46 - 1 = 45
     let expanded_total = widths[1] + widths[2];
-    assert_eq!(expanded_total, 45, "ratio columns should take remaining space");
+    assert_eq!(
+        expanded_total, 45,
+        "ratio columns should take remaining space"
+    );
 
     // Ratio 1:2 means widths[2] should be ~2x widths[1]
-    assert!(widths[2] > widths[1], "ratio=2 column should be larger than ratio=1");
+    assert!(
+        widths[2] > widths[1],
+        "ratio=2 column should be larger than ratio=1"
+    );
     assert_eq!(widths[1], 15); // 1/3 of 45 = 15
     assert_eq!(widths[2], 30); // 2/3 of 45 = 30
 }
@@ -288,7 +310,11 @@ fn test_expand_widths_single_ratio() {
     let widths = column_widths_from_top_border(top_border, 0);
 
     // Single column should expand to fill available space
-    assert_eq!(widths, vec![18], "single ratio column should take all extra space");
+    assert_eq!(
+        widths,
+        vec![18],
+        "single ratio column should take all extra space"
+    );
 }
 
 // =============================================================================
@@ -320,7 +346,10 @@ fn test_expand_widths_sum_exactness() {
 
     // Sum of widths must equal available space exactly (no rounding loss)
     let total_width: usize = widths.iter().sum();
-    assert_eq!(total_width, 96, "sum of column widths must equal available space exactly");
+    assert_eq!(
+        total_width, 96,
+        "sum of column widths must equal available space exactly"
+    );
 
     // Verify ratios are approximately correct (7:13:23)
     // Total ratio = 43
@@ -357,7 +386,9 @@ fn test_width_algorithm_validation_summary() {
     tracing::info!("3. collapse_widths() - MATCHES SPEC");
     tracing::info!("   Location: src/renderables/table.rs:646-698");
     tracing::info!("   Spec (Section 9.3): Has explicit rounding error correction loop");
-    tracing::info!("   Verified: Post-loop rounding correction implemented per spec lines 1680-1694");
+    tracing::info!(
+        "   Verified: Post-loop rounding correction implemented per spec lines 1680-1694"
+    );
     tracing::info!("");
 
     tracing::info!("4. ratio_distribute() - MATCHES SPEC");

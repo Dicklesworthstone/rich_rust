@@ -43,12 +43,12 @@ fn e2e_word_wrap_simple() {
     }
 
     // Verify all content preserved (no characters lost)
-    let combined: String = lines.iter().map(|l| l.plain()).collect::<Vec<_>>().join(" ");
-    let combined_trimmed: String = combined.split_whitespace().collect::<Vec<_>>().join(" ");
-    let original_trimmed: String = "The quick brown fox jumps over the lazy dog"
-        .split_whitespace()
+    let combined: String = lines
+        .iter()
+        .map(|l| l.plain())
         .collect::<Vec<_>>()
         .join(" ");
+    let combined_trimmed: String = combined.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
         combined_trimmed.contains("quick") && combined_trimmed.contains("dog"),
         "Content should be preserved"
@@ -179,7 +179,10 @@ fn e2e_styled_text_wrap() {
 
     // Style should be preserved in some form
     let combined_plain: String = lines.iter().map(|l| l.plain()).collect::<Vec<_>>().join("");
-    assert!(combined_plain.contains("quick"), "Styled word should be preserved");
+    assert!(
+        combined_plain.contains("quick"),
+        "Styled word should be preserved"
+    );
 
     tracing::info!("E2E styled text wrapping test PASSED");
 }
@@ -194,9 +197,9 @@ fn e2e_multiple_styles_wrap() {
     let blue = Style::new().color(Color::parse("blue").unwrap());
     let green = Style::new().color(Color::parse("green").unwrap());
 
-    text.stylize(0, 3, red);     // "Red"
-    text.stylize(4, 8, blue);    // "Blue"
-    text.stylize(9, 14, green);  // "Green"
+    text.stylize(0, 3, red); // "Red"
+    text.stylize(4, 8, blue); // "Blue"
+    text.stylize(9, 14, green); // "Green"
 
     tracing::debug!(span_count = text.spans().len(), "Multi-styled text");
 
@@ -268,12 +271,22 @@ fn e2e_text_divide_styled() {
     }
 
     assert_eq!(divided[0].plain(), "hello", "First part should be 'hello'");
-    assert!(divided[0].spans().is_empty(), "First part should have no bold spans");
+    assert!(
+        divided[0].spans().is_empty(),
+        "First part should have no bold spans"
+    );
 
-    assert_eq!(divided[1].plain(), " world", "Second part should be ' world'");
+    assert_eq!(
+        divided[1].plain(),
+        " world",
+        "Second part should be ' world'"
+    );
     // The bold span should be adjusted to cover "world" in the second part
     // Note: spans are relative to the part, so we just check presence
-    assert!(!divided[1].spans().is_empty(), "Second part should have bold span");
+    assert!(
+        !divided[1].spans().is_empty(),
+        "Second part should have bold span"
+    );
 
     assert_eq!(divided[2].plain(), "!", "Third part should be '!'");
 
@@ -288,7 +301,10 @@ fn e2e_text_divide_empty_parts() {
     let text = Text::new("ABC");
     let divided = text.divide(&[0, 1, 2, 3]);
 
-    tracing::debug!(part_count = divided.len(), "Parts from ABC split at 0,1,2,3");
+    tracing::debug!(
+        part_count = divided.len(),
+        "Parts from ABC split at 0,1,2,3"
+    );
 
     for (i, part) in divided.iter().enumerate() {
         tracing::debug!(part = i, content = %part.plain(), "Part");
@@ -310,7 +326,11 @@ fn e2e_text_divide_no_offsets() {
     let divided = text.divide(&[]);
 
     assert_eq!(divided.len(), 1, "No offsets should return single part");
-    assert_eq!(divided[0].plain(), "Hello", "Single part should be original");
+    assert_eq!(
+        divided[0].plain(),
+        "Hello",
+        "Single part should be original"
+    );
 
     tracing::info!("E2E text divide with no offsets test PASSED");
 }
@@ -574,7 +594,10 @@ fn e2e_text_empty() {
     tracing::debug!(line_count = lines.len(), "Empty text wrapped");
 
     assert_eq!(lines.len(), 1, "Empty text should produce one empty line");
-    assert!(lines[0].plain().is_empty() || lines[0].cell_len() == 0, "Should be empty");
+    assert!(
+        lines[0].plain().is_empty() || lines[0].cell_len() == 0,
+        "Should be empty"
+    );
 
     tracing::info!("E2E empty text test PASSED");
 }
@@ -657,7 +680,11 @@ fn e2e_text_strip() {
     let text = Text::new("  Hello World  ");
     let stripped = text.strip();
 
-    assert_eq!(stripped.plain(), "Hello World", "Whitespace should be stripped");
+    assert_eq!(
+        stripped.plain(),
+        "Hello World",
+        "Whitespace should be stripped"
+    );
 
     tracing::info!("E2E text strip test PASSED");
 }
@@ -714,7 +741,9 @@ fn e2e_stylize_all() {
 fn e2e_snapshot_wrapped_text() {
     init_test_logging();
 
-    let text = Text::new("The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.");
+    let text = Text::new(
+        "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.",
+    );
     let lines = text.wrap(30);
 
     let output: String = lines
@@ -803,7 +832,10 @@ fn e2e_render_overlapping_spans_later_wins() {
     }
 
     // Verify we have multiple segments showing style changes at boundaries
-    assert!(segments.len() >= 2, "Overlapping spans should create multiple segments");
+    assert!(
+        segments.len() >= 2,
+        "Overlapping spans should create multiple segments"
+    );
 
     // The middle section "LL" should have both bold AND italic applied
     // (later span combines with earlier, not replaces entirely)
@@ -820,14 +852,17 @@ fn e2e_divide_at_span_boundary() {
     tracing::info!("RICH_SPEC 6.4: Testing divide at exact span boundary");
 
     let mut text = Text::new("AABBCC");
-    text.stylize(0, 2, Style::new().bold());   // "AA" is bold
+    text.stylize(0, 2, Style::new().bold()); // "AA" is bold
     text.stylize(2, 4, Style::new().italic()); // "BB" is italic
     text.stylize(4, 6, Style::new().underline()); // "CC" is underlined
 
     // Divide at exact span boundaries
     let parts = text.divide(&[2, 4]);
 
-    tracing::debug!(part_count = parts.len(), "Parts from divide at span boundaries");
+    tracing::debug!(
+        part_count = parts.len(),
+        "Parts from divide at span boundaries"
+    );
 
     assert_eq!(parts.len(), 3, "Should have 3 parts");
     assert_eq!(parts[0].plain(), "AA");
@@ -835,9 +870,21 @@ fn e2e_divide_at_span_boundary() {
     assert_eq!(parts[2].plain(), "CC");
 
     // Each part should have exactly one span
-    assert_eq!(parts[0].spans().len(), 1, "First part should have bold span");
-    assert_eq!(parts[1].spans().len(), 1, "Second part should have italic span");
-    assert_eq!(parts[2].spans().len(), 1, "Third part should have underline span");
+    assert_eq!(
+        parts[0].spans().len(),
+        1,
+        "First part should have bold span"
+    );
+    assert_eq!(
+        parts[1].spans().len(),
+        1,
+        "Second part should have italic span"
+    );
+    assert_eq!(
+        parts[2].spans().len(),
+        1,
+        "Third part should have underline span"
+    );
 
     // Spans should be adjusted to local coordinates (0 to length)
     assert_eq!(parts[0].spans()[0].start, 0);
@@ -898,7 +945,10 @@ fn e2e_divide_offsets_beyond_length() {
     let text = Text::new("ABC");
     let parts = text.divide(&[1, 10, 20]); // 10 and 20 are beyond length 3
 
-    tracing::debug!(part_count = parts.len(), "Parts from divide with large offsets");
+    tracing::debug!(
+        part_count = parts.len(),
+        "Parts from divide with large offsets"
+    );
 
     for (i, part) in parts.iter().enumerate() {
         tracing::debug!(part = i, content = %part.plain(), len = part.len(), "Part");
@@ -908,8 +958,8 @@ fn e2e_divide_offsets_beyond_length() {
     assert_eq!(parts.len(), 4, "Should have 4 parts");
     assert_eq!(parts[0].plain(), "A");
     assert_eq!(parts[1].plain(), "BC"); // 1 to 3 (clamped from 1 to 10)
-    assert_eq!(parts[2].plain(), "");   // 3 to 3 (clamped from 10 to 20)
-    assert_eq!(parts[3].plain(), "");   // remainder
+    assert_eq!(parts[2].plain(), ""); // 3 to 3 (clamped from 10 to 20)
+    assert_eq!(parts[3].plain(), ""); // remainder
 
     tracing::info!("RICH_SPEC 6.4 divide beyond length test PASSED");
 }
@@ -974,7 +1024,10 @@ fn e2e_wrap_style_preservation_detailed() {
     assert!(bbbb_line.is_some(), "Should have line with BBBB");
 
     let bbbb_line = bbbb_line.unwrap();
-    assert!(!bbbb_line.spans().is_empty(), "BBBB line should preserve bold span");
+    assert!(
+        !bbbb_line.spans().is_empty(),
+        "BBBB line should preserve bold span"
+    );
 
     tracing::info!("RICH_SPEC 6.6 wrap style preservation test PASSED");
 }
@@ -995,7 +1048,9 @@ fn e2e_text_validation_summary() {
     tracing::info!("");
 
     tracing::info!("6.2 Text Structure - VALIDATED");
-    tracing::info!("   - Fields: plain, spans, length, style, justify, overflow, no_wrap, end, tab_size");
+    tracing::info!(
+        "   - Fields: plain, spans, length, style, justify, overflow, no_wrap, end, tab_size"
+    );
     tracing::info!("   - Length cached for O(1) access");
     tracing::info!("");
 

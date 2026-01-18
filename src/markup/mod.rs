@@ -3,9 +3,9 @@
 //! This module provides functionality to parse markup strings like
 //! `[bold red]Hello[/]` into styled `Text` objects.
 
-use std::fmt;
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
+use std::fmt;
 
 use crate::style::Style;
 use crate::text::Text;
@@ -79,9 +79,8 @@ pub enum ParseElement {
 
 // Regex for matching tags: ((\\*)\[([a-z#/@][^[]*?)])
 // Matches: optional backslashes, then [tag_content]
-static TAG_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(\\*)\[([a-z#/@][^\[\]]*?)\]").expect("invalid regex")
-});
+static TAG_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\\*)\[([a-z#/@][^\[\]]*?)\]").expect("invalid regex"));
 
 /// Parse markup string into elements.
 ///
@@ -111,21 +110,13 @@ fn parse_elements(markup: &str) -> Vec<(usize, Option<String>, Option<Tag>)> {
         if num_backslashes > 0 {
             let literal_backslashes = num_backslashes / 2;
             if literal_backslashes > 0 {
-                elements.push((
-                    match_start,
-                    Some("\\".repeat(literal_backslashes)),
-                    None,
-                ));
+                elements.push((match_start, Some("\\".repeat(literal_backslashes)), None));
             }
         }
 
         if escaped {
             // Escaped bracket - treat as literal text
-            elements.push((
-                match_start,
-                Some(format!("[{tag_content}]")),
-                None,
-            ));
+            elements.push((match_start, Some(format!("[{tag_content}]")), None));
         } else {
             // Parse the tag
             let tag = parse_tag(tag_content);
@@ -207,10 +198,9 @@ pub fn render(markup: &str) -> Result<Text, MarkupError> {
                         .ok_or(MarkupError::UnmatchedClosingTag(None))?
                 } else {
                     // Explicit close [/name] - search stack
-                    pop_matching(&mut style_stack, style_name)
-                        .ok_or_else(|| {
-                            MarkupError::UnmatchedClosingTag(Some(style_name.to_string()))
-                        })?
+                    pop_matching(&mut style_stack, style_name).ok_or_else(|| {
+                        MarkupError::UnmatchedClosingTag(Some(style_name.to_string()))
+                    })?
                 };
 
                 // Apply style from the opening tag

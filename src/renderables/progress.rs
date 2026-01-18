@@ -31,9 +31,9 @@ impl BarStyle {
     pub const fn completed_char(&self) -> &str {
         match self {
             Self::Ascii => "#",
-            Self::Block => "\u{2588}",   // █
-            Self::Line => "\u{2501}",    // ━
-            Self::Dots => "\u{25CF}",    // ●
+            Self::Block => "\u{2588}",    // █
+            Self::Line => "\u{2501}",     // ━
+            Self::Dots => "\u{25CF}",     // ●
             Self::Gradient => "\u{2588}", // █
         }
     }
@@ -43,9 +43,9 @@ impl BarStyle {
     pub const fn remaining_char(&self) -> &str {
         match self {
             Self::Ascii => "-",
-            Self::Block => "\u{2591}",   // ░
-            Self::Line => "\u{2500}",    // ─
-            Self::Dots => "\u{25CB}",    // ○
+            Self::Block => "\u{2591}",    // ░
+            Self::Line => "\u{2500}",     // ─
+            Self::Dots => "\u{25CB}",     // ○
             Self::Gradient => "\u{2591}", // ░
         }
     }
@@ -55,9 +55,9 @@ impl BarStyle {
     pub const fn pulse_char(&self) -> &str {
         match self {
             Self::Ascii => ">",
-            Self::Block => "\u{2593}",   // ▓
-            Self::Line => "\u{257A}",    // ╺
-            Self::Dots => "\u{25CF}",    // ●
+            Self::Block => "\u{2593}",    // ▓
+            Self::Line => "\u{257A}",     // ╺
+            Self::Dots => "\u{25CF}",     // ●
             Self::Gradient => "\u{2593}", // ▓
         }
     }
@@ -145,7 +145,9 @@ impl Spinner {
     #[must_use]
     pub fn clock() -> Self {
         Self {
-            frames: vec!["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
+            frames: vec![
+                "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛",
+            ],
             frame_index: 0,
             style: Style::new(),
         }
@@ -458,16 +460,16 @@ impl ProgressBar {
     fn format_duration(duration: Duration) -> String {
         let total_secs = duration.as_secs();
         if total_secs < 60 {
-            format!("{}s", total_secs)
+            format!("{total_secs}s")
         } else if total_secs < 3600 {
             let mins = total_secs / 60;
             let secs = total_secs % 60;
-            format!("{}:{:02}", mins, secs)
+            format!("{mins}:{secs:02}")
         } else {
             let hours = total_secs / 3600;
             let mins = (total_secs % 3600) / 60;
             let secs = total_secs % 60;
-            format!("{}:{:02}:{:02}", hours, mins, secs)
+            format!("{hours}:{mins:02}:{secs:02}")
         }
     }
 
@@ -565,7 +567,10 @@ impl ProgressBar {
         // Completed portion
         if completed_width > 0 {
             let completed_chars = self.bar_style.completed_char().repeat(completed_width);
-            segments.push(Segment::new(&completed_chars, Some(self.completed_style.clone())));
+            segments.push(Segment::new(
+                &completed_chars,
+                Some(self.completed_style.clone()),
+            ));
         }
 
         // Pulse character (at the edge)
@@ -581,11 +586,17 @@ impl ProgressBar {
 
             if remaining_width > 0 {
                 let remaining_chars = self.bar_style.remaining_char().repeat(remaining_width);
-                segments.push(Segment::new(&remaining_chars, Some(self.remaining_style.clone())));
+                segments.push(Segment::new(
+                    &remaining_chars,
+                    Some(self.remaining_style.clone()),
+                ));
             }
         } else if remaining_width > 0 {
             let remaining_chars = self.bar_style.remaining_char().repeat(remaining_width);
-            segments.push(Segment::new(&remaining_chars, Some(self.remaining_style.clone())));
+            segments.push(Segment::new(
+                &remaining_chars,
+                Some(self.remaining_style.clone()),
+            ));
         }
 
         if self.show_brackets {
@@ -604,10 +615,7 @@ impl ProgressBar {
     /// Render the progress bar as a plain string.
     #[must_use]
     pub fn render_plain(&self, width: usize) -> String {
-        self.render(width)
-            .into_iter()
-            .map(|seg| seg.text)
-            .collect()
+        self.render(width).into_iter().map(|seg| seg.text).collect()
     }
 }
 
@@ -699,7 +707,12 @@ mod tests {
 
     #[test]
     fn test_progress_bar_styles() {
-        for style in [BarStyle::Ascii, BarStyle::Block, BarStyle::Line, BarStyle::Dots] {
+        for style in [
+            BarStyle::Ascii,
+            BarStyle::Block,
+            BarStyle::Line,
+            BarStyle::Dots,
+        ] {
             let mut bar = ProgressBar::new().bar_style(style).width(10);
             bar.set_progress(0.5);
             let segments = bar.render(40);
@@ -709,9 +722,7 @@ mod tests {
 
     #[test]
     fn test_progress_bar_with_description() {
-        let mut bar = ProgressBar::new()
-            .description("Downloading")
-            .width(20);
+        let mut bar = ProgressBar::new().description("Downloading").width(20);
         bar.set_progress(0.5);
         let plain = bar.render_plain(80);
         assert!(plain.contains("Downloading"));
@@ -719,9 +730,7 @@ mod tests {
 
     #[test]
     fn test_progress_bar_finished_message() {
-        let mut bar = ProgressBar::new()
-            .finished_message("Done!")
-            .width(20);
+        let mut bar = ProgressBar::new().finished_message("Done!").width(20);
         bar.finish();
         let plain = bar.render_plain(80);
         assert!(plain.contains("Done!"));
@@ -772,8 +781,14 @@ mod tests {
     #[test]
     fn test_format_duration() {
         assert_eq!(ProgressBar::format_duration(Duration::from_secs(30)), "30s");
-        assert_eq!(ProgressBar::format_duration(Duration::from_secs(90)), "1:30");
-        assert_eq!(ProgressBar::format_duration(Duration::from_secs(3661)), "1:01:01");
+        assert_eq!(
+            ProgressBar::format_duration(Duration::from_secs(90)),
+            "1:30"
+        );
+        assert_eq!(
+            ProgressBar::format_duration(Duration::from_secs(3661)),
+            "1:01:01"
+        );
     }
 
     #[test]

@@ -8,8 +8,8 @@
 mod common;
 
 use common::init_test_logging;
-use rich_rust::prelude::*;
 use rich_rust::markup;
+use rich_rust::prelude::*;
 
 /// Helper to render markup through the console pipeline and capture output.
 fn render_markup(markup: &str, color_system: ColorSystem) -> String {
@@ -20,8 +20,7 @@ fn render_markup(markup: &str, color_system: ColorSystem) -> String {
         .build();
 
     let mut output = Vec::new();
-    let mut options = rich_rust::console::PrintOptions::new()
-        .with_markup(true);
+    let mut options = rich_rust::console::PrintOptions::new().with_markup(true);
     options.no_newline = true;
 
     console
@@ -168,7 +167,11 @@ fn e2e_style_override() {
     // The output should have distinct style regions
     // Check that we have multiple escape sequences
     let escape_count = output.matches("\x1b[").count();
-    assert!(escape_count >= 3, "Expected multiple style changes, got {}", escape_count);
+    assert!(
+        escape_count >= 3,
+        "Expected multiple style changes, got {}",
+        escape_count
+    );
 
     tracing::info!("E2E style override test PASSED");
 }
@@ -190,7 +193,8 @@ fn e2e_color_system_truecolor() {
     // #ff5500 = rgb(255, 85, 0)
     assert!(
         output.contains("\x1b[38;2;255;85;0m") || output.contains("\x1b[38;2;"),
-        "Expected true color sequence. Output: {}", output
+        "Expected true color sequence. Output: {}",
+        output
     );
 
     let plain = strip_ansi(&output);
@@ -229,7 +233,11 @@ fn e2e_color_system_standard() {
 
     // Standard color should use basic codes 30-37/40-47
     // Red foreground is 31
-    assert!(output.contains("\x1b[31m"), "Expected standard red (31). Output: {}", output);
+    assert!(
+        output.contains("\x1b[31m"),
+        "Expected standard red (31). Output: {}",
+        output
+    );
 
     let plain = strip_ansi(&output);
     assert_eq!(plain, "Red");
@@ -348,7 +356,10 @@ fn e2e_plain_text_no_markup() {
     tracing::debug!(output = %output, "Plain text output");
 
     // Should not have any ANSI codes
-    assert!(!output.contains("\x1b["), "Unexpected ANSI code in plain text");
+    assert!(
+        !output.contains("\x1b["),
+        "Unexpected ANSI code in plain text"
+    );
     assert_eq!(output, "Just plain text, no markup here.");
 
     tracing::info!("E2E plain text test PASSED");
@@ -411,7 +422,10 @@ fn e2e_markup_parser_direct() {
 
     // Verify span has both bold and red
     let span = &text.spans()[0];
-    assert!(span.style.attributes.contains(Attributes::BOLD), "Missing bold attribute");
+    assert!(
+        span.style.attributes.contains(Attributes::BOLD),
+        "Missing bold attribute"
+    );
 
     tracing::info!("Markup parser direct test PASSED");
 }

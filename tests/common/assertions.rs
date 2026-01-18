@@ -53,7 +53,11 @@ pub fn assert_true_logged(context: &str, value: bool) {
     tracing::debug!(context = context, value = value, "asserting true");
 
     if !value {
-        tracing::error!(context = context, value = value, "assertion failed: expected true");
+        tracing::error!(
+            context = context,
+            value = value,
+            "assertion failed: expected true"
+        );
     }
 
     assert!(value, "{context}: expected true, got false");
@@ -73,7 +77,11 @@ pub fn assert_false_logged(context: &str, value: bool) {
     tracing::debug!(context = context, value = value, "asserting false");
 
     if value {
-        tracing::error!(context = context, value = value, "assertion failed: expected false");
+        tracing::error!(
+            context = context,
+            value = value,
+            "assertion failed: expected false"
+        );
     }
 
     assert!(!value, "{context}: expected false, got true");
@@ -154,7 +162,10 @@ pub fn assert_some_logged<T: Debug>(context: &str, option: Option<T>) -> T {
             value
         }
         None => {
-            tracing::error!(context = context, "assertion failed: expected Some, got None");
+            tracing::error!(
+                context = context,
+                "assertion failed: expected Some, got None"
+            );
             panic!("{context}: expected Some, got None");
         }
     }
@@ -206,7 +217,9 @@ pub fn assert_contains_logged(context: &str, haystack: &str, needle: &str) {
             needle = needle,
             "assertion failed: string does not contain substring"
         );
-        panic!("{context}: expected string to contain {needle:?}, but it doesn't.\nString: {haystack:?}");
+        panic!(
+            "{context}: expected string to contain {needle:?}, but it doesn't.\nString: {haystack:?}"
+        );
     }
 
     tracing::trace!(context = context, "assertion passed");
@@ -235,7 +248,9 @@ pub fn assert_not_contains_logged(context: &str, haystack: &str, needle: &str) {
             needle = needle,
             "assertion failed: string contains unwanted substring"
         );
-        panic!("{context}: expected string to not contain {needle:?}, but it does.\nString: {haystack:?}");
+        panic!(
+            "{context}: expected string to not contain {needle:?}, but it does.\nString: {haystack:?}"
+        );
     }
 
     tracing::trace!(context = context, "assertion passed");

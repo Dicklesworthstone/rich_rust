@@ -10,7 +10,6 @@ mod common;
 use common::init_test_logging;
 use rich_rust::prelude::*;
 
-
 // =============================================================================
 // Scenario 1: Simple Table
 // =============================================================================
@@ -41,7 +40,10 @@ fn e2e_table_simple_2x2() {
     assert!(output.contains("200"), "Missing cell '200'");
 
     // Verify box characters (default is SQUARE)
-    assert!(output.contains("┌") || output.contains("├"), "Missing box corners");
+    assert!(
+        output.contains("┌") || output.contains("├"),
+        "Missing box corners"
+    );
     assert!(output.contains("─"), "Missing horizontal box line");
     assert!(output.contains("│"), "Missing vertical box line");
 
@@ -53,8 +55,7 @@ fn e2e_table_single_column() {
     init_test_logging();
     tracing::info!("Starting E2E single column table test");
 
-    let mut table = Table::new()
-        .with_column(Column::new("Item"));
+    let mut table = Table::new().with_column(Column::new("Item"));
 
     table.add_row_cells(["First"]);
     table.add_row_cells(["Second"]);
@@ -256,8 +257,14 @@ fn e2e_table_expand() {
     let narrow = table.render_plain(30);
     let wide = table.render_plain(60);
 
-    tracing::debug!(narrow_len = narrow.lines().next().map(|l| l.len()), "Narrow table");
-    tracing::debug!(wide_len = wide.lines().next().map(|l| l.len()), "Wide table");
+    tracing::debug!(
+        narrow_len = narrow.lines().next().map(|l| l.len()),
+        "Narrow table"
+    );
+    tracing::debug!(
+        wide_len = wide.lines().next().map(|l| l.len()),
+        "Wide table"
+    );
 
     // Wide table should be wider than narrow (expanded to fill)
     let narrow_first_line = narrow.lines().next().unwrap_or("").len();
@@ -375,8 +382,7 @@ fn e2e_table_cell_wrapping() {
 
     // Note: The current implementation may not support multi-line cells fully,
     // but let's test that long content at least renders without panic
-    let mut table = Table::new()
-        .with_column(Column::new("Description").width(15));
+    let mut table = Table::new().with_column(Column::new("Description").width(15));
 
     table.add_row_cells(["This is a very long piece of text that would need wrapping"]);
 
@@ -422,8 +428,11 @@ fn e2e_table_center_align() {
     init_test_logging();
     tracing::info!("Starting E2E table center alignment test");
 
-    let mut table = Table::new()
-        .with_column(Column::new("Centered").justify(JustifyMethod::Center).width(20));
+    let mut table = Table::new().with_column(
+        Column::new("Centered")
+            .justify(JustifyMethod::Center)
+            .width(20),
+    );
 
     table.add_row_cells(["X"]);
     table.add_row_cells(["Short"]);
@@ -452,7 +461,10 @@ fn e2e_table_empty() {
     tracing::debug!(output = %output, "Empty table");
 
     // Empty table should render to empty string or minimal content
-    assert!(output.is_empty() || output.trim().is_empty(), "Empty table should be empty");
+    assert!(
+        output.is_empty() || output.trim().is_empty(),
+        "Empty table should be empty"
+    );
 
     tracing::info!("E2E empty table test PASSED");
 }
@@ -481,8 +493,7 @@ fn e2e_table_single_cell() {
     init_test_logging();
     tracing::info!("Starting E2E single cell table test");
 
-    let mut table = Table::new()
-        .with_column(Column::new("Solo"));
+    let mut table = Table::new().with_column(Column::new("Solo"));
 
     table.add_row_cells(["One"]);
 
@@ -686,8 +697,16 @@ fn e2e_snapshot_table_all_features() {
         .show_footer(true)
         .show_lines(true)
         .with_column(Column::new("Product").footer("Total"))
-        .with_column(Column::new("Qty").justify(JustifyMethod::Center).footer("10"))
-        .with_column(Column::new("Price").justify(JustifyMethod::Right).footer("$250"));
+        .with_column(
+            Column::new("Qty")
+                .justify(JustifyMethod::Center)
+                .footer("10"),
+        )
+        .with_column(
+            Column::new("Price")
+                .justify(JustifyMethod::Right)
+                .footer("$250"),
+        );
 
     table.add_row_cells(["Widget", "3", "$75"]);
     table.add_row_cells(["Gadget", "5", "$125"]);

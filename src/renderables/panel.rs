@@ -3,8 +3,8 @@
 //! A Panel renders content inside a decorative border with optional
 //! title and subtitle.
 
+use crate::r#box::{ASCII, BoxChars, ROUNDED, SQUARE};
 use crate::cells;
-use crate::r#box::{BoxChars, ROUNDED, SQUARE, ASCII};
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::{JustifyMethod, Text};
@@ -260,15 +260,15 @@ impl Panel {
         // Top padding
         for _ in 0..self.padding.top {
             segments.push(Segment::new(
-                &box_chars.head[0].to_string(),
+                box_chars.head[0].to_string(),
                 Some(self.border_style.clone()),
             ));
             segments.push(Segment::new(
-                &" ".repeat(inner_width),
+                " ".repeat(inner_width),
                 Some(self.style.clone()),
             ));
             segments.push(Segment::new(
-                &box_chars.head[3].to_string(),
+                box_chars.head[3].to_string(),
                 Some(self.border_style.clone()),
             ));
             segments.push(Segment::line());
@@ -281,13 +281,13 @@ impl Panel {
         for line in &self.content_lines {
             // Left border
             segments.push(Segment::new(
-                &box_chars.head[0].to_string(),
+                box_chars.head[0].to_string(),
                 Some(self.border_style.clone()),
             ));
 
             // Left padding
             if self.padding.left > 0 {
-                segments.push(Segment::new(&left_pad, Some(self.style.clone())));
+                segments.push(Segment::new(left_pad.clone(), Some(self.style.clone())));
             }
 
             // Content (with right-padding to fill width)
@@ -299,17 +299,20 @@ impl Panel {
             // Fill remaining content space
             let fill_width = content_width.saturating_sub(line_width);
             if fill_width > 0 {
-                segments.push(Segment::new(&" ".repeat(fill_width), Some(self.style.clone())));
+                segments.push(Segment::new(
+                    " ".repeat(fill_width),
+                    Some(self.style.clone()),
+                ));
             }
 
             // Right padding
             if self.padding.right > 0 {
-                segments.push(Segment::new(&right_pad, Some(self.style.clone())));
+                segments.push(Segment::new(right_pad.clone(), Some(self.style.clone())));
             }
 
             // Right border
             segments.push(Segment::new(
-                &box_chars.head[3].to_string(),
+                box_chars.head[3].to_string(),
                 Some(self.border_style.clone()),
             ));
             segments.push(Segment::line());
@@ -318,15 +321,15 @@ impl Panel {
         // Bottom padding
         for _ in 0..self.padding.bottom {
             segments.push(Segment::new(
-                &box_chars.head[0].to_string(),
+                box_chars.head[0].to_string(),
                 Some(self.border_style.clone()),
             ));
             segments.push(Segment::new(
-                &" ".repeat(inner_width),
+                " ".repeat(inner_width),
                 Some(self.style.clone()),
             ));
             segments.push(Segment::new(
-                &box_chars.head[3].to_string(),
+                box_chars.head[3].to_string(),
                 Some(self.border_style.clone()),
             ));
             segments.push(Segment::line());
@@ -372,7 +375,9 @@ impl Panel {
                 // Calculate rule sections based on alignment
                 let rule_width = inner_width - title_width;
                 let (left_rule, right_rule) = match self.title_align {
-                    JustifyMethod::Left | JustifyMethod::Default => (1, rule_width.saturating_sub(1)),
+                    JustifyMethod::Left | JustifyMethod::Default => {
+                        (1, rule_width.saturating_sub(1))
+                    }
                     JustifyMethod::Right => (rule_width.saturating_sub(1), 1),
                     JustifyMethod::Center | JustifyMethod::Full => {
                         let left = rule_width / 2;
@@ -445,7 +450,9 @@ impl Panel {
                 // Calculate rule sections based on alignment
                 let rule_width = inner_width - subtitle_width;
                 let (left_rule, right_rule) = match self.subtitle_align {
-                    JustifyMethod::Left | JustifyMethod::Default => (1, rule_width.saturating_sub(1)),
+                    JustifyMethod::Left | JustifyMethod::Default => {
+                        (1, rule_width.saturating_sub(1))
+                    }
                     JustifyMethod::Right => (rule_width.saturating_sub(1), 1),
                     JustifyMethod::Center | JustifyMethod::Full => {
                         let left = rule_width / 2;
@@ -545,9 +552,7 @@ mod tests {
 
     #[test]
     fn test_panel_with_title() {
-        let panel = Panel::from_text("Content")
-            .title("Title")
-            .width(30);
+        let panel = Panel::from_text("Content").title("Title").width(30);
         let text = panel.render_plain(80);
         assert!(text.contains("Title"));
         assert!(text.contains("Content"));
@@ -570,9 +575,7 @@ mod tests {
 
     #[test]
     fn test_panel_padding() {
-        let panel = Panel::from_text("Hi")
-            .padding((1, 2))
-            .width(20);
+        let panel = Panel::from_text("Hi").padding((1, 2)).width(20);
         let segments = panel.render(80);
         // Count newlines to verify padding
         let newlines = segments.iter().filter(|s| s.text == "\n").count();
@@ -582,9 +585,7 @@ mod tests {
 
     #[test]
     fn test_panel_subtitle() {
-        let panel = Panel::from_text("Content")
-            .subtitle("Footer")
-            .width(30);
+        let panel = Panel::from_text("Content").subtitle("Footer").width(30);
         let text = panel.render_plain(80);
         assert!(text.contains("Footer"));
     }

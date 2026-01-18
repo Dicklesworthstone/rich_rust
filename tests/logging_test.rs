@@ -15,7 +15,10 @@ use common::{
 #[test]
 fn test_logging_infrastructure_works() {
     init_test_logging();
-    log_test_context("test_logging_infrastructure_works", "Verifies tracing setup");
+    log_test_context(
+        "test_logging_infrastructure_works",
+        "Verifies tracing setup",
+    );
 
     {
         let _setup = test_phase("setup");
@@ -36,7 +39,10 @@ fn test_logging_infrastructure_works() {
 #[test]
 fn test_logged_assertions_basic() {
     init_test_logging();
-    log_test_context("test_logged_assertions_basic", "Tests basic assertion logging");
+    log_test_context(
+        "test_logged_assertions_basic",
+        "Tests basic assertion logging",
+    );
 
     assert_eq_logged("integer equality", 42, 42);
     assert_eq_logged("string equality", "hello", "hello");
@@ -46,7 +52,10 @@ fn test_logged_assertions_basic() {
 #[test]
 fn test_logged_assertions_result() {
     init_test_logging();
-    log_test_context("test_logged_assertions_result", "Tests Result assertion logging");
+    log_test_context(
+        "test_logged_assertions_result",
+        "Tests Result assertion logging",
+    );
 
     let ok_result: Result<i32, &str> = Ok(100);
     let value = assert_ok_logged("successful result", ok_result);
@@ -56,7 +65,10 @@ fn test_logged_assertions_result() {
 #[test]
 fn test_logged_assertions_option() {
     init_test_logging();
-    log_test_context("test_logged_assertions_option", "Tests Option assertion logging");
+    log_test_context(
+        "test_logged_assertions_option",
+        "Tests Option assertion logging",
+    );
 
     let some_value: Option<&str> = Some("present");
     let value = assert_some_logged("some option", some_value);
@@ -69,7 +81,10 @@ fn test_logged_assertions_option() {
 #[test]
 fn test_logged_assertions_collection() {
     init_test_logging();
-    log_test_context("test_logged_assertions_collection", "Tests collection assertion logging");
+    log_test_context(
+        "test_logged_assertions_collection",
+        "Tests collection assertion logging",
+    );
 
     let vec = vec![1, 2, 3, 4, 5];
     assert_len_logged("vector length", &vec, 5);
@@ -112,9 +127,6 @@ fn test_with_rich_rust_types() {
         tracing::debug!(style = ?style, "Created bold red style");
 
         // Verify the style has the expected attributes
-        assert_true_logged(
-            "style is bold",
-            style.attributes.contains(Attributes::BOLD),
-        );
+        assert_true_logged("style is bold", style.attributes.contains(Attributes::BOLD));
     }
 }

@@ -3,9 +3,9 @@
 //! A `Segment` is a piece of text with a single style applied. The rendering
 //! pipeline produces streams of segments that are then written to the terminal.
 
-use std::fmt;
-use crate::style::Style;
 use crate::cells::cell_len;
+use crate::style::Style;
+use std::fmt;
 
 /// Control codes for terminal manipulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -407,7 +407,10 @@ pub fn align_top(
     for line in &mut result {
         let line_width: usize = line.iter().map(Segment::cell_length).sum();
         if line_width < width {
-            line.push(Segment::new(" ".repeat(width - line_width), Some(style.clone())));
+            line.push(Segment::new(
+                " ".repeat(width - line_width),
+                Some(style.clone()),
+            ));
         }
     }
 
@@ -440,7 +443,10 @@ pub fn align_bottom(
     for mut line in lines {
         let line_width: usize = line.iter().map(Segment::cell_length).sum();
         if line_width < width {
-            line.push(Segment::new(" ".repeat(width - line_width), Some(style.clone())));
+            line.push(Segment::new(
+                " ".repeat(width - line_width),
+                Some(style.clone()),
+            ));
         }
         result.push(line);
     }
@@ -477,7 +483,10 @@ pub fn align_middle(
     for mut line in lines {
         let line_width: usize = line.iter().map(Segment::cell_length).sum();
         if line_width < width {
-            line.push(Segment::new(" ".repeat(width - line_width), Some(style.clone())));
+            line.push(Segment::new(
+                " ".repeat(width - line_width),
+                Some(style.clone()),
+            ));
         }
         result.push(line);
     }
@@ -674,7 +683,10 @@ mod tests {
         assert_eq!(seg.cell_length(), 0);
 
         // Control segment with params still 0
-        let seg = Segment::control(vec![ControlCode::with_params(ControlType::CursorMoveTo, vec![1, 2])]);
+        let seg = Segment::control(vec![ControlCode::with_params(
+            ControlType::CursorMoveTo,
+            vec![1, 2],
+        )]);
         assert_eq!(seg.cell_length(), 0);
     }
 

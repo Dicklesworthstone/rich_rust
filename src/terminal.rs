@@ -132,91 +132,97 @@ pub mod control {
 
     /// Clear the entire screen.
     pub fn clear_screen<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{terminal::{Clear, ClearType}, ExecutableCommand};
+        use crossterm::{
+            ExecutableCommand,
+            terminal::{Clear, ClearType},
+        };
         writer.execute(Clear(ClearType::All))?;
         Ok(())
     }
 
     /// Clear the current line.
     pub fn clear_line<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{terminal::{Clear, ClearType}, ExecutableCommand};
+        use crossterm::{
+            ExecutableCommand,
+            terminal::{Clear, ClearType},
+        };
         writer.execute(Clear(ClearType::CurrentLine))?;
         Ok(())
     }
 
     /// Move cursor to home position (0, 0).
     pub fn cursor_home<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveTo, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveTo};
         writer.execute(MoveTo(0, 0))?;
         Ok(())
     }
 
     /// Move cursor to a specific position.
     pub fn cursor_move_to<W: Write>(writer: &mut W, x: u16, y: u16) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveTo, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveTo};
         writer.execute(MoveTo(x, y))?;
         Ok(())
     }
 
     /// Move cursor up by `n` lines.
     pub fn cursor_up<W: Write>(writer: &mut W, n: u16) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveUp, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveUp};
         writer.execute(MoveUp(n))?;
         Ok(())
     }
 
     /// Move cursor down by `n` lines.
     pub fn cursor_down<W: Write>(writer: &mut W, n: u16) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveDown, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveDown};
         writer.execute(MoveDown(n))?;
         Ok(())
     }
 
     /// Move cursor forward (right) by `n` columns.
     pub fn cursor_forward<W: Write>(writer: &mut W, n: u16) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveRight, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveRight};
         writer.execute(MoveRight(n))?;
         Ok(())
     }
 
     /// Move cursor backward (left) by `n` columns.
     pub fn cursor_backward<W: Write>(writer: &mut W, n: u16) -> std::io::Result<()> {
-        use crossterm::{cursor::MoveLeft, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::MoveLeft};
         writer.execute(MoveLeft(n))?;
         Ok(())
     }
 
     /// Hide the cursor.
     pub fn hide_cursor<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{cursor::Hide, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::Hide};
         writer.execute(Hide)?;
         Ok(())
     }
 
     /// Show the cursor.
     pub fn show_cursor<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{cursor::Show, ExecutableCommand};
+        use crossterm::{ExecutableCommand, cursor::Show};
         writer.execute(Show)?;
         Ok(())
     }
 
     /// Enable alternate screen buffer.
     pub fn enable_alt_screen<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{terminal::EnterAlternateScreen, ExecutableCommand};
+        use crossterm::{ExecutableCommand, terminal::EnterAlternateScreen};
         writer.execute(EnterAlternateScreen)?;
         Ok(())
     }
 
     /// Disable alternate screen buffer (return to main screen).
     pub fn disable_alt_screen<W: Write>(writer: &mut W) -> std::io::Result<()> {
-        use crossterm::{terminal::LeaveAlternateScreen, ExecutableCommand};
+        use crossterm::{ExecutableCommand, terminal::LeaveAlternateScreen};
         writer.execute(LeaveAlternateScreen)?;
         Ok(())
     }
 
     /// Set the terminal window title.
     pub fn set_title<W: Write>(writer: &mut W, title: &str) -> std::io::Result<()> {
-        use crossterm::{terminal::SetTitle, ExecutableCommand};
+        use crossterm::{ExecutableCommand, terminal::SetTitle};
         writer.execute(SetTitle(title))?;
         Ok(())
     }

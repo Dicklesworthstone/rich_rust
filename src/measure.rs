@@ -241,14 +241,8 @@ pub fn measure_sum(measurements: &[Measurement]) -> Measurement {
     }
 
     Measurement {
-        minimum: measurements
-            .iter()
-            .map(|m| m.normalize().minimum)
-            .sum(),
-        maximum: measurements
-            .iter()
-            .map(|m| m.normalize().maximum)
-            .sum(),
+        minimum: measurements.iter().map(|m| m.normalize().minimum).sum(),
+        maximum: measurements.iter().map(|m| m.normalize().maximum).sum(),
     }
 }
 
@@ -431,7 +425,7 @@ mod tests {
             Measurement::new(8, 12),
         ];
         let union = measure_union(&measurements);
-        assert_eq!(union.minimum, 8);  // max of minimums
+        assert_eq!(union.minimum, 8); // max of minimums
         assert_eq!(union.maximum, 15); // max of maximums
     }
 
@@ -444,10 +438,7 @@ mod tests {
 
     #[test]
     fn test_measure_sum() {
-        let measurements = vec![
-            Measurement::new(5, 10),
-            Measurement::new(3, 7),
-        ];
+        let measurements = vec![Measurement::new(5, 10), Measurement::new(3, 7)];
         let sum = measure_sum(&measurements);
         assert_eq!(sum.minimum, 8);
         assert_eq!(sum.maximum, 17);

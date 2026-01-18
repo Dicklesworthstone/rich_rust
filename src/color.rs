@@ -5,14 +5,81 @@
 //! - 8-bit colors (256 colors)
 //! - 24-bit true colors (16 million colors)
 //! - Automatic color downgrading for terminal compatibility
+//!
+//! # Examples
+//!
+//! ## Parsing Colors
+//!
+//! ```
+//! use rich_rust::color::Color;
+//!
+//! // Named colors
+//! let red = Color::parse("red").unwrap();
+//! let bright_blue = Color::parse("bright_blue").unwrap();
+//!
+//! // Hex colors
+//! let orange = Color::parse("#ff8800").unwrap();
+//! let short_hex = Color::parse("#f80").unwrap();  // Shorthand
+//!
+//! // RGB format
+//! let custom = Color::parse("rgb(100, 150, 200)").unwrap();
+//!
+//! // Color number (0-255)
+//! let color196 = Color::parse("color(196)").unwrap();
+//! ```
+//!
+//! ## Creating Colors Programmatically
+//!
+//! ```
+//! use rich_rust::color::{Color, ColorTriplet};
+//!
+//! // From ANSI number
+//! let ansi_red = Color::from_ansi(1);
+//!
+//! // From RGB values
+//! let rgb_color = Color::from_rgb(255, 128, 64);
+//!
+//! // From a triplet
+//! let triplet = ColorTriplet::new(100, 150, 200);
+//! let from_triplet = Color::from_triplet(triplet);
+//! ```
+//!
+//! ## Color Downgrading
+//!
+//! Colors are automatically downgraded to match terminal capabilities:
+//!
+//! ```
+//! use rich_rust::color::{Color, ColorSystem};
+//!
+//! let truecolor = Color::from_rgb(255, 128, 64);
+//!
+//! // Downgrade to 256 colors
+//! let eight_bit = truecolor.downgrade(ColorSystem::EightBit);
+//!
+//! // Downgrade to 16 colors
+//! let standard = truecolor.downgrade(ColorSystem::Standard);
+//! ```
+//!
+//! ## ANSI Code Generation
+//!
+//! ```
+//! use rich_rust::color::Color;
+//!
+//! let red = Color::from_ansi(1);
+//! let fg_codes = red.get_ansi_codes(true);   // Foreground: ["31"]
+//! let bg_codes = red.get_ansi_codes(false);  // Background: ["41"]
+//!
+//! let rgb = Color::from_rgb(255, 0, 0);
+//! let rgb_fg = rgb.get_ansi_codes(true);     // ["38", "2", "255", "0", "0"]
+//! ```
 
+use lru::LruCache;
+use regex::Regex;
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::sync::LazyLock;
-use lru::LruCache;
 use std::sync::Mutex;
-use std::num::NonZeroUsize;
-use regex::Regex;
 
 /// RGB color triplet with values 0-255.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -57,7 +124,7 @@ impl ColorTriplet {
         let (r, g, b) = self.normalized();
         let max = r.max(g).max(b);
         let min = r.min(g).min(b);
-        let lightness = (max + min) / 2.0;
+        let lightness = f64::midpoint(max, min);
 
         if (max - min).abs() < f64::EPSILON {
             return (0.0, lightness, 0.0);
@@ -224,10 +291,7 @@ impl Color {
     /// Returns true if color is system-defined (Standard or Windows).
     #[must_use]
     pub const fn is_system_defined(&self) -> bool {
-        matches!(
-            self.color_type,
-            ColorType::Standard | ColorType::Windows
-        )
+        matches!(self.color_type, ColorType::Standard | ColorType::Windows)
     }
 
     /// Returns true if this is the default color.
@@ -253,12 +317,11 @@ impl Color {
                     .copied()
                     .unwrap_or_default()
             }
-            ColorType::EightBit => {
-                self.number
-                    .and_then(|n| EIGHT_BIT_PALETTE.get(n as usize))
-                    .copied()
-                    .unwrap_or_default()
-            }
+            ColorType::EightBit => self
+                .number
+                .and_then(|n| EIGHT_BIT_PALETTE.get(n as usize))
+                .copied()
+                .unwrap_or_default(),
         }
     }
 
@@ -318,7 +381,7 @@ impl Color {
 
         match (self.color_type, system) {
             // Already at or below target system
-            (ColorType::Standard, _) | (ColorType::Windows, _) => self.clone(),
+            (ColorType::Standard | ColorType::Windows, _) => self.clone(),
             (ColorType::EightBit, ColorSystem::EightBit | ColorSystem::TrueColor) => self.clone(),
             (ColorType::TrueColor, ColorSystem::TrueColor) => self.clone(),
 
@@ -355,9 +418,8 @@ impl Color {
     /// - Default: `default`
     pub fn parse(color: &str) -> Result<Self, ColorParseError> {
         // Check cache first
-        static CACHE: LazyLock<Mutex<LruCache<String, Color>>> = LazyLock::new(|| {
-            Mutex::new(LruCache::new(NonZeroUsize::new(1024).expect("non-zero")))
-        });
+        static CACHE: LazyLock<Mutex<LruCache<String, Color>>> =
+            LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(1024).expect("non-zero"))));
 
         let normalized = color.trim().to_lowercase();
 
@@ -414,9 +476,8 @@ impl Color {
         }
 
         // Try color(N) format
-        static COLOR_NUM_RE: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^color\((\d{1,3})\)$").expect("valid regex")
-        });
+        static COLOR_NUM_RE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"^color\((\d{1,3})\)$").expect("valid regex"));
         if let Some(caps) = COLOR_NUM_RE.captures(color) {
             if let Ok(num) = caps[1].parse::<u16>() {
                 if num <= 255 {
@@ -531,42 +592,170 @@ impl TryFrom<String> for Color {
 
 /// Standard 16-color ANSI palette.
 pub static STANDARD_PALETTE: [ColorTriplet; 16] = [
-    ColorTriplet { red: 0, green: 0, blue: 0 },         // 0: Black
-    ColorTriplet { red: 170, green: 0, blue: 0 },       // 1: Red
-    ColorTriplet { red: 0, green: 170, blue: 0 },       // 2: Green
-    ColorTriplet { red: 170, green: 85, blue: 0 },      // 3: Yellow
-    ColorTriplet { red: 0, green: 0, blue: 170 },       // 4: Blue
-    ColorTriplet { red: 170, green: 0, blue: 170 },     // 5: Magenta
-    ColorTriplet { red: 0, green: 170, blue: 170 },     // 6: Cyan
-    ColorTriplet { red: 170, green: 170, blue: 170 },   // 7: White
-    ColorTriplet { red: 85, green: 85, blue: 85 },      // 8: Bright Black
-    ColorTriplet { red: 255, green: 85, blue: 85 },     // 9: Bright Red
-    ColorTriplet { red: 85, green: 255, blue: 85 },     // 10: Bright Green
-    ColorTriplet { red: 255, green: 255, blue: 85 },    // 11: Bright Yellow
-    ColorTriplet { red: 85, green: 85, blue: 255 },     // 12: Bright Blue
-    ColorTriplet { red: 255, green: 85, blue: 255 },    // 13: Bright Magenta
-    ColorTriplet { red: 85, green: 255, blue: 255 },    // 14: Bright Cyan
-    ColorTriplet { red: 255, green: 255, blue: 255 },   // 15: Bright White
+    ColorTriplet {
+        red: 0,
+        green: 0,
+        blue: 0,
+    }, // 0: Black
+    ColorTriplet {
+        red: 170,
+        green: 0,
+        blue: 0,
+    }, // 1: Red
+    ColorTriplet {
+        red: 0,
+        green: 170,
+        blue: 0,
+    }, // 2: Green
+    ColorTriplet {
+        red: 170,
+        green: 85,
+        blue: 0,
+    }, // 3: Yellow
+    ColorTriplet {
+        red: 0,
+        green: 0,
+        blue: 170,
+    }, // 4: Blue
+    ColorTriplet {
+        red: 170,
+        green: 0,
+        blue: 170,
+    }, // 5: Magenta
+    ColorTriplet {
+        red: 0,
+        green: 170,
+        blue: 170,
+    }, // 6: Cyan
+    ColorTriplet {
+        red: 170,
+        green: 170,
+        blue: 170,
+    }, // 7: White
+    ColorTriplet {
+        red: 85,
+        green: 85,
+        blue: 85,
+    }, // 8: Bright Black
+    ColorTriplet {
+        red: 255,
+        green: 85,
+        blue: 85,
+    }, // 9: Bright Red
+    ColorTriplet {
+        red: 85,
+        green: 255,
+        blue: 85,
+    }, // 10: Bright Green
+    ColorTriplet {
+        red: 255,
+        green: 255,
+        blue: 85,
+    }, // 11: Bright Yellow
+    ColorTriplet {
+        red: 85,
+        green: 85,
+        blue: 255,
+    }, // 12: Bright Blue
+    ColorTriplet {
+        red: 255,
+        green: 85,
+        blue: 255,
+    }, // 13: Bright Magenta
+    ColorTriplet {
+        red: 85,
+        green: 255,
+        blue: 255,
+    }, // 14: Bright Cyan
+    ColorTriplet {
+        red: 255,
+        green: 255,
+        blue: 255,
+    }, // 15: Bright White
 ];
 
 /// Windows 10+ console palette.
 pub static WINDOWS_PALETTE: [ColorTriplet; 16] = [
-    ColorTriplet { red: 12, green: 12, blue: 12 },      // 0: Black
-    ColorTriplet { red: 197, green: 15, blue: 31 },     // 1: Red
-    ColorTriplet { red: 19, green: 161, blue: 14 },     // 2: Green
-    ColorTriplet { red: 193, green: 156, blue: 0 },     // 3: Yellow
-    ColorTriplet { red: 0, green: 55, blue: 218 },      // 4: Blue
-    ColorTriplet { red: 136, green: 23, blue: 152 },    // 5: Magenta
-    ColorTriplet { red: 58, green: 150, blue: 221 },    // 6: Cyan
-    ColorTriplet { red: 204, green: 204, blue: 204 },   // 7: White
-    ColorTriplet { red: 118, green: 118, blue: 118 },   // 8: Bright Black
-    ColorTriplet { red: 231, green: 72, blue: 86 },     // 9: Bright Red
-    ColorTriplet { red: 22, green: 198, blue: 12 },     // 10: Bright Green
-    ColorTriplet { red: 249, green: 241, blue: 165 },   // 11: Bright Yellow
-    ColorTriplet { red: 59, green: 120, blue: 255 },    // 12: Bright Blue
-    ColorTriplet { red: 180, green: 0, blue: 158 },     // 13: Bright Magenta
-    ColorTriplet { red: 97, green: 214, blue: 214 },    // 14: Bright Cyan
-    ColorTriplet { red: 242, green: 242, blue: 242 },   // 15: Bright White
+    ColorTriplet {
+        red: 12,
+        green: 12,
+        blue: 12,
+    }, // 0: Black
+    ColorTriplet {
+        red: 197,
+        green: 15,
+        blue: 31,
+    }, // 1: Red
+    ColorTriplet {
+        red: 19,
+        green: 161,
+        blue: 14,
+    }, // 2: Green
+    ColorTriplet {
+        red: 193,
+        green: 156,
+        blue: 0,
+    }, // 3: Yellow
+    ColorTriplet {
+        red: 0,
+        green: 55,
+        blue: 218,
+    }, // 4: Blue
+    ColorTriplet {
+        red: 136,
+        green: 23,
+        blue: 152,
+    }, // 5: Magenta
+    ColorTriplet {
+        red: 58,
+        green: 150,
+        blue: 221,
+    }, // 6: Cyan
+    ColorTriplet {
+        red: 204,
+        green: 204,
+        blue: 204,
+    }, // 7: White
+    ColorTriplet {
+        red: 118,
+        green: 118,
+        blue: 118,
+    }, // 8: Bright Black
+    ColorTriplet {
+        red: 231,
+        green: 72,
+        blue: 86,
+    }, // 9: Bright Red
+    ColorTriplet {
+        red: 22,
+        green: 198,
+        blue: 12,
+    }, // 10: Bright Green
+    ColorTriplet {
+        red: 249,
+        green: 241,
+        blue: 165,
+    }, // 11: Bright Yellow
+    ColorTriplet {
+        red: 59,
+        green: 120,
+        blue: 255,
+    }, // 12: Bright Blue
+    ColorTriplet {
+        red: 180,
+        green: 0,
+        blue: 158,
+    }, // 13: Bright Magenta
+    ColorTriplet {
+        red: 97,
+        green: 214,
+        blue: 214,
+    }, // 14: Bright Cyan
+    ColorTriplet {
+        red: 242,
+        green: 242,
+        blue: 242,
+    }, // 15: Bright White
 ];
 
 /// Generate the 256-color palette.
@@ -667,7 +856,7 @@ fn color_distance(c1: ColorTriplet, c2: ColorTriplet) -> u32 {
     let g2 = u32::from(c2.green);
     let b2 = u32::from(c2.blue);
 
-    let red_mean = (r1 + r2) / 2;
+    let red_mean = u32::midpoint(r1, r2);
     let red_diff = r1.abs_diff(r2);
     let green_diff = g1.abs_diff(g2);
     let blue_diff = b1.abs_diff(b2);
@@ -1029,7 +1218,7 @@ mod tests {
         let c = ColorTriplet::new(255, 128, 0);
         let (r, g, b) = c.normalized();
         assert!((r - 1.0).abs() < f64::EPSILON);
-        assert!((g - 128.0/255.0).abs() < 0.001);
+        assert!((g - 128.0 / 255.0).abs() < 0.001);
         assert!(b.abs() < f64::EPSILON);
     }
 
@@ -1113,19 +1302,19 @@ mod tests {
     #[test]
     fn test_spec_standard_palette_values() {
         // Per RICH_SPEC.md Section 1.3
-        assert_eq!(STANDARD_PALETTE[0], ColorTriplet::new(0, 0, 0));       // Black
-        assert_eq!(STANDARD_PALETTE[1], ColorTriplet::new(170, 0, 0));     // Red
-        assert_eq!(STANDARD_PALETTE[2], ColorTriplet::new(0, 170, 0));     // Green
-        assert_eq!(STANDARD_PALETTE[3], ColorTriplet::new(170, 85, 0));    // Yellow
-        assert_eq!(STANDARD_PALETTE[4], ColorTriplet::new(0, 0, 170));     // Blue
-        assert_eq!(STANDARD_PALETTE[5], ColorTriplet::new(170, 0, 170));   // Magenta
-        assert_eq!(STANDARD_PALETTE[6], ColorTriplet::new(0, 170, 170));   // Cyan
+        assert_eq!(STANDARD_PALETTE[0], ColorTriplet::new(0, 0, 0)); // Black
+        assert_eq!(STANDARD_PALETTE[1], ColorTriplet::new(170, 0, 0)); // Red
+        assert_eq!(STANDARD_PALETTE[2], ColorTriplet::new(0, 170, 0)); // Green
+        assert_eq!(STANDARD_PALETTE[3], ColorTriplet::new(170, 85, 0)); // Yellow
+        assert_eq!(STANDARD_PALETTE[4], ColorTriplet::new(0, 0, 170)); // Blue
+        assert_eq!(STANDARD_PALETTE[5], ColorTriplet::new(170, 0, 170)); // Magenta
+        assert_eq!(STANDARD_PALETTE[6], ColorTriplet::new(0, 170, 170)); // Cyan
         assert_eq!(STANDARD_PALETTE[7], ColorTriplet::new(170, 170, 170)); // White
-        assert_eq!(STANDARD_PALETTE[8], ColorTriplet::new(85, 85, 85));    // Bright Black
-        assert_eq!(STANDARD_PALETTE[9], ColorTriplet::new(255, 85, 85));   // Bright Red
-        assert_eq!(STANDARD_PALETTE[10], ColorTriplet::new(85, 255, 85));  // Bright Green
+        assert_eq!(STANDARD_PALETTE[8], ColorTriplet::new(85, 85, 85)); // Bright Black
+        assert_eq!(STANDARD_PALETTE[9], ColorTriplet::new(255, 85, 85)); // Bright Red
+        assert_eq!(STANDARD_PALETTE[10], ColorTriplet::new(85, 255, 85)); // Bright Green
         assert_eq!(STANDARD_PALETTE[11], ColorTriplet::new(255, 255, 85)); // Bright Yellow
-        assert_eq!(STANDARD_PALETTE[12], ColorTriplet::new(85, 85, 255));  // Bright Blue
+        assert_eq!(STANDARD_PALETTE[12], ColorTriplet::new(85, 85, 255)); // Bright Blue
         assert_eq!(STANDARD_PALETTE[13], ColorTriplet::new(255, 85, 255)); // Bright Magenta
         assert_eq!(STANDARD_PALETTE[14], ColorTriplet::new(85, 255, 255)); // Bright Cyan
         assert_eq!(STANDARD_PALETTE[15], ColorTriplet::new(255, 255, 255)); // Bright White
@@ -1135,20 +1324,20 @@ mod tests {
     #[test]
     fn test_spec_windows_palette_values() {
         // Per RICH_SPEC.md Section 1.3
-        assert_eq!(WINDOWS_PALETTE[0], ColorTriplet::new(12, 12, 12));     // Black
-        assert_eq!(WINDOWS_PALETTE[1], ColorTriplet::new(197, 15, 31));    // Red
-        assert_eq!(WINDOWS_PALETTE[2], ColorTriplet::new(19, 161, 14));    // Green
-        assert_eq!(WINDOWS_PALETTE[3], ColorTriplet::new(193, 156, 0));    // Yellow
-        assert_eq!(WINDOWS_PALETTE[4], ColorTriplet::new(0, 55, 218));     // Blue
-        assert_eq!(WINDOWS_PALETTE[5], ColorTriplet::new(136, 23, 152));   // Magenta
-        assert_eq!(WINDOWS_PALETTE[6], ColorTriplet::new(58, 150, 221));   // Cyan
-        assert_eq!(WINDOWS_PALETTE[7], ColorTriplet::new(204, 204, 204));  // White
+        assert_eq!(WINDOWS_PALETTE[0], ColorTriplet::new(12, 12, 12)); // Black
+        assert_eq!(WINDOWS_PALETTE[1], ColorTriplet::new(197, 15, 31)); // Red
+        assert_eq!(WINDOWS_PALETTE[2], ColorTriplet::new(19, 161, 14)); // Green
+        assert_eq!(WINDOWS_PALETTE[3], ColorTriplet::new(193, 156, 0)); // Yellow
+        assert_eq!(WINDOWS_PALETTE[4], ColorTriplet::new(0, 55, 218)); // Blue
+        assert_eq!(WINDOWS_PALETTE[5], ColorTriplet::new(136, 23, 152)); // Magenta
+        assert_eq!(WINDOWS_PALETTE[6], ColorTriplet::new(58, 150, 221)); // Cyan
+        assert_eq!(WINDOWS_PALETTE[7], ColorTriplet::new(204, 204, 204)); // White
         assert_eq!(WINDOWS_PALETTE[8], ColorTriplet::new(118, 118, 118)); // Bright Black
-        assert_eq!(WINDOWS_PALETTE[9], ColorTriplet::new(231, 72, 86));   // Bright Red
-        assert_eq!(WINDOWS_PALETTE[10], ColorTriplet::new(22, 198, 12));  // Bright Green
+        assert_eq!(WINDOWS_PALETTE[9], ColorTriplet::new(231, 72, 86)); // Bright Red
+        assert_eq!(WINDOWS_PALETTE[10], ColorTriplet::new(22, 198, 12)); // Bright Green
         assert_eq!(WINDOWS_PALETTE[11], ColorTriplet::new(249, 241, 165)); // Bright Yellow
         assert_eq!(WINDOWS_PALETTE[12], ColorTriplet::new(59, 120, 255)); // Bright Blue
-        assert_eq!(WINDOWS_PALETTE[13], ColorTriplet::new(180, 0, 158));  // Bright Magenta
+        assert_eq!(WINDOWS_PALETTE[13], ColorTriplet::new(180, 0, 158)); // Bright Magenta
         assert_eq!(WINDOWS_PALETTE[14], ColorTriplet::new(97, 214, 214)); // Bright Cyan
         assert_eq!(WINDOWS_PALETTE[15], ColorTriplet::new(242, 242, 242)); // Bright White
     }
@@ -1215,14 +1404,20 @@ mod tests {
         // Pure gray (saturation = 0) should map to grayscale range
         let gray = ColorTriplet::new(128, 128, 128);
         let idx = rgb_to_eight_bit(gray);
-        assert!(idx >= 232, "Gray should map to grayscale ramp (232-255), got {idx}");
+        assert!(
+            idx >= 232,
+            "Gray should map to grayscale ramp (232-255), got {idx}"
+        );
 
         // Slightly chromatic (saturation > 0.15) should map to color cube
         let chromatic = ColorTriplet::new(128, 100, 100);
         let (_, _, sat) = chromatic.to_hls();
         if sat >= 0.15 {
             let idx = rgb_to_eight_bit(chromatic);
-            assert!(idx < 232 || idx >= 16, "Chromatic color should map to color cube or standard");
+            assert!(
+                idx < 232 || idx >= 16,
+                "Chromatic color should map to color cube or standard"
+            );
         }
     }
 
@@ -1293,21 +1488,21 @@ mod tests {
         assert!(Color::parse("rgb(-1,0,0)").is_err());
 
         // Invalid format
-        assert!(Color::parse("rgb(255,0)").is_err());      // Missing component
-        assert!(Color::parse("rgb(255,0,0,0)").is_err());  // Extra component
-        assert!(Color::parse("rgb(a,b,c)").is_err());       // Non-numeric
-        assert!(Color::parse("rgb255,0,0)").is_err());     // Missing open paren
-        assert!(Color::parse("rgb(255,0,0").is_err());     // Missing close paren
+        assert!(Color::parse("rgb(255,0)").is_err()); // Missing component
+        assert!(Color::parse("rgb(255,0,0,0)").is_err()); // Extra component
+        assert!(Color::parse("rgb(a,b,c)").is_err()); // Non-numeric
+        assert!(Color::parse("rgb255,0,0)").is_err()); // Missing open paren
+        assert!(Color::parse("rgb(255,0,0").is_err()); // Missing close paren
     }
 
     // Invalid named colors
     #[test]
     fn test_invalid_named_colors() {
         assert!(Color::parse("not_a_color").is_err());
-        assert!(Color::parse("redd").is_err());           // Typo
-        assert!(Color::parse("bluee").is_err());          // Typo
-        assert!(Color::parse("fancy_purple").is_err());   // Not in palette
-        assert!(Color::parse("123abc").is_err());         // Starts with number
+        assert!(Color::parse("redd").is_err()); // Typo
+        assert!(Color::parse("bluee").is_err()); // Typo
+        assert!(Color::parse("fancy_purple").is_err()); // Not in palette
+        assert!(Color::parse("123abc").is_err()); // Starts with number
     }
 
     // Invalid color numbers
@@ -1319,9 +1514,9 @@ mod tests {
         assert!(Color::parse("color(-1)").is_err());
 
         // Invalid format
-        assert!(Color::parse("color()").is_err());        // Missing number
-        assert!(Color::parse("color(abc)").is_err());     // Non-numeric
-        assert!(Color::parse("color 128").is_err());      // Missing parens
+        assert!(Color::parse("color()").is_err()); // Missing number
+        assert!(Color::parse("color(abc)").is_err()); // Non-numeric
+        assert!(Color::parse("color 128").is_err()); // Missing parens
     }
 
     // Empty and whitespace inputs
@@ -1362,7 +1557,10 @@ mod tests {
 
         // Downgrade to Standard (should find nearest standard color)
         let downgraded = eight_bit.downgrade(ColorSystem::Standard);
-        assert!(downgraded.color_type == ColorType::Standard || downgraded.color_type == ColorType::Default);
+        assert!(
+            downgraded.color_type == ColorType::Standard
+                || downgraded.color_type == ColorType::Default
+        );
 
         // The downgraded color should be a valid standard color (0-15)
         if downgraded.number.is_some() {
@@ -1392,10 +1590,22 @@ mod tests {
     #[test]
     fn test_all_standard_named_colors() {
         let standard_colors = [
-            "black", "red", "green", "yellow",
-            "blue", "magenta", "cyan", "white",
-            "bright_black", "bright_red", "bright_green", "bright_yellow",
-            "bright_blue", "bright_magenta", "bright_cyan", "bright_white",
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
         ];
 
         for (i, name) in standard_colors.iter().enumerate() {

@@ -192,10 +192,7 @@ impl Padding {
             if self.expand && content_width < inner_width {
                 let fill = inner_width.saturating_sub(content_width);
                 if fill > 0 {
-                    line.push(Segment::new(
-                        " ".repeat(fill),
-                        Some(self.style.clone()),
-                    ));
+                    line.push(Segment::new(" ".repeat(fill), Some(self.style.clone())));
                 }
             }
 
@@ -283,7 +280,7 @@ mod tests {
     fn test_horizontal_vertical() {
         let pad = PaddingDimensions::new(1, 2, 3, 4);
         assert_eq!(pad.horizontal(), 6); // 2 + 4
-        assert_eq!(pad.vertical(), 4);   // 1 + 3
+        assert_eq!(pad.vertical(), 4); // 1 + 3
     }
 
     #[test]

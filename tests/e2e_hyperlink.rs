@@ -6,8 +6,8 @@
 mod common;
 
 use common::init_test_logging;
-use rich_rust::prelude::*;
 use rich_rust::color::ColorSystem;
+use rich_rust::prelude::*;
 
 // =============================================================================
 // OSC 8 Format Reference
@@ -183,7 +183,8 @@ fn test_markup_link_tag() {
 fn test_markup_link_with_nested_styles() {
     init_test_logging();
 
-    let text = rich_rust::markup::render("[bold][link=https://example.com]bold link[/link][/bold]").unwrap();
+    let text = rich_rust::markup::render("[bold][link=https://example.com]bold link[/link][/bold]")
+        .unwrap();
     assert_eq!(text.plain(), "bold link");
 }
 
@@ -192,7 +193,8 @@ fn test_markup_link_with_nested_styles() {
 fn test_markup_link_special_chars() {
     init_test_logging();
 
-    let text = rich_rust::markup::render("[link=https://example.com/path?a=1&b=2]url[/link]").unwrap();
+    let text =
+        rich_rust::markup::render("[link=https://example.com/path?a=1&b=2]url[/link]").unwrap();
     assert_eq!(text.plain(), "url");
 
     let spans = text.spans();
@@ -209,7 +211,10 @@ fn test_markup_link_special_chars() {
 fn test_markup_styled_link() {
     init_test_logging();
 
-    let text = rich_rust::markup::render("[red]before [link=https://example.com]linked[/link] after[/red]").unwrap();
+    let text = rich_rust::markup::render(
+        "[red]before [link=https://example.com]linked[/link] after[/red]",
+    )
+    .unwrap();
     assert_eq!(text.plain(), "before linked after");
 }
 
@@ -271,7 +276,10 @@ fn test_style_display_with_link() {
 
     assert!(display.contains("bold"), "Display should contain 'bold'");
     assert!(display.contains("link"), "Display should contain 'link'");
-    assert!(display.contains("https://example.com"), "Display should contain URL");
+    assert!(
+        display.contains("https://example.com"),
+        "Display should contain URL"
+    );
 }
 
 // =============================================================================

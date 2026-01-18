@@ -29,7 +29,7 @@
 pub mod assertions;
 
 use std::sync::Once;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 static INIT: Once = Once::new();
 
@@ -105,8 +105,8 @@ pub fn init_test_logging() {
 /// ```
 pub fn init_test_logging_with_filter(filter: &str) {
     INIT.call_once(|| {
-        let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new(filter));
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter));
 
         tracing_subscriber::registry()
             .with(env_filter)

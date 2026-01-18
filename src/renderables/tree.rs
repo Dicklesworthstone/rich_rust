@@ -40,10 +40,10 @@ impl TreeGuides {
     pub const fn branch(&self) -> &str {
         match self {
             Self::Ascii => "+-- ",
-            Self::Unicode => "\u{251C}\u{2500}\u{2500} ",       // ├──
-            Self::Bold => "\u{2523}\u{2501}\u{2501} ",          // ┣━━
-            Self::Double => "\u{2560}\u{2550}\u{2550} ",        // ╠══
-            Self::Rounded => "\u{251C}\u{2500}\u{2500} ",       // ├──
+            Self::Unicode => "\u{251C}\u{2500}\u{2500} ", // ├──
+            Self::Bold => "\u{2523}\u{2501}\u{2501} ",    // ┣━━
+            Self::Double => "\u{2560}\u{2550}\u{2550} ",  // ╠══
+            Self::Rounded => "\u{251C}\u{2500}\u{2500} ", // ├──
         }
     }
 
@@ -52,10 +52,10 @@ impl TreeGuides {
     pub const fn last(&self) -> &str {
         match self {
             Self::Ascii => "`-- ",
-            Self::Unicode => "\u{2514}\u{2500}\u{2500} ",       // └──
-            Self::Bold => "\u{2517}\u{2501}\u{2501} ",          // ┗━━
-            Self::Double => "\u{255A}\u{2550}\u{2550} ",        // ╚══
-            Self::Rounded => "\u{2570}\u{2500}\u{2500} ",       // ╰──
+            Self::Unicode => "\u{2514}\u{2500}\u{2500} ", // └──
+            Self::Bold => "\u{2517}\u{2501}\u{2501} ",    // ┗━━
+            Self::Double => "\u{255A}\u{2550}\u{2550} ",  // ╚══
+            Self::Rounded => "\u{2570}\u{2500}\u{2500} ", // ╰──
         }
     }
 
@@ -335,11 +335,17 @@ impl Tree {
 
         // Add icon if present
         if let Some(icon) = node.get_icon() {
-            segments.push(Segment::new(&format!("{icon} "), Some(node.icon_style.clone())));
+            segments.push(Segment::new(
+                &format!("{icon} "),
+                Some(node.icon_style.clone()),
+            ));
         }
 
         // Add the label
-        let label_style = self.highlight_style.clone().unwrap_or_else(|| node.label.style().clone());
+        let label_style = self
+            .highlight_style
+            .clone()
+            .unwrap_or_else(|| node.label.style().clone());
         segments.push(Segment::new(node.label.plain(), Some(label_style)));
 
         // Add collapse indicator if has children but collapsed
@@ -365,10 +371,7 @@ impl Tree {
     /// Render the tree as a plain string.
     #[must_use]
     pub fn render_plain(&self) -> String {
-        self.render()
-            .into_iter()
-            .map(|seg| seg.text)
-            .collect()
+        self.render().into_iter().map(|seg| seg.text).collect()
     }
 }
 
@@ -480,11 +483,8 @@ mod tests {
 
     #[test]
     fn test_tree_render_nested() {
-        let tree = Tree::with_label("root")
-            .child(
-                TreeNode::new("parent")
-                    .child(TreeNode::new("child"))
-            );
+        let tree =
+            Tree::with_label("root").child(TreeNode::new("parent").child(TreeNode::new("child")));
 
         let plain = tree.render_plain();
         assert!(plain.contains("root"));
@@ -505,12 +505,11 @@ mod tests {
 
     #[test]
     fn test_tree_collapsed_node() {
-        let tree = Tree::with_label("root")
-            .child(
-                TreeNode::new("collapsed")
-                    .collapsed()
-                    .child(TreeNode::new("hidden"))
-            );
+        let tree = Tree::with_label("root").child(
+            TreeNode::new("collapsed")
+                .collapsed()
+                .child(TreeNode::new("hidden")),
+        );
 
         let plain = tree.render_plain();
         assert!(plain.contains("collapsed"));
@@ -522,10 +521,7 @@ mod tests {
     fn test_tree_max_depth() {
         let tree = Tree::with_label("root")
             .max_depth(1)
-            .child(
-                TreeNode::new("level1")
-                    .child(TreeNode::new("level2"))
-            );
+            .child(TreeNode::new("level1").child(TreeNode::new("level2")));
 
         let plain = tree.render_plain();
         assert!(plain.contains("root"));
@@ -535,10 +531,7 @@ mod tests {
 
     #[test]
     fn test_tree_ascii_style() {
-        let tree = ascii_tree(
-            TreeNode::new("root")
-                .child(TreeNode::new("child"))
-        );
+        let tree = ascii_tree(TreeNode::new("root").child(TreeNode::new("child")));
 
         let plain = tree.render_plain();
         assert!(plain.contains("+--") || plain.contains("`--"));
@@ -559,10 +552,7 @@ mod tests {
 
     #[test]
     fn test_file_tree() {
-        let tree = file_tree("project", &[
-            ("src", true),
-            ("Cargo.toml", false),
-        ]);
+        let tree = file_tree("project", &[("src", true), ("Cargo.toml", false)]);
 
         let plain = tree.render_plain();
         assert!(plain.contains("project"));
@@ -576,14 +566,11 @@ mod tests {
             .child(
                 TreeNode::new("branch1")
                     .child(TreeNode::new("leaf1"))
-                    .child(TreeNode::new("leaf2"))
+                    .child(TreeNode::new("leaf2")),
             )
             .child(
                 TreeNode::new("branch2")
-                    .child(
-                        TreeNode::new("sub-branch")
-                            .child(TreeNode::new("deep-leaf"))
-                    )
+                    .child(TreeNode::new("sub-branch").child(TreeNode::new("deep-leaf"))),
             )
             .child(TreeNode::new("leaf3"));
 
@@ -623,9 +610,9 @@ mod tests {
     #[test]
     fn test_tree_wide_unicode_labels() {
         // Test with CJK characters (each is 2 cells wide)
-        let tree = Tree::with_label("项目")  // "project" in Chinese
-            .child(TreeNode::new("源代码"))  // "source code"
-            .child(TreeNode::new("文档"));   // "documentation"
+        let tree = Tree::with_label("项目") // "project" in Chinese
+            .child(TreeNode::new("源代码")) // "source code"
+            .child(TreeNode::new("文档")); // "documentation"
 
         let plain = tree.render_plain();
         assert!(plain.contains("项目"));
@@ -668,7 +655,7 @@ mod tests {
         let guides = TreeGuides::Rounded;
         assert_eq!(guides.vertical(), "│   ");
         assert_eq!(guides.branch(), "├── ");
-        assert_eq!(guides.last(), "╰── ");  // Rounded uses ╰
+        assert_eq!(guides.last(), "╰── "); // Rounded uses ╰
         assert_eq!(guides.space(), "    ");
     }
 }
