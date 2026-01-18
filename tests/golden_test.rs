@@ -353,8 +353,7 @@ fn golden_progress_bar_ascii() {
 #[test]
 fn golden_text_wrapped() {
     init_test_logging();
-    // Use Panel to demonstrate text wrapping since Text doesn't have a direct
-    // render with wrap method exposed
+    // Use Panel to demonstrate truncation to width (Panel does not wrap content).
     let long_text = "This is a very long piece of text that should be wrapped \
         across multiple lines when rendered at a narrow width.";
 

@@ -388,6 +388,7 @@ impl ProgressBar {
             {
                 self.completed = (current as f64) / (total as f64);
             }
+            self.completed = self.completed.clamp(0.0, 1.0);
         }
         if self.completed >= 1.0 {
             self.is_finished = true;
@@ -491,9 +492,10 @@ impl ProgressBar {
         // Description
         let mut used_width = 0;
         if let Some(ref desc) = self.description {
-            let desc_text = format!("{} ", desc.plain());
-            let desc_width = cells::cell_len(&desc_text);
-            segments.push(Segment::new(&desc_text, Some(desc.style().clone())));
+            let mut desc_text = desc.clone();
+            desc_text.append(" ");
+            let desc_width = desc_text.cell_len();
+            segments.extend(desc_text.render(""));
             used_width += desc_width;
         }
 
@@ -651,6 +653,7 @@ pub fn gradient_bar() -> ProgressBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Attributes;
 
     #[test]
     fn test_progress_bar_new() {
@@ -734,6 +737,22 @@ mod tests {
     }
 
     #[test]
+    fn test_progress_bar_description_preserves_spans() {
+        let mut desc = Text::new("Download");
+        desc.stylize(0, 8, Style::new().bold());
+        let bar = ProgressBar::new().description(desc).width(20);
+        let segments = bar.render(80);
+        let has_bold = segments.iter().any(|seg| {
+            seg.text.contains("Download")
+                && seg
+                    .style
+                    .as_ref()
+                    .is_some_and(|style| style.attributes.contains(Attributes::BOLD))
+        });
+        assert!(has_bold, "description should preserve span styles");
+    }
+
+    #[test]
     fn test_progress_bar_finished_message() {
         let mut bar = ProgressBar::new().finished_message("Done!").width(20);
         bar.finish();
@@ -803,5 +822,13 @@ mod tests {
         assert!((bar.progress() - 0.0).abs() < f64::EPSILON);
         bar.set_progress(1.5);
         assert!((bar.progress() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_update_clamps_progress() {
+        let mut bar = ProgressBar::with_total(10);
+        bar.update(15);
+        assert!((bar.progress() - 1.0).abs() < f64::EPSILON);
+        assert!(bar.is_finished());
     }
 }

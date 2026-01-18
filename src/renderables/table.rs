@@ -829,6 +829,8 @@ impl Table {
         }
 
         let mut segments = Vec::new();
+        let has_body_rows = !self.rows.is_empty();
+        let has_footer = self.show_footer && !self.columns.is_empty();
 
         // Title
         if let Some(title) = &self.title {
@@ -862,6 +864,15 @@ impl Table {
                 &self.header_style,
                 &header_overrides,
             ));
+
+            if self.leading > 0 && (has_body_rows || has_footer) {
+                segments.extend(self.render_leading_lines(
+                    box_chars,
+                    &widths,
+                    &self.header_style,
+                    self.leading,
+                ));
+            }
 
             // Header separator
             let sep = self.build_separator(box_chars, &widths, RowLevel::HeadRow);
@@ -902,10 +913,16 @@ impl Table {
             ));
 
             let is_last = row_idx == self.rows.len() - 1;
+            let has_next_row = row_idx + 1 < self.rows.len() || has_footer;
 
             // Leading blank lines between rows
-            if self.leading > 0 && !is_last {
-                segments.extend(self.render_leading_lines(box_chars, &widths, self.leading));
+            if self.leading > 0 && has_next_row {
+                segments.extend(self.render_leading_lines(
+                    box_chars,
+                    &widths,
+                    row_style,
+                    self.leading,
+                ));
             }
 
             // Row separator
@@ -1155,75 +1172,33 @@ impl Table {
         segments
     }
 
-    /// Render a blank row line with proper borders (for leading).
-    fn render_blank_row(&self, box_chars: &BoxChars, widths: &[usize]) -> Vec<Segment> {
-        let mut segments = Vec::new();
-        let pad_str = " ".repeat(self.padding.0);
-        let last_idx = widths.len().saturating_sub(1);
-
-        // Left edge
-        if self.show_edge {
-            segments.push(Segment::new(
-                box_chars.head[0].to_string(),
-                Some(self.border_style.clone()),
-            ));
-        }
-
-        for (i, &width) in widths.iter().enumerate() {
-            // Left padding
-            let pad_left = if self.collapse_padding {
-                self.pad_edge && i == 0
-            } else {
-                self.pad_edge || i > 0
-            };
-            if pad_left {
-                segments.push(Segment::new(&pad_str, None));
-            }
-
-            // Blank content (just spaces)
-            segments.push(Segment::new(" ".repeat(width), None));
-
-            // Right padding
-            let pad_right = if self.collapse_padding {
-                self.pad_edge && i == last_idx
-            } else {
-                self.pad_edge || i < widths.len() - 1
-            };
-            if pad_right {
-                segments.push(Segment::new(&pad_str, None));
-            }
-
-            // Cell divider
-            if i < widths.len() - 1 {
-                segments.push(Segment::new(
-                    box_chars.head[2].to_string(),
-                    Some(self.border_style.clone()),
-                ));
-            }
-        }
-
-        // Right edge
-        if self.show_edge {
-            segments.push(Segment::new(
-                box_chars.head[3].to_string(),
-                Some(self.border_style.clone()),
-            ));
-        }
-
-        segments.push(Segment::line());
-        segments
-    }
-
     /// Render multiple leading blank lines between rows.
     fn render_leading_lines(
         &self,
         box_chars: &BoxChars,
         widths: &[usize],
+        row_style: &Style,
         count: usize,
     ) -> Vec<Segment> {
+        if count == 0 {
+            return Vec::new();
+        }
+
+        let empty_cells: Vec<Text> = (0..widths.len()).map(|_| Text::new("")).collect();
+        let cell_refs: Vec<&Text> = empty_cells.iter().collect();
+        let cell_styles: Vec<&Style> = self.columns.iter().map(|c| &c.style).collect();
+        let overrides: Vec<Option<Style>> = vec![None; self.columns.len()];
+
         let mut segments = Vec::new();
         for _ in 0..count {
-            segments.extend(self.render_blank_row(box_chars, widths));
+            segments.extend(self.render_row_content(
+                box_chars,
+                widths,
+                &cell_refs,
+                &cell_styles,
+                row_style,
+                &overrides,
+            ));
         }
         segments
     }

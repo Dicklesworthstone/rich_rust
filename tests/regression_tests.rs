@@ -1367,6 +1367,56 @@ fn regression_table_caption_alignment_width() {
     tracing::info!("Regression test PASSED: caption alignment width");
 }
 
+/// Regression test: Table leading inserts blank lines between rows
+#[test]
+fn regression_table_leading_inserts_blank_lines() {
+    init_test_logging();
+    log_test_context(
+        "regression_table_leading_inserts_blank_lines",
+        "Ensures table leading inserts blank spacer lines between rows",
+    );
+
+    let _phase = test_phase("table_leading_blank_lines");
+
+    use rich_rust::cells;
+
+    let table = Table::new()
+        .with_column(Column::new("H"))
+        .show_header(false)
+        .leading(2)
+        .with_row_cells(["row-1"])
+        .with_row_cells(["row-2"]);
+
+    let output: String = table.render(30).into_iter().map(|seg| seg.text).collect();
+    let lines: Vec<&str> = output.lines().filter(|line| !line.is_empty()).collect();
+
+    let first_idx = lines
+        .iter()
+        .position(|line| line.contains("row-1"))
+        .expect("row-1 line should exist");
+    let second_idx = lines
+        .iter()
+        .position(|line| line.contains("row-2"))
+        .expect("row-2 line should exist");
+
+    assert_eq!(
+        second_idx.saturating_sub(first_idx).saturating_sub(1),
+        2,
+        "leading should insert two blank lines between rows"
+    );
+
+    let table_width = cells::cell_len(lines[0]);
+    for line in lines {
+        assert_eq!(
+            cells::cell_len(line),
+            table_width,
+            "table line should match table width"
+        );
+    }
+
+    tracing::info!("Regression test PASSED: table leading blank lines");
+}
+
 /// Regression test: Rule title alignment preserves total width
 ///
 /// Bug: Rule titles could produce lines shorter/longer than width

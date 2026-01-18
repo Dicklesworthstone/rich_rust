@@ -334,6 +334,17 @@ impl Markdown {
 
         let parser = Parser::new_ext(&self.source, options);
 
+        let combined_style = |stack: &[Style]| -> Option<Style> {
+            if stack.is_empty() {
+                return None;
+            }
+            let mut combined = Style::new();
+            for style in stack {
+                combined = combined.combine(style);
+            }
+            Some(combined)
+        };
+
         for event in parser {
             match event {
                 Event::Start(tag) => {
@@ -498,7 +509,7 @@ impl Markdown {
                     if in_table {
                         current_cell_content.push_str(&text);
                     } else {
-                        let current_style = style_stack.last().cloned();
+                        let current_style = combined_style(&style_stack);
                         if in_code_block {
                             // Preserve code block formatting
                             for line in text.lines() {
@@ -678,6 +689,7 @@ impl Markdown {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Attributes;
 
     #[test]
     fn test_markdown_new() {
@@ -723,6 +735,22 @@ mod tests {
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         assert!(text.contains("italic"));
         assert!(text.contains("bold"));
+    }
+
+    #[test]
+    fn test_render_nested_emphasis_combines_styles() {
+        let md = Markdown::new("**bold *italic***");
+        let segments = md.render(80);
+        let italic_segment = segments
+            .iter()
+            .find(|seg| seg.text.contains("italic"))
+            .expect("missing italic segment");
+        let style = italic_segment
+            .style
+            .as_ref()
+            .expect("missing style for italic segment");
+        assert!(style.attributes.contains(Attributes::BOLD));
+        assert!(style.attributes.contains(Attributes::ITALIC));
     }
 
     #[test]

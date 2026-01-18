@@ -5,7 +5,7 @@
 
 use crate::r#box::{ASCII, BoxChars, ROUNDED, SQUARE};
 use crate::cells;
-use crate::segment::Segment;
+use crate::segment::{Segment, adjust_line_length};
 use crate::style::Style;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
 
@@ -281,27 +281,29 @@ impl Panel {
                 segments.push(Segment::new(left_pad.clone(), Some(self.style.clone())));
             }
 
-            // Content (with right-padding to fill width)
-            let line_width: usize = line.iter().map(|seg| cells::cell_len(&seg.text)).sum();
-            for seg in line {
-                let mut out = seg.clone();
-                if !out.is_control() {
-                    out.style = Some(match out.style.take() {
-                        Some(existing) => self.style.combine(&existing),
-                        None => self.style.clone(),
-                    });
-                }
-                segments.push(out);
-            }
+            // Content (truncate/pad to content width)
+            let mut content_segments: Vec<Segment> = line
+                .iter()
+                .cloned()
+                .map(|mut seg| {
+                    if !seg.is_control() {
+                        seg.style = Some(match seg.style.take() {
+                            Some(existing) => self.style.combine(&existing),
+                            None => self.style.clone(),
+                        });
+                    }
+                    seg
+                })
+                .collect();
 
-            // Fill remaining content space
-            let fill_width = content_width.saturating_sub(line_width);
-            if fill_width > 0 {
-                segments.push(Segment::new(
-                    " ".repeat(fill_width),
-                    Some(self.style.clone()),
-                ));
-            }
+            content_segments = adjust_line_length(
+                content_segments,
+                content_width,
+                Some(self.style.clone()),
+                true,
+            );
+
+            segments.extend(content_segments);
 
             // Right padding
             if self.padding.right > 0 {
@@ -544,6 +546,7 @@ pub fn fit_panel(text: &str) -> Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::segment::split_lines;
     use crate::style::Attributes;
 
     #[test]
@@ -602,6 +605,23 @@ mod tests {
         let panel = Panel::from_text("Content").subtitle("Footer").width(30);
         let text = panel.render_plain(80);
         assert!(text.contains("Footer"));
+    }
+
+    #[test]
+    fn test_panel_truncates_to_width() {
+        let panel = Panel::from_text("This is a very long line")
+            .width(10)
+            .padding(0);
+
+        let segments = panel.render(10);
+        let lines = split_lines(segments.into_iter());
+
+        for line in lines {
+            let width: usize = line.iter().map(Segment::cell_length).sum();
+            if width > 0 {
+                assert_eq!(width, 10);
+            }
+        }
     }
 
     #[test]

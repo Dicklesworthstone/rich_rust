@@ -368,6 +368,12 @@ impl Syntax {
         // Process each line
         for (idx, line) in LinesWithEndings::from(&self.code).enumerate() {
             let line_num = self.start_line + idx;
+            let has_newline = line.ends_with('\n');
+            let line_content = if has_newline {
+                &line[..line.len().saturating_sub(1)]
+            } else {
+                line
+            };
 
             // Add horizontal padding
             if self.padding.1 > 0 {
@@ -381,7 +387,7 @@ impl Syntax {
             }
 
             // Expand tabs
-            let line_expanded = line.replace('\t', &" ".repeat(self.tab_size));
+            let line_expanded = line_content.replace('\t', &" ".repeat(self.tab_size));
 
             // Add indentation guides if enabled
             if self.indent_guides {
@@ -408,6 +414,10 @@ impl Syntax {
             // Add horizontal padding at end
             if self.padding.1 > 0 {
                 segments.push(Segment::new(" ".repeat(self.padding.1), None));
+            }
+
+            if has_newline {
+                segments.push(Segment::new("\n", None));
             }
         }
 
@@ -590,5 +600,18 @@ mod tests {
     fn test_tab_size_minimum() {
         let syntax = Syntax::new("code", "text").tab_size(0);
         assert_eq!(syntax.tab_size, 1); // Should be at minimum 1
+    }
+
+    #[test]
+    fn test_padding_does_not_shift_lines() {
+        let syntax = Syntax::new("a\nb", "text").padding(0, 2);
+        let text = syntax
+            .render(None)
+            .expect("render should succeed")
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<String>();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines, vec!["  a  ", "  b  "]);
     }
 }

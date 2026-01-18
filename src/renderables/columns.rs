@@ -261,7 +261,10 @@ impl Columns {
                     }
 
                     let content_width = column_width.saturating_sub(self.padding * 2);
-                    let aligned = Align::new(self.items[item_idx].clone(), content_width)
+                    let mut content = self.items[item_idx].clone();
+                    content =
+                        crate::segment::adjust_line_length(content, content_width, None, false);
+                    let aligned = Align::new(content, content_width)
                         .method(self.align)
                         .render();
                     row_segments.extend(aligned);
@@ -463,8 +466,13 @@ mod tests {
             .gutter(2);
 
         // Even with narrow width, should not panic
-        let lines = cols.render(5);
+        let total_width = 5;
+        let lines = cols.render(total_width);
         assert!(!lines.is_empty());
+        for line in lines {
+            let width: usize = line.iter().map(Segment::cell_length).sum();
+            assert!(width <= total_width);
+        }
     }
 
     #[test]

@@ -1,7 +1,8 @@
 ---
 source: tests/golden_test.rs
+assertion_line: 364
 expression: plain
 ---
 ╭─────────────────────────────────╮
-│ This is a very long piece of text that should be wrapped across multiple lines when rendered at a narrow width. │
+│ This is a very long piece of te │
 ╰─────────────────────────────────╯

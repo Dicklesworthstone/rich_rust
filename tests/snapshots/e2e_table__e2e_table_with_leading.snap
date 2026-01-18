@@ -5,6 +5,7 @@ expression: output
   Spaced Table   
 ┌───────┬───────┐
 │ Name  │ Score │
+│       │       │
 ├───────┼───────┤
 │ Alice │    95 │
 │       │       │

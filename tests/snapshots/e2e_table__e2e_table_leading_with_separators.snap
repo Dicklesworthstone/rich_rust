@@ -4,6 +4,7 @@ expression: output
 ---
 ┌────────┬─────────┐
 │ Task   │ Status  │
+│        │         │
 ├────────┼─────────┤
 │ Build  │ Done    │
 │        │         │
