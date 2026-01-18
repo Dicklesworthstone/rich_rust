@@ -1,17 +1,121 @@
 //! JSON - Pretty-printed JSON with syntax highlighting.
 //!
 //! This module provides a JSON renderable for rendering JSON data
-//! with syntax highlighting and configurable formatting.
+//! with syntax highlighting and configurable formatting. It uses semantic
+//! coloring to distinguish keys, strings, numbers, booleans, and null values.
 //!
-//! # Example
+//! # Feature Flag
+//!
+//! This module requires the `json` feature to be enabled:
+//!
+//! ```toml
+//! [dependencies]
+//! rich_rust = { version = "0.1", features = ["json"] }
+//! ```
+//!
+//! Or enable all optional features with:
+//!
+//! ```toml
+//! rich_rust = { version = "0.1", features = ["full"] }
+//! ```
+//!
+//! # Dependencies
+//!
+//! Enabling this feature adds the [`serde_json`](https://docs.rs/serde_json) crate
+//! as a dependency for JSON parsing and value representation.
+//!
+//! # Basic Usage
 //!
 //! ```rust,ignore
 //! use rich_rust::renderables::json::Json;
 //!
+//! // From a JSON string
 //! let data = r#"{"name": "Alice", "age": 30, "active": true}"#;
 //! let json = Json::from_str(data).unwrap();
 //! let segments = json.render();
+//!
+//! // From a serde_json::Value
+//! use serde_json::json;
+//! let json = Json::new(json!({"key": "value"}));
 //! ```
+//!
+//! # Indentation Options
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::json::Json;
+//!
+//! let json = Json::from_str(r#"{"a": [1, 2, 3]}"#).unwrap()
+//!     .indent(4);  // Use 4-space indentation (default is 2)
+//! ```
+//!
+//! # Sorting Keys
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::json::Json;
+//!
+//! // Keys will appear in alphabetical order
+//! let json = Json::from_str(r#"{"z": 1, "a": 2, "m": 3}"#).unwrap()
+//!     .sort_keys(true);
+//! ```
+//!
+//! # Custom Themes
+//!
+//! The default theme uses semantic colors:
+//! - **Keys**: Blue, bold
+//! - **Strings**: Green
+//! - **Numbers**: Cyan
+//! - **Booleans**: Yellow
+//! - **Null**: Magenta, italic
+//! - **Brackets/braces**: White
+//! - **Punctuation**: White
+//!
+//! You can customize the theme:
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::json::{Json, JsonTheme};
+//! use rich_rust::style::Style;
+//!
+//! let theme = JsonTheme {
+//!     key: Style::new().bold().color_str("red").unwrap(),
+//!     string: Style::new().color_str("blue").unwrap(),
+//!     number: Style::new().color_str("green").unwrap(),
+//!     boolean: Style::new().color_str("yellow").unwrap(),
+//!     null: Style::new().color_str("white").unwrap(),
+//!     bracket: Style::new().color_str("cyan").unwrap(),
+//!     punctuation: Style::new().color_str("magenta").unwrap(),
+//! };
+//!
+//! let json = Json::from_str(r#"{"key": "value"}"#).unwrap()
+//!     .theme(theme);
+//! ```
+//!
+//! # Disabling Highlighting
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::json::Json;
+//!
+//! // Render without colors (plain text)
+//! let json = Json::from_str(r#"{"key": "value"}"#).unwrap()
+//!     .highlight(false);
+//! ```
+//!
+//! # Plain Text Output
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::json::Json;
+//!
+//! let json = Json::from_str(r#"{"key": "value"}"#).unwrap();
+//! let plain = json.to_plain_string();  // Get formatted JSON without ANSI codes
+//! ```
+//!
+//! # Known Limitations
+//!
+//! - **Large JSON**: Very large JSON documents may be slow to render due to
+//!   per-token segment creation
+//! - **Streaming**: Does not support streaming JSON parsing; the entire document
+//!   must fit in memory
+//! - **Compact output**: No option for compact (non-pretty-printed) output
+//! - **Trailing commas**: Standard JSON only; no trailing comma support
 
 use serde_json::Value;
 
@@ -44,7 +148,10 @@ impl Default for JsonTheme {
             string: Style::new().color_str("green").unwrap_or_default(),
             number: Style::new().color_str("cyan").unwrap_or_default(),
             boolean: Style::new().color_str("yellow").unwrap_or_default(),
-            null: Style::new().color_str("magenta").unwrap_or_default().italic(),
+            null: Style::new()
+                .color_str("magenta")
+                .unwrap_or_default()
+                .italic(),
             bracket: Style::new().color_str("white").unwrap_or_default(),
             punctuation: Style::new().color_str("white").unwrap_or_default(),
         }

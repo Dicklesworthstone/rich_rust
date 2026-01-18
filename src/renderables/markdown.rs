@@ -1,9 +1,30 @@
 //! Markdown rendering for the terminal.
 //!
 //! This module provides markdown rendering using pulldown-cmark for parsing
-//! and converting to styled terminal output.
+//! and converting to styled terminal output. It supports the full CommonMark
+//! specification plus GitHub Flavored Markdown extensions.
 //!
-//! # Example
+//! # Feature Flag
+//!
+//! This module requires the `markdown` feature to be enabled:
+//!
+//! ```toml
+//! [dependencies]
+//! rich_rust = { version = "0.1", features = ["markdown"] }
+//! ```
+//!
+//! Or enable all optional features with:
+//!
+//! ```toml
+//! rich_rust = { version = "0.1", features = ["full"] }
+//! ```
+//!
+//! # Dependencies
+//!
+//! Enabling this feature adds the [`pulldown-cmark`](https://docs.rs/pulldown-cmark) crate
+//! as a dependency for Markdown parsing.
+//!
+//! # Basic Usage
 //!
 //! ```rust,ignore
 //! use rich_rust::renderables::markdown::Markdown;
@@ -11,6 +32,72 @@
 //! let md = Markdown::new("# Hello\n\nThis is **bold** and *italic*.");
 //! let segments = md.render(80);
 //! ```
+//!
+//! # Supported Markdown Features
+//!
+//! - **Headings**: H1-H6 with distinct styles
+//! - **Emphasis**: *italic*, **bold**, ~~strikethrough~~
+//! - **Code**: `inline code` and fenced code blocks
+//! - **Lists**: Ordered (1. 2. 3.) and unordered (- * +)
+//! - **Links**: `[text](url)` with optional URL display
+//! - **Blockquotes**: `> quoted text`
+//! - **Tables**: GitHub Flavored Markdown tables with alignment
+//! - **Horizontal rules**: `---` or `***`
+//!
+//! # Customizing Styles
+//!
+//! All element styles can be customized via builder methods:
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::markdown::Markdown;
+//! use rich_rust::style::Style;
+//!
+//! let md = Markdown::new("# Custom Styled Heading")
+//!     .h1_style(Style::new().bold().color_str("bright_magenta").unwrap())
+//!     .h2_style(Style::new().bold().color_str("magenta").unwrap())
+//!     .emphasis_style(Style::new().italic().color_str("yellow").unwrap())
+//!     .strong_style(Style::new().bold().color_str("red").unwrap())
+//!     .code_style(Style::new().bgcolor_str("bright_black").unwrap())
+//!     .link_style(Style::new().underline().color_str("blue").unwrap())
+//!     .quote_style(Style::new().italic().color_str("bright_black").unwrap());
+//!
+//! let segments = md.render(80);
+//! ```
+//!
+//! # List Customization
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::markdown::Markdown;
+//!
+//! let md = Markdown::new("- Item 1\n- Item 2")
+//!     .bullet_char('→')  // Custom bullet character
+//!     .list_indent(4);   // 4-space indent for nested lists
+//! ```
+//!
+//! # Link Display
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::markdown::Markdown;
+//!
+//! // Show URLs after link text (default)
+//! let md = Markdown::new("[Click here](https://example.com)")
+//!     .show_links(true);
+//! // Output: "Click here (https://example.com)"
+//!
+//! // Hide URLs, show only link text
+//! let md = Markdown::new("[Click here](https://example.com)")
+//!     .show_links(false);
+//! // Output: "Click here"
+//! ```
+//!
+//! # Known Limitations
+//!
+//! - **Images**: Image references are parsed but not rendered (terminals can't display images)
+//! - **HTML**: Inline HTML is ignored
+//! - **Footnotes**: Supported by the parser but rendering may be basic
+//! - **Task lists**: Not currently supported (`- [ ]` / `- [x]`)
+//! - **Code block languages**: Language hints in fenced code blocks are parsed but not
+//!   used for syntax highlighting (use the `syntax` feature for that)
 
 use std::fmt::Write;
 
@@ -67,14 +154,8 @@ impl Default for Markdown {
                 .underline()
                 .color_str("bright_cyan")
                 .unwrap_or_default(),
-            h2_style: Style::new()
-                .bold()
-                .color_str("cyan")
-                .unwrap_or_default(),
-            h3_style: Style::new()
-                .bold()
-                .color_str("blue")
-                .unwrap_or_default(),
+            h2_style: Style::new().bold().color_str("cyan").unwrap_or_default(),
+            h3_style: Style::new().bold().color_str("blue").unwrap_or_default(),
             h4_style: Style::new()
                 .bold()
                 .color_str("bright_blue")
@@ -104,9 +185,7 @@ impl Default for Markdown {
                 .bold()
                 .color_str("bright_white")
                 .unwrap_or_default(),
-            table_border_style: Style::new()
-                .color_str("bright_black")
-                .unwrap_or_default(),
+            table_border_style: Style::new().color_str("bright_black").unwrap_or_default(),
             bullet_char: '•',
             list_indent: 2,
             show_links: true,
@@ -249,9 +328,8 @@ impl Markdown {
         let mut in_table_head = false;
         let mut header_row: Option<Vec<String>> = None;
 
-        let options = Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_TABLES
-            | Options::ENABLE_FOOTNOTES;
+        let options =
+            Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_FOOTNOTES;
 
         let parser = Parser::new_ext(&self.source, options);
 
@@ -316,7 +394,8 @@ impl Markdown {
                         }
                         Tag::Item => {
                             // Add indent based on list nesting
-                            let indent = " ".repeat(list_stack.len().saturating_sub(1) * self.list_indent);
+                            let indent =
+                                " ".repeat(list_stack.len().saturating_sub(1) * self.list_indent);
                             segments.push(Segment::new(indent, None));
 
                             if let Some((is_ordered, num)) = list_stack.last_mut() {
@@ -324,7 +403,8 @@ impl Markdown {
                                     segments.push(Segment::new(format!("{num}. "), None));
                                     *num += 1;
                                 } else {
-                                    segments.push(Segment::new(format!("{} ", self.bullet_char), None));
+                                    segments
+                                        .push(Segment::new(format!("{} ", self.bullet_char), None));
                                 }
                             }
                         }
@@ -369,7 +449,9 @@ impl Markdown {
                             if self.show_links && !current_link_url.is_empty() && !in_table {
                                 segments.push(Segment::new(
                                     format!(" ({current_link_url})"),
-                                    Some(Style::new().color_str("bright_black").unwrap_or_default()),
+                                    Some(
+                                        Style::new().color_str("bright_black").unwrap_or_default(),
+                                    ),
                                 ));
                             }
                             current_link_url.clear();
@@ -419,7 +501,8 @@ impl Markdown {
                         if in_code_block {
                             // Preserve code block formatting
                             for line in text.lines() {
-                                segments.push(Segment::new(format!("  {line}"), current_style.clone()));
+                                segments
+                                    .push(Segment::new(format!("  {line}"), current_style.clone()));
                                 segments.push(Segment::new("\n", None));
                             }
                         } else {
@@ -475,10 +558,7 @@ impl Markdown {
         alignments: &[Alignment],
     ) {
         // Calculate column widths
-        let num_cols = header.map_or_else(
-            || rows.first().map_or(0, Vec::len),
-            Vec::len,
-        );
+        let num_cols = header.map_or_else(|| rows.first().map_or(0, Vec::len), Vec::len);
 
         if num_cols == 0 {
             return;
@@ -512,36 +592,38 @@ impl Markdown {
         let border_style = Some(self.table_border_style.clone());
 
         // Helper to render a horizontal border
-        let render_border = |segs: &mut Vec<Segment>, left: &str, mid: &str, right: &str, style: Option<Style>| {
-            segs.push(Segment::new(left, style.clone()));
-            for (i, &width) in col_widths.iter().enumerate() {
-                segs.push(Segment::new("─".repeat(width + 2), style.clone()));
-                if i < col_widths.len() - 1 {
-                    segs.push(Segment::new(mid, style.clone()));
+        let render_border =
+            |segs: &mut Vec<Segment>, left: &str, mid: &str, right: &str, style: Option<Style>| {
+                segs.push(Segment::new(left, style.clone()));
+                for (i, &width) in col_widths.iter().enumerate() {
+                    segs.push(Segment::new("─".repeat(width + 2), style.clone()));
+                    if i < col_widths.len() - 1 {
+                        segs.push(Segment::new(mid, style.clone()));
+                    }
                 }
-            }
-            segs.push(Segment::new(right, style));
-            segs.push(Segment::new("\n", None));
-        };
+                segs.push(Segment::new(right, style));
+                segs.push(Segment::new("\n", None));
+            };
 
         // Helper to render a row
-        let render_row = |segs: &mut Vec<Segment>, cells: &[String], style: Option<Style>, is_header: bool| {
-            segs.push(Segment::new("│", border_style.clone()));
-            for (i, width) in col_widths.iter().enumerate() {
-                let content = cells.get(i).map_or("", String::as_str);
-                let alignment = alignments.get(i).copied().unwrap_or(Alignment::None);
-                let padded = Self::pad_cell(content, *width, alignment);
-                segs.push(Segment::new(" ", None));
-                if is_header {
-                    segs.push(Segment::new(padded, Some(self.table_header_style.clone())));
-                } else {
-                    segs.push(Segment::new(padded, style.clone()));
-                }
-                segs.push(Segment::new(" ", None));
+        let render_row =
+            |segs: &mut Vec<Segment>, cells: &[String], style: Option<Style>, is_header: bool| {
                 segs.push(Segment::new("│", border_style.clone()));
-            }
-            segs.push(Segment::new("\n", None));
-        };
+                for (i, width) in col_widths.iter().enumerate() {
+                    let content = cells.get(i).map_or("", String::as_str);
+                    let alignment = alignments.get(i).copied().unwrap_or(Alignment::None);
+                    let padded = Self::pad_cell(content, *width, alignment);
+                    segs.push(Segment::new(" ", None));
+                    if is_header {
+                        segs.push(Segment::new(padded, Some(self.table_header_style.clone())));
+                    } else {
+                        segs.push(Segment::new(padded, style.clone()));
+                    }
+                    segs.push(Segment::new(" ", None));
+                    segs.push(Segment::new("│", border_style.clone()));
+                }
+                segs.push(Segment::new("\n", None));
+            };
 
         // Top border
         render_border(segments, "┌", "┬", "┐", border_style.clone());

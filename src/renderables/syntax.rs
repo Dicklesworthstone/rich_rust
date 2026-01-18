@@ -1,18 +1,87 @@
 //! Syntax highlighting renderable.
 //!
 //! This module provides syntax highlighting for code using the syntect library.
-//! It is only available when the `syntax` feature is enabled.
+//! It supports numerous programming languages and themes out of the box.
 //!
-//! # Example
+//! # Feature Flag
+//!
+//! This module requires the `syntax` feature to be enabled:
+//!
+//! ```toml
+//! [dependencies]
+//! rich_rust = { version = "0.1", features = ["syntax"] }
+//! ```
+//!
+//! Or enable all optional features with:
+//!
+//! ```toml
+//! rich_rust = { version = "0.1", features = ["full"] }
+//! ```
+//!
+//! # Dependencies
+//!
+//! Enabling this feature adds the [`syntect`](https://docs.rs/syntect) crate as a dependency,
+//! which provides the underlying syntax definitions and theme support.
+//!
+//! # Basic Usage
 //!
 //! ```rust,ignore
 //! use rich_rust::renderables::syntax::Syntax;
 //!
+//! // Create a syntax-highlighted code block
 //! let code = r#"fn main() { println!("Hello"); }"#;
-//! let syntax = Syntax::new(code, "rust")
-//!     .line_numbers(true)
-//!     .theme("base16-ocean.dark");
+//! let syntax = Syntax::new(code, "rust");
+//! let segments = syntax.render(None)?;
 //! ```
+//!
+//! # Line Numbers and Themes
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::syntax::Syntax;
+//!
+//! let code = "def hello():\n    print('world')";
+//! let syntax = Syntax::new(code, "python")
+//!     .line_numbers(true)
+//!     .start_line(10)  // Start numbering from line 10
+//!     .theme("base16-ocean.dark");
+//!
+//! let segments = syntax.render(None)?;
+//! ```
+//!
+//! # Loading from Files
+//!
+//! ```rust,ignore
+//! use rich_rust::renderables::syntax::Syntax;
+//!
+//! // Auto-detect language from file extension
+//! let syntax = Syntax::from_path("src/main.rs")?
+//!     .line_numbers(true)
+//!     .theme("InspiredGitHub");
+//! ```
+//!
+//! # Available Themes
+//!
+//! Call [`Syntax::available_themes()`] to list all built-in themes. Common themes include:
+//! - `base16-ocean.dark` (default)
+//! - `base16-ocean.light`
+//! - `InspiredGitHub`
+//! - `Solarized (dark)`
+//! - `Solarized (light)`
+//!
+//! # Supported Languages
+//!
+//! Call [`Syntax::available_languages()`] to list all supported languages. Syntect includes
+//! syntax definitions for 100+ languages including Rust, Python, JavaScript, TypeScript,
+//! Go, Java, C/C++, Ruby, and many more.
+//!
+//! # Known Limitations
+//!
+//! - **Theme loading**: Only the default syntect themes are available. Custom `.tmTheme` files
+//!   are not currently supported.
+//! - **Syntax definitions**: Only default syntect syntax definitions are available. Custom
+//!   `.sublime-syntax` files are not currently supported.
+//! - **Large files**: Rendering very large files may be slow due to per-line highlighting.
+//! - **Word wrap**: The `word_wrap` option is defined but not yet fully implemented.
 
 use crate::color::Color;
 use crate::segment::Segment;
@@ -254,10 +323,7 @@ impl Syntax {
     #[must_use]
     pub fn available_languages() -> Vec<String> {
         let ss = SyntaxSet::load_defaults_newlines();
-        ss.syntaxes()
-            .iter()
-            .map(|s| s.name.clone())
-            .collect()
+        ss.syntaxes().iter().map(|s| s.name.clone()).collect()
     }
 
     /// Render the syntax-highlighted code to segments.
@@ -349,16 +415,8 @@ impl Syntax {
     }
 
     /// Convert syntect style to rich Style.
-    fn syntect_style_to_rich(
-        &self,
-        style: syntect::highlighting::Style,
-        theme: &Theme,
-    ) -> Style {
-        let fg = Color::from_rgb(
-            style.foreground.r,
-            style.foreground.g,
-            style.foreground.b,
-        );
+    fn syntect_style_to_rich(&self, style: syntect::highlighting::Style, theme: &Theme) -> Style {
+        let fg = Color::from_rgb(style.foreground.r, style.foreground.g, style.foreground.b);
 
         let bg = if let Some(ref override_bg) = self.background_color {
             override_bg.clone()
@@ -373,13 +431,22 @@ impl Syntax {
         let mut rich_style = Style::new().color(fg).bgcolor(bg);
 
         // Apply font style modifiers
-        if style.font_style.contains(syntect::highlighting::FontStyle::BOLD) {
+        if style
+            .font_style
+            .contains(syntect::highlighting::FontStyle::BOLD)
+        {
             rich_style = rich_style.bold();
         }
-        if style.font_style.contains(syntect::highlighting::FontStyle::ITALIC) {
+        if style
+            .font_style
+            .contains(syntect::highlighting::FontStyle::ITALIC)
+        {
             rich_style = rich_style.italic();
         }
-        if style.font_style.contains(syntect::highlighting::FontStyle::UNDERLINE) {
+        if style
+            .font_style
+            .contains(syntect::highlighting::FontStyle::UNDERLINE)
+        {
             rich_style = rich_style.underline();
         }
 
@@ -504,8 +571,7 @@ mod tests {
 
     #[test]
     fn test_background_color_override() {
-        let syntax = Syntax::new("code", "text")
-            .background_color(Color::parse("red").unwrap());
+        let syntax = Syntax::new("code", "text").background_color(Color::parse("red").unwrap());
         assert!(syntax.background_color.is_some());
     }
 
