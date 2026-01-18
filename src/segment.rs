@@ -499,6 +499,8 @@ pub fn line_length(line: &[Segment]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::Color;
+    use crate::style::Attributes;
 
     #[test]
     fn test_segment_new() {
@@ -610,5 +612,338 @@ mod tests {
         assert_eq!(aligned.len(), 3);
         // Content should be in middle
         assert!(aligned[1][0].text.starts_with("hi"));
+    }
+
+    // ============================================================================
+    // SPEC VALIDATION TESTS - RICH_SPEC.md Section 3 (Segment)
+    // ============================================================================
+
+    // 3.1 ControlType Enum - All 16 control types with correct values
+    #[test]
+    fn test_spec_control_type_values() {
+        assert_eq!(ControlType::Bell as u8, 1);
+        assert_eq!(ControlType::CarriageReturn as u8, 2);
+        assert_eq!(ControlType::Home as u8, 3);
+        assert_eq!(ControlType::Clear as u8, 4);
+        assert_eq!(ControlType::ShowCursor as u8, 5);
+        assert_eq!(ControlType::HideCursor as u8, 6);
+        assert_eq!(ControlType::EnableAltScreen as u8, 7);
+        assert_eq!(ControlType::DisableAltScreen as u8, 8);
+        assert_eq!(ControlType::CursorUp as u8, 9);
+        assert_eq!(ControlType::CursorDown as u8, 10);
+        assert_eq!(ControlType::CursorForward as u8, 11);
+        assert_eq!(ControlType::CursorBackward as u8, 12);
+        assert_eq!(ControlType::CursorMoveToColumn as u8, 13);
+        assert_eq!(ControlType::CursorMoveTo as u8, 14);
+        assert_eq!(ControlType::EraseInLine as u8, 15);
+        assert_eq!(ControlType::SetWindowTitle as u8, 16);
+    }
+
+    // 3.2 Segment Structure - Fields and methods
+    #[test]
+    fn test_spec_segment_structure() {
+        // Test structure: text, style, control
+        let seg = Segment::new("test", None);
+        assert_eq!(seg.text, "test");
+        assert!(seg.style.is_none());
+        assert!(seg.control.is_none());
+
+        // With style
+        let style = Style::new().bold();
+        let seg = Segment::styled("text", style.clone());
+        assert_eq!(seg.style, Some(style));
+
+        // Control segment
+        let seg = Segment::control(vec![ControlCode::new(ControlType::Bell)]);
+        assert!(seg.control.is_some());
+    }
+
+    // 3.2 Segment - cell_length() returns 0 for control, else cell_len(text)
+    #[test]
+    fn test_spec_segment_cell_length() {
+        // Regular segment uses cell_len
+        let seg = Segment::new("hello", None);
+        assert_eq!(seg.cell_length(), 5);
+
+        // CJK characters count as 2 cells
+        let seg = Segment::new("日本", None);
+        assert_eq!(seg.cell_length(), 4); // 2 chars * 2 cells
+
+        // Control segment always 0
+        let seg = Segment::control(vec![ControlCode::new(ControlType::Bell)]);
+        assert_eq!(seg.cell_length(), 0);
+
+        // Control segment with params still 0
+        let seg = Segment::control(vec![ControlCode::with_params(ControlType::CursorMoveTo, vec![1, 2])]);
+        assert_eq!(seg.cell_length(), 0);
+    }
+
+    // 3.2 Segment - is_control() returns control.is_some()
+    #[test]
+    fn test_spec_segment_is_control() {
+        let seg = Segment::new("text", None);
+        assert!(!seg.is_control());
+
+        let seg = Segment::control(vec![ControlCode::new(ControlType::Bell)]);
+        assert!(seg.is_control());
+    }
+
+    // 3.3 line() - Creates newline segment
+    #[test]
+    fn test_spec_line_creation() {
+        let seg = Segment::line();
+        assert_eq!(seg.text, "\n");
+        assert!(seg.style.is_none());
+        assert!(seg.control.is_none());
+    }
+
+    // 3.3 apply_style - Applies style + segment.style or segment.style + post_style
+    #[test]
+    fn test_spec_apply_style() {
+        let red = Style::new().color(Color::parse("red").unwrap());
+        let bold = Style::new().bold();
+
+        // Pre-style: style + segment.style
+        let segments = vec![Segment::styled("hello", bold.clone())];
+        let result: Vec<_> = apply_style(segments.into_iter(), Some(&red), None).collect();
+        let combined_style = result[0].style.as_ref().unwrap();
+        // The segment should have both red (from pre) and bold (from segment)
+        assert!(combined_style.attributes.contains(Attributes::BOLD));
+
+        // Post-style: segment.style + post_style
+        let segments = vec![Segment::styled("hello", red.clone())];
+        let result: Vec<_> = apply_style(segments.into_iter(), None, Some(&bold)).collect();
+        let combined_style = result[0].style.as_ref().unwrap();
+        assert!(combined_style.attributes.contains(Attributes::BOLD));
+
+        // Control segments are not modified
+        let segments = vec![Segment::control(vec![ControlCode::new(ControlType::Bell)])];
+        let result: Vec<_> = apply_style(segments.into_iter(), Some(&red), None).collect();
+        assert!(result[0].is_control());
+        assert!(result[0].style.is_none());
+    }
+
+    // 3.3 split_lines - Splits at newline characters
+    #[test]
+    fn test_spec_split_lines() {
+        // Single newline
+        let segments = vec![Segment::new("a\nb", None)];
+        let lines = split_lines(segments.into_iter());
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0][0].text, "a");
+        assert_eq!(lines[1][0].text, "b");
+
+        // Multiple newlines across segments
+        let segments = vec![
+            Segment::new("line1\n", None),
+            Segment::new("line2\nline3", None),
+        ];
+        let lines = split_lines(segments.into_iter());
+        assert_eq!(lines.len(), 3);
+
+        // Trailing newline creates empty line
+        let segments = vec![Segment::new("text\n", None)];
+        let lines = split_lines(segments.into_iter());
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].is_empty());
+
+        // Control segments stay on current line
+        let segments = vec![
+            Segment::new("text", None),
+            Segment::control(vec![ControlCode::new(ControlType::Bell)]),
+        ];
+        let lines = split_lines(segments.into_iter());
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].len(), 2);
+    }
+
+    // 3.3 adjust_line_length - Pads or truncates
+    #[test]
+    fn test_spec_adjust_line_length() {
+        // Shorter than length with pad=true: appends padding
+        let line = vec![Segment::new("hi", None)];
+        let result = adjust_line_length(line, 5, None, true);
+        assert_eq!(line_length(&result), 5);
+
+        // Shorter than length with pad=false: no change
+        let line = vec![Segment::new("hi", None)];
+        let result = adjust_line_length(line, 5, None, false);
+        assert_eq!(line_length(&result), 2);
+
+        // Longer than length: truncates (may split segments)
+        let line = vec![Segment::new("hello world", None)];
+        let result = adjust_line_length(line, 5, None, false);
+        assert_eq!(line_length(&result), 5);
+
+        // Control segments never truncated
+        let line = vec![
+            Segment::control(vec![ControlCode::new(ControlType::Bell)]),
+            Segment::new("text", None),
+        ];
+        let result = adjust_line_length(line, 2, None, false);
+        assert!(result[0].is_control()); // Control preserved
+    }
+
+    // 3.3 simplify - Merges contiguous segments with identical styles
+    #[test]
+    fn test_spec_simplify() {
+        let style = Style::new().bold();
+
+        // Merge same styles
+        let segments = vec![
+            Segment::styled("a", style.clone()),
+            Segment::styled("b", style.clone()),
+            Segment::styled("c", style.clone()),
+        ];
+        let result = simplify(segments.into_iter());
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "abc");
+
+        // Different styles not merged
+        let red = Style::new().color(Color::parse("red").unwrap());
+        let segments = vec![
+            Segment::styled("a", style.clone()),
+            Segment::styled("b", red.clone()),
+        ];
+        let result = simplify(segments.into_iter());
+        assert_eq!(result.len(), 2);
+
+        // Control segments preserved (not merged)
+        let segments = vec![
+            Segment::styled("a", style.clone()),
+            Segment::control(vec![ControlCode::new(ControlType::Bell)]),
+            Segment::styled("b", style.clone()),
+        ];
+        let result = simplify(segments.into_iter());
+        assert_eq!(result.len(), 3);
+        assert!(result[1].is_control());
+
+        // Empty text segments dropped
+        let segments = vec![
+            Segment::styled("a", style.clone()),
+            Segment::styled("", style.clone()),
+            Segment::styled("b", style.clone()),
+        ];
+        let result = simplify(segments.into_iter());
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "ab");
+    }
+
+    // 3.3 divide - Divides segments at specified cell positions
+    #[test]
+    fn test_spec_divide() {
+        // Empty cuts returns single group
+        let segments = vec![Segment::new("hello", None)];
+        let result = divide(segments, &[]);
+        assert_eq!(result.len(), 1);
+
+        // Single cut
+        let segments = vec![Segment::new("hello world", None)];
+        let result = divide(segments, &[5]);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0][0].text, "hello");
+        assert_eq!(result[1][0].text, " world");
+
+        // Multiple cuts
+        let segments = vec![Segment::new("abcdefghij", None)];
+        let result = divide(segments, &[3, 6]);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0][0].text, "abc");
+        assert_eq!(result[1][0].text, "def");
+        assert_eq!(result[2][0].text, "ghij");
+
+        // Cut on CJK boundary
+        let segments = vec![Segment::new("日本語", None)];
+        let result = divide(segments, &[2]); // After first CJK char
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0][0].text, "日");
+        assert_eq!(result[1][0].text, "本語");
+
+        // Control segments placed in current division
+        let segments = vec![
+            Segment::control(vec![ControlCode::new(ControlType::Bell)]),
+            Segment::new("abc", None),
+        ];
+        let result = divide(segments, &[2]);
+        assert!(result[0][0].is_control());
+    }
+
+    // 3.3 Alignment methods
+    #[test]
+    fn test_spec_align_top() {
+        let lines = vec![vec![Segment::new("a", None)]];
+        let result = align_top(lines, 3, 3, Style::null());
+
+        // 3 lines total
+        assert_eq!(result.len(), 3);
+        // Content at top (index 0)
+        assert!(result[0][0].text.starts_with('a'));
+        // Each line padded to width 3
+        for line in &result {
+            assert_eq!(line_length(line), 3);
+        }
+    }
+
+    #[test]
+    fn test_spec_align_bottom() {
+        let lines = vec![vec![Segment::new("a", None)]];
+        let result = align_bottom(lines, 3, 3, Style::null());
+
+        assert_eq!(result.len(), 3);
+        // Content at bottom (index 2)
+        assert!(result[2][0].text.starts_with('a'));
+        // Blank lines at top
+        assert!(!result[0][0].text.contains('a'));
+        assert!(!result[1][0].text.contains('a'));
+    }
+
+    #[test]
+    fn test_spec_align_middle() {
+        let lines = vec![vec![Segment::new("a", None)]];
+        let result = align_middle(lines, 3, 5, Style::null());
+
+        assert_eq!(result.len(), 5);
+        // Content in middle (index 2 for 5 lines with 1 content line)
+        // top_padding = (5-1)/2 = 2, so content at index 2
+        assert!(result[2][0].text.starts_with('a'));
+    }
+
+    // Additional: ControlCode with parameters
+    #[test]
+    fn test_spec_control_code_params() {
+        // No params
+        let code = ControlCode::new(ControlType::Bell);
+        assert!(code.params.is_empty());
+
+        // With params (e.g., CURSOR_MOVE_TO uses x, y)
+        let code = ControlCode::with_params(ControlType::CursorMoveTo, vec![10, 20]);
+        assert_eq!(code.params, vec![10, 20]);
+    }
+
+    // Additional: split_at_cell for CJK
+    #[test]
+    fn test_spec_split_at_cell_cjk() {
+        let seg = Segment::new("日本語", None);
+
+        // Split at cell 2 (after first char)
+        let (left, right) = seg.split_at_cell(2);
+        assert_eq!(left.text, "日");
+        assert_eq!(right.text, "本語");
+
+        // Split at cell 3 (middle of second char) - stops before
+        let (left, right) = seg.split_at_cell(3);
+        assert_eq!(left.text, "日");
+        assert_eq!(right.text, "本語");
+
+        // Split at cell 4 (after second char)
+        let (left, right) = seg.split_at_cell(4);
+        assert_eq!(left.text, "日本");
+        assert_eq!(right.text, "語");
+
+        // Control segment split returns clone
+        let seg = Segment::control(vec![ControlCode::new(ControlType::Bell)]);
+        let (left, right) = seg.split_at_cell(1);
+        assert!(left.is_control());
+        assert!(!right.is_control()); // Right is default (empty)
     }
 }
