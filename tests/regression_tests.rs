@@ -1240,6 +1240,42 @@ fn regression_table_cell_preserves_spans() {
     tracing::info!("Regression test PASSED: table cell spans preserved");
 }
 
+/// Regression test: Table caption preserves span styles
+///
+/// Bug: Caption spans could be flattened to plain text
+/// Fixed: Caption rendering preserves span styles
+#[test]
+fn regression_table_caption_preserves_spans() {
+    init_test_logging();
+    log_test_context(
+        "regression_table_caption_preserves_spans",
+        "Ensures table caption preserves span styles",
+    );
+
+    let _phase = test_phase("table_caption_spans");
+
+    let mut caption = Text::new("Caption");
+    caption.stylize(0, 7, Style::new().underline());
+
+    let mut table = Table::new()
+        .with_column(Column::new("H"))
+        .caption(caption)
+        .caption_style(Style::new().color(Color::parse("green").unwrap()));
+    table.add_row_cells(["1"]);
+
+    let segments = table.render(30);
+    let has_underline = segments.iter().any(|seg| {
+        seg.text.contains("Caption")
+            && seg
+                .style
+                .as_ref()
+                .is_some_and(|style| style.attributes.contains(Attributes::UNDERLINE))
+    });
+
+    assert!(has_underline, "caption should preserve underline span");
+    tracing::info!("Regression test PASSED: table caption spans preserved");
+}
+
 /// Regression test: Rule title alignment preserves total width
 ///
 /// Bug: Rule titles could produce lines shorter/longer than width
