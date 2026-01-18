@@ -371,31 +371,60 @@ impl Style {
     /// Generate ANSI escape codes for this style.
     #[must_use]
     pub fn make_ansi_codes(&self, color_system: ColorSystem) -> String {
-        let mut codes: Vec<String> = Vec::new();
+        let mut result = String::new();
+        self.make_ansi_codes_into(color_system, &mut result);
+        result
+    }
+
+    /// Generate ANSI escape codes for this style, appending to an existing buffer.
+    ///
+    /// This is more efficient than [`make_ansi_codes`] when you need to reuse buffers
+    /// or avoid allocations in hot paths.
+    pub fn make_ansi_codes_into(&self, color_system: ColorSystem, buf: &mut String) {
+        use std::fmt::Write;
+
+        let mut first = true;
 
         // Add attribute codes
         for code in self.attributes.to_sgr_codes() {
-            codes.push(code.to_string());
+            if !first {
+                buf.push(';');
+            }
+            // write! to String is infallible
+            let _ = write!(buf, "{code}");
+            first = false;
         }
 
         // Add foreground color codes
         if let Some(color) = &self.color {
             let downgraded = color.downgrade(color_system);
-            codes.extend(downgraded.get_ansi_codes(true));
+            for code in downgraded.get_ansi_codes(true) {
+                if !first {
+                    buf.push(';');
+                }
+                buf.push_str(&code);
+                first = false;
+            }
         }
 
         // Add background color codes
         if let Some(bgcolor) = &self.bgcolor {
             let downgraded = bgcolor.downgrade(color_system);
-            codes.extend(downgraded.get_ansi_codes(false));
+            for code in downgraded.get_ansi_codes(false) {
+                if !first {
+                    buf.push(';');
+                }
+                buf.push_str(&code);
+                first = false;
+            }
         }
-
-        codes.join(";")
     }
 
     /// Render text with this style applied.
     #[must_use]
     pub fn render(&self, text: &str, color_system: ColorSystem) -> String {
+        use std::fmt::Write;
+
         if self.is_null() {
             return text.to_string();
         }
@@ -408,21 +437,27 @@ impl Style {
             return text.to_string();
         }
 
-        let mut result = String::with_capacity(text.len() + codes.len() + 50);
+        // Estimate capacity: text + codes + ANSI overhead + link overhead
+        let link_overhead = self.link.as_ref().map_or(0, |l| l.len() + 30);
+        let mut result = String::with_capacity(text.len() + codes.len() + 20 + link_overhead);
 
         // Handle hyperlinks (OSC 8)
         // Format: \x1b]8;{params};{url}\x1b\\ where params can include id={link_id}
         if let Some(link) = &self.link {
-            let params = self
-                .link_id
-                .as_ref()
-                .map_or(String::new(), |id| format!("id={id}"));
-            result.push_str(&format!("\x1b]8;{params};{link}\x1b\\"));
+            result.push_str("\x1b]8;");
+            if let Some(id) = &self.link_id {
+                let _ = write!(result, "id={id}");
+            }
+            result.push(';');
+            result.push_str(link);
+            result.push_str("\x1b\\");
         }
 
         // Apply style (only if there are codes)
         if !codes.is_empty() {
-            result.push_str(&format!("\x1b[{codes}m"));
+            result.push_str("\x1b[");
+            result.push_str(&codes);
+            result.push_str("m");
         }
         result.push_str(text);
         if !codes.is_empty() {
