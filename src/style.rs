@@ -470,9 +470,13 @@ impl Style {
                     Attributes::CONCEAL => result = result.conceal(),
                     Attributes::STRIKE => result = result.strike(),
                     Attributes::OVERLINE => result = result.overline(),
-                    Attributes::UNDERLINE2 => {
-                        result.attributes.insert(Attributes::UNDERLINE2);
-                        result.set_attributes.insert(Attributes::UNDERLINE2);
+                    // Attributes without dedicated builder methods
+                    Attributes::BLINK2
+                    | Attributes::UNDERLINE2
+                    | Attributes::FRAME
+                    | Attributes::ENCIRCLE => {
+                        result.attributes.insert(attr);
+                        result.set_attributes.insert(attr);
                         result.null = false;
                     }
                     _ => {}
