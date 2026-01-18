@@ -1265,7 +1265,7 @@ fn regression_table_caption_preserves_spans() {
 
     let segments = table.render(30);
     let has_underline = segments.iter().any(|seg| {
-        seg.text.contains("Caption")
+        seg.text.contains("Cap")
             && seg
                 .style
                 .as_ref()

@@ -345,12 +345,19 @@ impl Tree {
             ));
         }
 
-        // Add the label
-        let label_style = self
-            .highlight_style
-            .clone()
-            .unwrap_or_else(|| node.label.style().clone());
-        segments.push(Segment::new(node.label.plain(), Some(label_style)));
+        // Add the label (preserve spans)
+        let mut label_segments = node.label.render("");
+        if let Some(ref highlight) = self.highlight_style {
+            for segment in &mut label_segments {
+                if !segment.is_control() {
+                    segment.style = Some(match segment.style.take() {
+                        Some(existing) => existing.combine(highlight),
+                        None => highlight.clone(),
+                    });
+                }
+            }
+        }
+        segments.extend(label_segments);
 
         // Add collapse indicator if has children but collapsed
         if node.has_children() && !node.is_expanded() {
@@ -483,6 +490,26 @@ mod tests {
         assert!(plain.contains("root"));
         assert!(plain.contains("child1"));
         assert!(plain.contains("child2"));
+    }
+
+    #[test]
+    fn test_tree_render_preserves_spans() {
+        use crate::style::Attributes;
+
+        let mut label = Text::new("root");
+        label.stylize(0, 4, Style::new().bold());
+        let tree = Tree::new(TreeNode::new(label));
+
+        let segments = tree.render();
+        let has_bold = segments.iter().any(|seg| {
+            seg.text.contains("root")
+                && seg
+                    .style
+                    .as_ref()
+                    .is_some_and(|style| style.attributes.contains(Attributes::BOLD))
+        });
+
+        assert!(has_bold);
     }
 
     #[test]

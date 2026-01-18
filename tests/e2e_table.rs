@@ -118,14 +118,21 @@ fn e2e_table_title_alignment_width() {
 
     for table in tables {
         let output = table.render_plain(width);
-        let title_line = output
-            .lines()
+        let lines: Vec<&str> = output.lines().filter(|line| !line.is_empty()).collect();
+        let title_line = lines
+            .iter()
+            .copied()
             .find(|line| line.contains("Title"))
             .expect("missing title line");
+        let table_width_line = lines
+            .iter()
+            .copied()
+            .find(|line| !line.contains("Title"))
+            .expect("missing table width line");
         assert_eq!(
             cells::cell_len(title_line),
-            width,
-            "title line should match width"
+            cells::cell_len(table_width_line),
+            "title line should match table width"
         );
     }
 

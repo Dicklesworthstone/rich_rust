@@ -1126,8 +1126,15 @@ impl Table {
         style: &Style,
         justify: JustifyMethod,
     ) -> Vec<Segment> {
-        let content = text.plain();
-        let content_width = cells::cell_len(content);
+        if width == 0 {
+            return Vec::new();
+        }
+
+        let mut content_text = text.clone();
+        if content_text.cell_len() > width {
+            content_text.truncate(width, OverflowMethod::Crop, false);
+        }
+        let content_width = content_text.cell_len();
         let space = width.saturating_sub(content_width);
 
         let (left_space, right_space) = match justify {
@@ -1145,7 +1152,41 @@ impl Table {
             segments.push(Segment::new(" ".repeat(left_space), Some(style.clone())));
         }
 
-        segments.push(Segment::new(content, Some(text.style().clone())));
+        let mut content_segments = content_text.render("");
+        for segment in &mut content_segments {
+            if !segment.is_control() {
+                segment.style = Some(match segment.style.take() {
+                    Some(existing) => style.combine(&existing),
+                    None => style.clone(),
+                });
+            }
+        }
+        let mut remaining = width;
+        let mut trimmed_segments = Vec::new();
+        for segment in content_segments {
+            if segment.is_control() {
+                trimmed_segments.push(segment);
+                continue;
+            }
+
+            if remaining == 0 {
+                break;
+            }
+
+            let seg_width = segment.cell_length();
+            if seg_width <= remaining {
+                remaining = remaining.saturating_sub(seg_width);
+                trimmed_segments.push(segment);
+            } else {
+                let (left, _right) = segment.split_at_cell(remaining);
+                if !left.is_empty() {
+                    trimmed_segments.push(left);
+                }
+                break;
+            }
+        }
+
+        segments.extend(trimmed_segments);
 
         if right_space > 0 {
             segments.push(Segment::new(" ".repeat(right_space), Some(style.clone())));
@@ -1167,6 +1208,7 @@ impl Table {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cells::cell_len;
     use crate::color::Color;
     use crate::style::Attributes;
 
@@ -1246,12 +1288,75 @@ mod tests {
 
     #[test]
     fn test_table_with_title() {
-        let mut table = Table::new().with_column(Column::new("X")).title("My Table");
+        let mut table = Table::new()
+            .with_column(Column::new("X").width(10))
+            .title("My Table");
 
         table.add_row_cells(["1"]);
 
         let text = table.render_plain(30);
         assert!(text.contains("My Table"));
+    }
+
+    #[test]
+    fn test_table_title_preserves_spans_and_style() {
+        use crate::style::Attributes;
+
+        let mut title = Text::new("Title");
+        title.stylize(0, 5, Style::new().bold());
+
+        let red = Style::new().color(crate::color::Color::parse("red").unwrap());
+        let mut table = Table::new()
+            .with_column(Column::new("X"))
+            .title(title)
+            .title_style(red);
+
+        table.add_row_cells(["1"]);
+
+        let segments = table.render(30);
+        let has_styled_title = segments.iter().any(|seg| {
+            seg.text.contains("Title")
+                && seg
+                    .style
+                    .as_ref()
+                    .is_some_and(|style| style.color.is_some())
+                && seg
+                    .style
+                    .as_ref()
+                    .is_some_and(|style| style.attributes.contains(Attributes::BOLD))
+        });
+
+        assert!(has_styled_title);
+    }
+
+    #[test]
+    fn test_caption_alignment_preserves_line_width() {
+        let justifies = [
+            JustifyMethod::Left,
+            JustifyMethod::Center,
+            JustifyMethod::Right,
+        ];
+
+        for justify in justifies {
+            let mut table = Table::new()
+                .with_column(Column::new("Col").width(6))
+                .caption("A very long caption")
+                .caption_justify(justify);
+            table.add_row_cells(["Value"]);
+
+            let output = table.render_plain(40);
+            let lines: Vec<&str> = output.lines().collect();
+            assert!(lines.len() >= 2, "Expected at least border + caption");
+
+            let caption_line = lines.last().expect("caption line");
+            let border_line = lines.iter().rev().nth(1).expect("bottom border line");
+
+            assert_eq!(
+                cell_len(caption_line),
+                cell_len(border_line),
+                "caption width mismatch for {justify:?}"
+            );
+        }
     }
 
     #[test]

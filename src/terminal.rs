@@ -7,6 +7,26 @@ use std::io::IsTerminal;
 
 use crate::color::ColorSystem;
 
+struct EnvSettings {
+    no_color: Option<String>,
+    force_color: Option<String>,
+    colorterm: Option<String>,
+    term: Option<String>,
+    #[cfg(windows)]
+    wt_session: Option<String>,
+}
+
+fn read_env_settings() -> EnvSettings {
+    EnvSettings {
+        no_color: std::env::var("NO_COLOR").ok(),
+        force_color: std::env::var("FORCE_COLOR").ok(),
+        colorterm: std::env::var("COLORTERM").ok(),
+        term: std::env::var("TERM").ok(),
+        #[cfg(windows)]
+        wt_session: std::env::var("WT_SESSION").ok(),
+    }
+}
+
 /// Get the terminal size (width, height) in cells.
 ///
 /// Returns `None` if the terminal size cannot be determined.
@@ -55,27 +75,33 @@ pub fn is_stderr_terminal() -> bool {
 /// - Otherwise: Standard 16 colors (if terminal)
 #[must_use]
 pub fn detect_color_system() -> Option<ColorSystem> {
+    detect_color_system_with(&read_env_settings(), is_terminal())
+}
+
+fn detect_color_system_with(env: &EnvSettings, is_tty: bool) -> Option<ColorSystem> {
     // Check NO_COLOR env var (https://no-color.org/)
-    if std::env::var("NO_COLOR").is_ok() {
+    if env.no_color.is_some() {
         return None;
     }
 
     // Check FORCE_COLOR env var
-    if std::env::var("FORCE_COLOR").is_ok() {
-        // Force colors, check for level
-        if let Ok(level) = std::env::var("FORCE_COLOR") {
-            match level.as_str() {
-                "3" => return Some(ColorSystem::TrueColor),
-                "2" => return Some(ColorSystem::EightBit),
-                "1" | "" => return Some(ColorSystem::Standard),
-                _ => {}
-            }
+    if let Some(level) = env.force_color.as_deref() {
+        // A value of "0" disables colors entirely.
+        if level == "0" {
+            return None;
         }
-        return Some(ColorSystem::TrueColor);
+
+        // Force colors, check for level
+        return match level {
+            "3" => Some(ColorSystem::TrueColor),
+            "2" => Some(ColorSystem::EightBit),
+            "1" | "" => Some(ColorSystem::Standard),
+            _ => Some(ColorSystem::TrueColor),
+        };
     }
 
     // Check COLORTERM for truecolor
-    if let Ok(colorterm) = std::env::var("COLORTERM") {
+    if let Some(colorterm) = env.colorterm.as_ref() {
         let colorterm = colorterm.to_lowercase();
         if colorterm == "truecolor" || colorterm == "24bit" {
             return Some(ColorSystem::TrueColor);
@@ -83,7 +109,7 @@ pub fn detect_color_system() -> Option<ColorSystem> {
     }
 
     // Check TERM for color support
-    if let Ok(term) = std::env::var("TERM") {
+    if let Some(term) = env.term.as_ref() {
         let term = term.to_lowercase();
         if term == "dumb" {
             return None;
@@ -99,7 +125,7 @@ pub fn detect_color_system() -> Option<ColorSystem> {
     // Check for Windows legacy console
     #[cfg(windows)]
     {
-        if std::env::var("WT_SESSION").is_ok() {
+        if env.wt_session.is_some() {
             // Windows Terminal supports true color
             return Some(ColorSystem::TrueColor);
         }
@@ -109,7 +135,7 @@ pub fn detect_color_system() -> Option<ColorSystem> {
 
     // Default to standard colors if we're on a terminal
     #[cfg(not(windows))]
-    if is_terminal() {
+    if is_tty {
         Some(ColorSystem::Standard)
     } else {
         None
@@ -242,6 +268,20 @@ mod tests {
     fn test_detect_color_system() {
         // Just ensure it doesn't panic
         let _ = detect_color_system();
+    }
+
+    #[test]
+    fn test_force_color_zero_disables_colors() {
+        let settings = EnvSettings {
+            no_color: None,
+            force_color: Some("0".to_string()),
+            colorterm: None,
+            term: Some("xterm-256color".to_string()),
+            #[cfg(windows)]
+            wt_session: None,
+        };
+
+        assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     #[test]

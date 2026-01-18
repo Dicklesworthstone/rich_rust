@@ -89,11 +89,15 @@ use crate::style::Style;
 
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
+
+static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
+static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
 /// Error type for syntax highlighting operations.
 #[derive(Debug, Clone)]
@@ -314,15 +318,17 @@ impl Syntax {
     /// Get the list of available themes.
     #[must_use]
     pub fn available_themes() -> Vec<String> {
-        let ts = ThemeSet::load_defaults();
-        ts.themes.keys().cloned().collect()
+        THEME_SET.themes.keys().cloned().collect()
     }
 
     /// Get the list of available languages.
     #[must_use]
     pub fn available_languages() -> Vec<String> {
-        let ss = SyntaxSet::load_defaults_newlines();
-        ss.syntaxes().iter().map(|s| s.name.clone()).collect()
+        SYNTAX_SET
+            .syntaxes()
+            .iter()
+            .map(|s| s.name.clone())
+            .collect()
     }
 
     /// Render the syntax-highlighted code to segments.
@@ -331,8 +337,8 @@ impl Syntax {
     ///
     /// Returns an error if the theme or language is not found.
     pub fn render(&self, _max_width: Option<usize>) -> Result<Vec<Segment>, SyntaxError> {
-        let ps = SyntaxSet::load_defaults_newlines();
-        let ts = ThemeSet::load_defaults();
+        let ps = &*SYNTAX_SET;
+        let ts = &*THEME_SET;
 
         // Find the syntax definition
         let syntax = ps
@@ -351,8 +357,8 @@ impl Syntax {
 
         // Calculate line number width
         let line_count = self.code.lines().count();
-        let end_line = self.start_line + line_count;
-        let line_num_width = end_line.to_string().len();
+        let last_line = self.start_line.saturating_add(line_count.saturating_sub(1));
+        let line_num_width = last_line.to_string().len();
 
         // Add top padding
         for _ in 0..self.padding.0 {

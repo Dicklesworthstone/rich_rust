@@ -7,7 +7,7 @@ use crate::r#box::{ASCII, BoxChars, ROUNDED, SQUARE};
 use crate::cells;
 use crate::segment::Segment;
 use crate::style::Style;
-use crate::text::{JustifyMethod, Text};
+use crate::text::{JustifyMethod, OverflowMethod, Text};
 
 use super::padding::PaddingDimensions;
 
@@ -284,7 +284,14 @@ impl Panel {
             // Content (with right-padding to fill width)
             let line_width: usize = line.iter().map(|seg| cells::cell_len(&seg.text)).sum();
             for seg in line {
-                segments.push(seg.clone());
+                let mut out = seg.clone();
+                if !out.is_control() {
+                    out.style = Some(match out.style.take() {
+                        Some(existing) => self.style.combine(&existing),
+                        None => self.style.clone(),
+                    });
+                }
+                segments.push(out);
             }
 
             // Fill remaining content space
@@ -344,52 +351,66 @@ impl Panel {
         ));
 
         if let Some(title) = &self.title {
-            // Make title with surrounding spaces
-            let title_text = format!(" {} ", title.plain());
-            let title_width = cells::cell_len(&title_text);
-
-            if title_width + 2 >= inner_width {
-                // Title too long, truncate
-                let available = inner_width.saturating_sub(2);
-                let truncated = truncate_str(&title_text, available);
-                segments.push(Segment::new(
-                    box_chars.top[1].to_string(),
-                    Some(self.border_style.clone()),
-                ));
-                segments.push(Segment::new(truncated.clone(), Some(title.style().clone())));
-                let remaining = inner_width.saturating_sub(cells::cell_len(&truncated) + 1);
-                segments.push(Segment::new(
-                    box_chars.top[1].to_string().repeat(remaining),
-                    Some(self.border_style.clone()),
-                ));
+            let max_text_width = if inner_width >= 4 {
+                inner_width.saturating_sub(4)
             } else {
-                // Calculate rule sections based on alignment
-                let rule_width = inner_width - title_width;
-                let (left_rule, right_rule) = match self.title_align {
-                    JustifyMethod::Left | JustifyMethod::Default => {
-                        (1, rule_width.saturating_sub(1))
-                    }
-                    JustifyMethod::Right => (rule_width.saturating_sub(1), 1),
-                    JustifyMethod::Center | JustifyMethod::Full => {
-                        let left = rule_width / 2;
-                        (left, rule_width - left)
+                inner_width.saturating_sub(2)
+            };
+            let title_text = if inner_width >= 2 {
+                if title.cell_len() > max_text_width {
+                    truncate_text_to_width(title, max_text_width)
+                } else {
+                    title.clone()
+                }
+            } else {
+                truncate_text_to_width(title, inner_width)
+            };
+
+            let title_width = title_text.cell_len();
+            if inner_width < 2 {
+                segments.extend(title_text.render(""));
+                let remaining = inner_width.saturating_sub(title_width);
+                if remaining > 0 {
+                    segments.push(Segment::new(
+                        box_chars.top[1].to_string().repeat(remaining),
+                        Some(self.border_style.clone()),
+                    ));
+                }
+            } else {
+                let title_total_width = title_width.saturating_add(2);
+                let available = inner_width.saturating_sub(title_total_width);
+                let (left_rule, right_rule) = if available == 0 {
+                    (0, 0)
+                } else {
+                    match self.title_align {
+                        JustifyMethod::Left | JustifyMethod::Default => {
+                            (1, available.saturating_sub(1))
+                        }
+                        JustifyMethod::Right => (available.saturating_sub(1), 1),
+                        JustifyMethod::Center | JustifyMethod::Full => {
+                            let left = available / 2;
+                            (left, available - left)
+                        }
                     }
                 };
 
-                // Left rule section
-                segments.push(Segment::new(
-                    box_chars.top[1].to_string().repeat(left_rule),
-                    Some(self.border_style.clone()),
-                ));
+                if left_rule > 0 {
+                    segments.push(Segment::new(
+                        box_chars.top[1].to_string().repeat(left_rule),
+                        Some(self.border_style.clone()),
+                    ));
+                }
 
-                // Title
-                segments.push(Segment::new(title_text, Some(title.style().clone())));
+                segments.push(Segment::new(" ", Some(title_text.style().clone())));
+                segments.extend(title_text.render(""));
+                segments.push(Segment::new(" ", Some(title_text.style().clone())));
 
-                // Right rule section
-                segments.push(Segment::new(
-                    box_chars.top[1].to_string().repeat(right_rule),
-                    Some(self.border_style.clone()),
-                ));
+                if right_rule > 0 {
+                    segments.push(Segment::new(
+                        box_chars.top[1].to_string().repeat(right_rule),
+                        Some(self.border_style.clone()),
+                    ));
+                }
             }
         } else {
             // No title, just a line
@@ -419,55 +440,66 @@ impl Panel {
         ));
 
         if let Some(subtitle) = &self.subtitle {
-            // Make subtitle with surrounding spaces
-            let subtitle_text = format!(" {} ", subtitle.plain());
-            let subtitle_width = cells::cell_len(&subtitle_text);
-
-            if subtitle_width + 2 >= inner_width {
-                // Subtitle too long, truncate
-                let available = inner_width.saturating_sub(2);
-                let truncated = truncate_str(&subtitle_text, available);
-                segments.push(Segment::new(
-                    box_chars.bottom[1].to_string(),
-                    Some(self.border_style.clone()),
-                ));
-                segments.push(Segment::new(
-                    truncated.clone(),
-                    Some(subtitle.style().clone()),
-                ));
-                let remaining = inner_width.saturating_sub(cells::cell_len(&truncated) + 1);
-                segments.push(Segment::new(
-                    box_chars.bottom[1].to_string().repeat(remaining),
-                    Some(self.border_style.clone()),
-                ));
+            let max_text_width = if inner_width >= 4 {
+                inner_width.saturating_sub(4)
             } else {
-                // Calculate rule sections based on alignment
-                let rule_width = inner_width - subtitle_width;
-                let (left_rule, right_rule) = match self.subtitle_align {
-                    JustifyMethod::Left | JustifyMethod::Default => {
-                        (1, rule_width.saturating_sub(1))
-                    }
-                    JustifyMethod::Right => (rule_width.saturating_sub(1), 1),
-                    JustifyMethod::Center | JustifyMethod::Full => {
-                        let left = rule_width / 2;
-                        (left, rule_width - left)
+                inner_width.saturating_sub(2)
+            };
+            let subtitle_text = if inner_width >= 2 {
+                if subtitle.cell_len() > max_text_width {
+                    truncate_text_to_width(subtitle, max_text_width)
+                } else {
+                    subtitle.clone()
+                }
+            } else {
+                truncate_text_to_width(subtitle, inner_width)
+            };
+
+            let subtitle_width = subtitle_text.cell_len();
+            if inner_width < 2 {
+                segments.extend(subtitle_text.render(""));
+                let remaining = inner_width.saturating_sub(subtitle_width);
+                if remaining > 0 {
+                    segments.push(Segment::new(
+                        box_chars.bottom[1].to_string().repeat(remaining),
+                        Some(self.border_style.clone()),
+                    ));
+                }
+            } else {
+                let subtitle_total_width = subtitle_width.saturating_add(2);
+                let available = inner_width.saturating_sub(subtitle_total_width);
+                let (left_rule, right_rule) = if available == 0 {
+                    (0, 0)
+                } else {
+                    match self.subtitle_align {
+                        JustifyMethod::Left | JustifyMethod::Default => {
+                            (1, available.saturating_sub(1))
+                        }
+                        JustifyMethod::Right => (available.saturating_sub(1), 1),
+                        JustifyMethod::Center | JustifyMethod::Full => {
+                            let left = available / 2;
+                            (left, available - left)
+                        }
                     }
                 };
 
-                // Left rule section
-                segments.push(Segment::new(
-                    box_chars.bottom[1].to_string().repeat(left_rule),
-                    Some(self.border_style.clone()),
-                ));
+                if left_rule > 0 {
+                    segments.push(Segment::new(
+                        box_chars.bottom[1].to_string().repeat(left_rule),
+                        Some(self.border_style.clone()),
+                    ));
+                }
 
-                // Subtitle
-                segments.push(Segment::new(subtitle_text, Some(subtitle.style().clone())));
+                segments.push(Segment::new(" ", Some(subtitle_text.style().clone())));
+                segments.extend(subtitle_text.render(""));
+                segments.push(Segment::new(" ", Some(subtitle_text.style().clone())));
 
-                // Right rule section
-                segments.push(Segment::new(
-                    box_chars.bottom[1].to_string().repeat(right_rule),
-                    Some(self.border_style.clone()),
-                ));
+                if right_rule > 0 {
+                    segments.push(Segment::new(
+                        box_chars.bottom[1].to_string().repeat(right_rule),
+                        Some(self.border_style.clone()),
+                    ));
+                }
             }
         } else {
             // No subtitle, just a line
@@ -496,24 +528,11 @@ impl Panel {
     }
 }
 
-/// Truncate a string to fit within a cell width.
-fn truncate_str(s: &str, max_width: usize) -> String {
-    let mut result = String::new();
-    let mut width = 0;
-
-    for ch in s.chars() {
-        let ch_width = cells::get_character_cell_size(ch);
-        if width + ch_width > max_width {
-            if max_width > 3 && width + 3 <= max_width {
-                result.push_str("...");
-            }
-            break;
-        }
-        result.push(ch);
-        width += ch_width;
-    }
-
-    result
+/// Truncate a Text object to a maximum cell width with ellipsis.
+fn truncate_text_to_width(text: &Text, max_width: usize) -> Text {
+    let mut truncated = text.clone();
+    truncated.truncate(max_width, OverflowMethod::Ellipsis, false);
+    truncated
 }
 
 /// Create a panel with content that fits (doesn't expand).
@@ -525,6 +544,7 @@ pub fn fit_panel(text: &str) -> Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Attributes;
 
     #[test]
     fn test_panel_from_text() {
@@ -591,9 +611,27 @@ mod tests {
     }
 
     #[test]
-    fn test_truncate_str() {
-        let s = "Hello World";
-        let truncated = truncate_str(s, 5);
-        assert_eq!(truncated, "Hello");
+    fn test_truncate_text_to_width() {
+        let text = Text::new("Hello World");
+        let truncated = truncate_text_to_width(&text, 5);
+        assert_eq!(truncated.plain(), "He...");
+    }
+
+    #[test]
+    fn test_panel_title_preserves_spans() {
+        let mut title = Text::new("AB");
+        title.stylize(0, 1, Style::new().italic());
+
+        let panel = Panel::from_text("Content").title(title).width(20);
+        let segments = panel.render(20);
+        let title_segment = segments
+            .iter()
+            .find(|seg| seg.text.contains('A'))
+            .expect("expected title segment");
+        let style = title_segment
+            .style
+            .as_ref()
+            .expect("expected styled segment");
+        assert!(style.attributes.contains(Attributes::ITALIC));
     }
 }

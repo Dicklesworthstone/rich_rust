@@ -6,7 +6,7 @@
 use crate::cells;
 use crate::segment::Segment;
 use crate::style::Style;
-use crate::text::{JustifyMethod, Text};
+use crate::text::{JustifyMethod, OverflowMethod, Text};
 
 /// A horizontal rule with optional title.
 #[derive(Debug, Clone)]
@@ -98,17 +98,26 @@ impl Rule {
         let mut segments = Vec::new();
 
         if let Some(title) = &self.title {
-            // Render title with surrounding spaces
-            let title_text = format!(" {} ", title.plain());
-            let title_width = cells::cell_len(&title_text);
+            let title_width = cells::cell_len(title.plain());
+            let title_total_width = title_width.saturating_add(2);
+
+            if title_total_width > width {
+                let mut truncated = title.clone();
+                truncated.truncate(width, OverflowMethod::Crop, false);
+                segments.extend(truncated.render(""));
+                segments.push(Segment::line());
+                return segments;
+            }
 
             // Calculate available space for rule characters
-            let available = width.saturating_sub(title_width);
+            let available = width.saturating_sub(title_total_width);
             let rule_chars = available / char_width;
 
             if rule_chars < 2 {
                 // Not enough space for rule, just show title
-                segments.push(Segment::new(&title_text, Some(title.style().clone())));
+                segments.push(Segment::new(" ", Some(title.style().clone())));
+                segments.extend(title.render(""));
+                segments.push(Segment::new(" ", Some(title.style().clone())));
             } else {
                 let (left_count, right_count) = match self.align {
                     JustifyMethod::Left | JustifyMethod::Default => (1, rule_chars - 1),
@@ -124,8 +133,10 @@ impl Rule {
                 let left_rule = self.character.repeat(left_count);
                 segments.push(Segment::new(&left_rule, Some(self.style.clone())));
 
-                // Title
-                segments.push(Segment::new(&title_text, Some(title.style().clone())));
+                // Title with surrounding spaces
+                segments.push(Segment::new(" ", Some(title.style().clone())));
+                segments.extend(title.render(""));
+                segments.push(Segment::new(" ", Some(title.style().clone())));
 
                 // Right rule section
                 let right_rule = self.character.repeat(right_count);

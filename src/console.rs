@@ -195,7 +195,7 @@ pub struct PrintOptions {
     /// Suppress newline.
     pub no_newline: bool,
     /// Parse markup.
-    pub markup: bool,
+    pub markup: Option<bool>,
     /// Enable highlighting.
     pub highlight: bool,
     /// Override width.
@@ -220,7 +220,7 @@ impl PrintOptions {
     /// Set markup parsing.
     #[must_use]
     pub fn with_markup(mut self, markup: bool) -> Self {
-        self.markup = markup;
+        self.markup = Some(markup);
         self
     }
 
@@ -529,15 +529,74 @@ impl Console {
         options: &PrintOptions,
     ) -> io::Result<()> {
         // Parse markup if enabled
-        let text = if options.markup || self.markup {
+        let parse_markup = options.markup.unwrap_or(self.markup);
+        let mut text = if parse_markup {
             markup::render_or_plain(content)
         } else {
             Text::new(content)
         };
 
-        // Render to segments
+        if let Some(justify) = options.justify {
+            text.justify = justify;
+        }
+        if let Some(overflow) = options.overflow {
+            text.overflow = overflow;
+        }
+        if let Some(no_wrap) = options.no_wrap {
+            text.no_wrap = no_wrap;
+        }
+        if options.crop {
+            text.overflow = OverflowMethod::Crop;
+        }
+
+        let width = options.width.or_else(|| {
+            if options.justify.is_some()
+                || options.overflow.is_some()
+                || options.no_wrap.is_some()
+                || options.crop
+                || options.soft_wrap
+            {
+                Some(self.width())
+            } else {
+                None
+            }
+        });
+
         let end = if options.no_newline { "" } else { &options.end };
-        let segments = text.render(end);
+        let segments = if let Some(width) = width {
+            let mut rendered = Vec::new();
+            let lines = if text.no_wrap {
+                text.split_lines()
+            } else {
+                text.wrap(width)
+            };
+            let last_index = lines.len().saturating_sub(1);
+            let justify = match text.justify {
+                JustifyMethod::Default => JustifyMethod::Left,
+                other => other,
+            };
+
+            for (index, mut line) in lines.into_iter().enumerate() {
+                if text.no_wrap && line.cell_len() > width {
+                    line.truncate(width, line.overflow, false);
+                }
+
+                if matches!(
+                    justify,
+                    JustifyMethod::Center | JustifyMethod::Right | JustifyMethod::Full
+                ) && line.cell_len() < width
+                {
+                    line.pad(width, justify);
+                }
+
+                let line_end = if index == last_index { end } else { "\n" };
+                rendered.extend(line.render(line_end));
+            }
+
+            rendered
+        } else {
+            text.render(end)
+        };
 
         // Apply any overall style
         let segments: Vec<Segment> = if let Some(ref style) = options.style {
@@ -986,7 +1045,7 @@ mod tests {
             .with_markup(true)
             .with_style(Style::new().bold());
 
-        assert!(options.markup);
+        assert_eq!(options.markup, Some(true));
         assert!(options.style.is_some());
     }
 
@@ -1071,6 +1130,90 @@ mod tests {
             text.contains("Hello, World!"),
             "Expected 'Hello, World!' in output, got: {text}"
         );
+    }
+
+    #[test]
+    fn test_print_plain_disables_markup() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .markup(true)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print_plain("[bold]Hello[/]");
+
+        let output = buffer.0.lock().unwrap();
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("[bold]Hello[/]"),
+            "Expected literal markup in output, got: {text}"
+        );
+        assert!(
+            !text.contains("\x1b["),
+            "Did not expect ANSI sequences in output, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_print_options_justify_uses_console_width() {
+        let console = Console::builder().width(10).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new().with_justify(JustifyMethod::Center);
+        options.no_newline = true;
+
+        console
+            .print_to(&mut output, "Hi", &options)
+            .expect("failed to render");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert_eq!(text, "    Hi    ");
+    }
+
+    #[test]
+    fn test_print_options_width_wraps() {
+        let console = Console::builder().width(80).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new();
+        options.width = Some(4);
+
+        console
+            .print_to(&mut output, "Hello", &options)
+            .expect("failed to render");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert_eq!(text, "Hell\no\n");
+    }
+
+    #[test]
+    fn test_print_options_no_wrap_ellipsis() {
+        let console = Console::builder().width(80).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new()
+            .with_no_wrap(true)
+            .with_overflow(OverflowMethod::Ellipsis);
+        options.width = Some(4);
+        options.no_newline = true;
+
+        console
+            .print_to(&mut output, "Hello", &options)
+            .expect("failed to render");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert_eq!(text, "H...");
     }
 
     #[test]
