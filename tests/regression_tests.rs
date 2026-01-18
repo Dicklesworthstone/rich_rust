@@ -1207,6 +1207,39 @@ fn regression_panel_subtitle_preserves_spans() {
     tracing::info!("Regression test PASSED: panel subtitle spans preserved");
 }
 
+/// Regression test: Table cell preserves span styles
+///
+/// Bug: Table cells could lose Text span styling during render
+/// Fixed: Cell rendering preserves span styles
+#[test]
+fn regression_table_cell_preserves_spans() {
+    init_test_logging();
+    log_test_context(
+        "regression_table_cell_preserves_spans",
+        "Ensures table cell Text spans are preserved",
+    );
+
+    let _phase = test_phase("table_cell_spans");
+
+    let mut cell_text = Text::new("Cell");
+    cell_text.stylize(0, 4, Style::new().italic());
+
+    let mut table = Table::new().with_column(Column::new("H"));
+    table.add_row_cells([cell_text]);
+
+    let segments = table.render(20);
+    let has_italic = segments.iter().any(|seg| {
+        seg.text.contains("Cell")
+            && seg
+                .style
+                .as_ref()
+                .is_some_and(|style| style.attributes.contains(Attributes::ITALIC))
+    });
+
+    assert!(has_italic, "cell should preserve italic style");
+    tracing::info!("Regression test PASSED: table cell spans preserved");
+}
+
 /// Regression test: Console control segments emit ANSI/control sequences
 ///
 /// Bug: Control segments were silently skipped in Console output
