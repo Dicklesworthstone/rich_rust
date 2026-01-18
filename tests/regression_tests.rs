@@ -1083,6 +1083,71 @@ fn regression_tree_label_preserves_spans() {
     tracing::info!("Regression test PASSED: tree label spans preserved");
 }
 
+/// Regression test: Panel title truncates with ellipsis and fits width
+///
+/// Bug: Long titles could overflow panel width
+/// Fixed: Titles truncate with ellipsis and stay within width
+#[test]
+fn regression_panel_title_truncates_and_fits_width() {
+    init_test_logging();
+    log_test_context(
+        "regression_panel_title_truncates_and_fits_width",
+        "Ensures panel titles truncate and fit width",
+    );
+
+    let _phase = test_phase("panel_title_truncate");
+
+    use rich_rust::cells;
+
+    let panel = Panel::from_text("Body").title("ABCDEFGHIJK").width(10);
+    let output: String = panel.render(10).into_iter().map(|seg| seg.text).collect();
+    assert!(
+        output.contains("..."),
+        "expected ellipsis in truncated title"
+    );
+
+    for line in output.lines().filter(|line| !line.is_empty()) {
+        assert!(
+            cells::cell_len(line) <= 10,
+            "panel line should not exceed width"
+        );
+    }
+
+    tracing::info!("Regression test PASSED: panel title truncation");
+}
+
+/// Regression test: Panel subtitle truncates with ellipsis and fits width
+#[test]
+fn regression_panel_subtitle_truncates_and_fits_width() {
+    init_test_logging();
+    log_test_context(
+        "regression_panel_subtitle_truncates_and_fits_width",
+        "Ensures panel subtitles truncate and fit width",
+    );
+
+    let _phase = test_phase("panel_subtitle_truncate");
+
+    use rich_rust::cells;
+
+    let panel = Panel::from_text("Body")
+        .subtitle("LongSubtitleHere")
+        .width(12);
+    let output: String = panel.render(12).into_iter().map(|seg| seg.text).collect();
+    assert!(
+        output.contains("..."),
+        "expected ellipsis in truncated subtitle"
+    );
+
+    for line in output.lines().filter(|line| !line.is_empty()) {
+        assert!(
+            cells::cell_len(line) <= 12,
+            "panel line should not exceed width"
+        );
+    }
+
+    tracing::info!("Regression test PASSED: panel subtitle truncation");
+}
+
 /// Regression test: Console control segments emit ANSI/control sequences
 ///
 /// Bug: Control segments were silently skipped in Console output
