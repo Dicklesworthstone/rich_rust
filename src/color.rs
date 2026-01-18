@@ -377,17 +377,35 @@ impl Color {
     }
 
     fn parse_uncached(color: &str) -> Result<Self, ColorParseError> {
-        if color.is_empty() || color == "default" {
+        // Empty string is an error
+        if color.is_empty() {
+            return Err(ColorParseError::Empty);
+        }
+
+        // "default" returns the default color
+        if color == "default" {
             return Ok(Self::default_color());
         }
 
-        // Try hex format: #RRGGBB
+        // Try hex format: #RRGGBB or #RGB (shorthand)
         if let Some(hex) = color.strip_prefix('#') {
+            // 6-digit hex: #RRGGBB
             if hex.len() == 6 {
                 if let (Ok(r), Ok(g), Ok(b)) = (
                     u8::from_str_radix(&hex[0..2], 16),
                     u8::from_str_radix(&hex[2..4], 16),
                     u8::from_str_radix(&hex[4..6], 16),
+                ) {
+                    return Ok(Self::from_rgb(r, g, b));
+                }
+            }
+            // 3-digit hex shorthand: #RGB -> #RRGGBB
+            if hex.len() == 3 {
+                let chars: Vec<char> = hex.chars().collect();
+                if let (Ok(r), Ok(g), Ok(b)) = (
+                    u8::from_str_radix(&format!("{}{}", chars[0], chars[0]), 16),
+                    u8::from_str_radix(&format!("{}{}", chars[1], chars[1]), 16),
+                    u8::from_str_radix(&format!("{}{}", chars[2], chars[2]), 16),
                 ) {
                     return Ok(Self::from_rgb(r, g, b));
                 }
@@ -470,6 +488,7 @@ impl From<[u8; 3]> for Color {
 /// Error type for color parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColorParseError {
+    Empty,
     InvalidHex(String),
     InvalidColorNumber(String),
     InvalidRgb(String),
@@ -479,6 +498,7 @@ pub enum ColorParseError {
 impl fmt::Display for ColorParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Empty => write!(f, "Empty color string"),
             Self::InvalidHex(s) => write!(f, "Invalid hex color: {s}"),
             Self::InvalidColorNumber(s) => write!(f, "Invalid color number: {s}"),
             Self::InvalidRgb(s) => write!(f, "Invalid RGB color: {s}"),
@@ -1081,11 +1101,12 @@ mod tests {
     // 1.2 Color Parsing - Default
     #[test]
     fn test_spec_parse_default_variants() {
+        // Per RICH_SPEC Section 1.2: "default" -> ColorType::DEFAULT
         let c1 = Color::parse("default").unwrap();
         assert_eq!(c1.color_type, ColorType::Default);
 
-        let c2 = Color::parse("").unwrap();
-        assert_eq!(c2.color_type, ColorType::Default);
+        // Empty string is an error per RICH_SPEC (not listed in valid formats)
+        assert!(Color::parse("").is_err());
     }
 
     // 1.3 Color Palettes - Standard palette exact values
@@ -1235,5 +1256,193 @@ mod tests {
 
         assert_eq!(c1.number, c2.number);
         assert_eq!(c2.number, c3.number);
+    }
+
+    // ============================================================================
+    // EDGE CASE TESTS - Error Handling and Invalid Inputs
+    // ============================================================================
+
+    // Invalid hex color formats
+    #[test]
+    fn test_invalid_hex_colors() {
+        // Too short
+        assert!(Color::parse("#f").is_err());
+        assert!(Color::parse("#ff").is_err());
+
+        // Invalid characters
+        assert!(Color::parse("#gggggg").is_err());
+        assert!(Color::parse("#xyz123").is_err());
+
+        // Too long
+        assert!(Color::parse("#fffffff").is_err());
+
+        // Missing hash
+        assert!(Color::parse("ff0000").is_err());
+    }
+
+    // Invalid RGB values
+    #[test]
+    fn test_invalid_rgb_values() {
+        // Out of range values (> 255)
+        assert!(Color::parse("rgb(256,0,0)").is_err());
+        assert!(Color::parse("rgb(0,256,0)").is_err());
+        assert!(Color::parse("rgb(0,0,256)").is_err());
+        assert!(Color::parse("rgb(1000,1000,1000)").is_err());
+
+        // Negative values
+        assert!(Color::parse("rgb(-1,0,0)").is_err());
+
+        // Invalid format
+        assert!(Color::parse("rgb(255,0)").is_err());      // Missing component
+        assert!(Color::parse("rgb(255,0,0,0)").is_err());  // Extra component
+        assert!(Color::parse("rgb(a,b,c)").is_err());       // Non-numeric
+        assert!(Color::parse("rgb255,0,0)").is_err());     // Missing open paren
+        assert!(Color::parse("rgb(255,0,0").is_err());     // Missing close paren
+    }
+
+    // Invalid named colors
+    #[test]
+    fn test_invalid_named_colors() {
+        assert!(Color::parse("not_a_color").is_err());
+        assert!(Color::parse("redd").is_err());           // Typo
+        assert!(Color::parse("bluee").is_err());          // Typo
+        assert!(Color::parse("fancy_purple").is_err());   // Not in palette
+        assert!(Color::parse("123abc").is_err());         // Starts with number
+    }
+
+    // Invalid color numbers
+    #[test]
+    fn test_invalid_color_numbers() {
+        // Out of range (must be 0-255)
+        assert!(Color::parse("color(256)").is_err());
+        assert!(Color::parse("color(1000)").is_err());
+        assert!(Color::parse("color(-1)").is_err());
+
+        // Invalid format
+        assert!(Color::parse("color()").is_err());        // Missing number
+        assert!(Color::parse("color(abc)").is_err());     // Non-numeric
+        assert!(Color::parse("color 128").is_err());      // Missing parens
+    }
+
+    // Empty and whitespace inputs
+    #[test]
+    fn test_empty_and_whitespace_inputs() {
+        assert!(Color::parse("").is_err());
+        assert!(Color::parse("   ").is_err());
+        assert!(Color::parse("\t\n").is_err());
+    }
+
+    // Boundary values for RGB
+    #[test]
+    fn test_rgb_boundary_values() {
+        // Valid boundary values
+        let black = Color::parse("rgb(0,0,0)").unwrap();
+        assert_eq!(black.get_truecolor(), ColorTriplet::new(0, 0, 0));
+
+        let white = Color::parse("rgb(255,255,255)").unwrap();
+        assert_eq!(white.get_truecolor(), ColorTriplet::new(255, 255, 255));
+
+        // Single boundary component
+        let r = Color::parse("rgb(255,0,0)").unwrap();
+        assert_eq!(r.get_truecolor(), ColorTriplet::new(255, 0, 0));
+
+        let g = Color::parse("rgb(0,255,0)").unwrap();
+        assert_eq!(g.get_truecolor(), ColorTriplet::new(0, 255, 0));
+
+        let b = Color::parse("rgb(0,0,255)").unwrap();
+        assert_eq!(b.get_truecolor(), ColorTriplet::new(0, 0, 255));
+    }
+
+    // EightBit to Standard downgrade
+    #[test]
+    fn test_eight_bit_to_standard_downgrade() {
+        // Create an EightBit color and downgrade to Standard
+        let eight_bit = Color::from_ansi(196); // Bright red from 256-color palette
+        let _triplet = eight_bit.get_truecolor();
+
+        // Downgrade to Standard (should find nearest standard color)
+        let downgraded = eight_bit.downgrade(ColorSystem::Standard);
+        assert!(downgraded.color_type == ColorType::Standard || downgraded.color_type == ColorType::Default);
+
+        // The downgraded color should be a valid standard color (0-15)
+        if downgraded.number.is_some() {
+            assert!(downgraded.number.unwrap() <= 15);
+        }
+    }
+
+    // ColorTriplet equality and comparison
+    #[test]
+    fn test_color_triplet_equality() {
+        let a = ColorTriplet::new(128, 64, 32);
+        let b = ColorTriplet::new(128, 64, 32);
+        let c = ColorTriplet::new(128, 64, 33);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+
+        // Hash equality (same triplets should hash equally for HashMap use)
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(a);
+        assert!(set.contains(&b));
+        assert!(!set.contains(&c));
+    }
+
+    // Test all 16 standard named colors parse correctly
+    #[test]
+    fn test_all_standard_named_colors() {
+        let standard_colors = [
+            "black", "red", "green", "yellow",
+            "blue", "magenta", "cyan", "white",
+            "bright_black", "bright_red", "bright_green", "bright_yellow",
+            "bright_blue", "bright_magenta", "bright_cyan", "bright_white",
+        ];
+
+        for (i, name) in standard_colors.iter().enumerate() {
+            let color = Color::parse(name).unwrap_or_else(|_| panic!("Failed to parse '{name}'"));
+            assert!(
+                color.number.is_some(),
+                "Standard color '{name}' should have a number"
+            );
+            assert_eq!(
+                color.number.unwrap() as usize,
+                i,
+                "Color '{name}' should have number {i}"
+            );
+        }
+    }
+
+    // Test hex parsing with various valid formats
+    #[test]
+    fn test_hex_valid_formats() {
+        // 6-digit hex
+        let c1 = Color::parse("#ff0000").unwrap();
+        assert_eq!(c1.get_truecolor(), ColorTriplet::new(255, 0, 0));
+
+        // 3-digit hex (shorthand)
+        let c2 = Color::parse("#f00").unwrap();
+        assert_eq!(c2.get_truecolor(), ColorTriplet::new(255, 0, 0));
+
+        // Uppercase
+        let c3 = Color::parse("#FF0000").unwrap();
+        assert_eq!(c3.get_truecolor(), ColorTriplet::new(255, 0, 0));
+
+        // Mixed case
+        let c4 = Color::parse("#Ff00fF").unwrap();
+        assert_eq!(c4.get_truecolor(), ColorTriplet::new(255, 0, 255));
+    }
+
+    // Test color number boundaries
+    #[test]
+    fn test_color_number_full_range() {
+        // Test all valid color numbers (0-255)
+        for i in 0..=255u8 {
+            let color = Color::parse(&format!("color({i})")).unwrap();
+            assert_eq!(
+                color.number,
+                Some(i),
+                "color({i}) should parse to number {i}"
+            );
+        }
     }
 }
