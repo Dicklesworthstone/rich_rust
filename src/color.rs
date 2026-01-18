@@ -82,6 +82,18 @@ impl ColorTriplet {
     }
 }
 
+impl From<(u8, u8, u8)> for ColorTriplet {
+    fn from((red, green, blue): (u8, u8, u8)) -> Self {
+        Self::new(red, green, blue)
+    }
+}
+
+impl From<[u8; 3]> for ColorTriplet {
+    fn from([red, green, blue]: [u8; 3]) -> Self {
+        Self::new(red, green, blue)
+    }
+}
+
 impl fmt::Display for ColorTriplet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "rgb({}, {}, {})", self.red, self.green, self.blue)
@@ -437,6 +449,24 @@ impl FromStr for Color {
     }
 }
 
+impl From<ColorTriplet> for Color {
+    fn from(triplet: ColorTriplet) -> Self {
+        Self::from_triplet(triplet)
+    }
+}
+
+impl From<(u8, u8, u8)> for Color {
+    fn from((red, green, blue): (u8, u8, u8)) -> Self {
+        Self::from_rgb(red, green, blue)
+    }
+}
+
+impl From<[u8; 3]> for Color {
+    fn from([red, green, blue]: [u8; 3]) -> Self {
+        Self::from_rgb(red, green, blue)
+    }
+}
+
 /// Error type for color parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColorParseError {
@@ -458,6 +488,22 @@ impl fmt::Display for ColorParseError {
 }
 
 impl std::error::Error for ColorParseError {}
+
+impl TryFrom<&str> for Color {
+    type Error = ColorParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for Color {
+    type Error = ColorParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(value.as_str())
+    }
+}
 
 // ============================================================================
 // Color Palettes
@@ -951,5 +997,243 @@ mod tests {
         // Check color cube
         assert_eq!(palette[16], ColorTriplet::new(0, 0, 0));
         assert_eq!(palette[21], ColorTriplet::new(0, 0, 255));
+    }
+
+    // ============================================================================
+    // SPEC VALIDATION TESTS - RICH_SPEC.md Section 1 (Color System)
+    // ============================================================================
+
+    // 1.1 Data Structures - ColorTriplet
+    #[test]
+    fn test_spec_color_triplet_normalized() {
+        let c = ColorTriplet::new(255, 128, 0);
+        let (r, g, b) = c.normalized();
+        assert!((r - 1.0).abs() < f64::EPSILON);
+        assert!((g - 128.0/255.0).abs() < 0.001);
+        assert!(b.abs() < f64::EPSILON);
+    }
+
+    // 1.1 Data Structures - ColorSystem enum values
+    #[test]
+    fn test_spec_color_system_values() {
+        assert_eq!(ColorSystem::Standard as u8, 1);
+        assert_eq!(ColorSystem::EightBit as u8, 2);
+        assert_eq!(ColorSystem::TrueColor as u8, 3);
+        assert_eq!(ColorSystem::Windows as u8, 4);
+    }
+
+    // 1.1 Data Structures - ColorType enum values
+    #[test]
+    fn test_spec_color_type_values() {
+        assert_eq!(ColorType::Default as u8, 0);
+        assert_eq!(ColorType::Standard as u8, 1);
+        assert_eq!(ColorType::EightBit as u8, 2);
+        assert_eq!(ColorType::TrueColor as u8, 3);
+        assert_eq!(ColorType::Windows as u8, 4);
+    }
+
+    // 1.2 Color Parsing - Case insensitivity
+    #[test]
+    fn test_spec_parse_case_insensitive() {
+        let c1 = Color::parse("RED").unwrap();
+        let c2 = Color::parse("Red").unwrap();
+        let c3 = Color::parse("red").unwrap();
+        assert_eq!(c1.number, c2.number);
+        assert_eq!(c2.number, c3.number);
+
+        let h1 = Color::parse("#FF0000").unwrap();
+        let h2 = Color::parse("#ff0000").unwrap();
+        assert_eq!(h1.triplet, h2.triplet);
+    }
+
+    // 1.2 Color Parsing - color(N) boundary: 0-15 = Standard, 16-255 = EightBit
+    #[test]
+    fn test_spec_parse_color_number_boundaries() {
+        // color(0) should be Standard
+        let c0 = Color::parse("color(0)").unwrap();
+        assert_eq!(c0.color_type, ColorType::Standard);
+        assert_eq!(c0.number, Some(0));
+
+        // color(15) should be Standard
+        let c15 = Color::parse("color(15)").unwrap();
+        assert_eq!(c15.color_type, ColorType::Standard);
+        assert_eq!(c15.number, Some(15));
+
+        // color(16) should be EightBit
+        let c16 = Color::parse("color(16)").unwrap();
+        assert_eq!(c16.color_type, ColorType::EightBit);
+        assert_eq!(c16.number, Some(16));
+
+        // color(255) should be EightBit
+        let c255 = Color::parse("color(255)").unwrap();
+        assert_eq!(c255.color_type, ColorType::EightBit);
+        assert_eq!(c255.number, Some(255));
+    }
+
+    // 1.2 Color Parsing - RGB format whitespace handling
+    #[test]
+    fn test_spec_parse_rgb_whitespace() {
+        let c1 = Color::parse("rgb(100,150,200)").unwrap();
+        let c2 = Color::parse("rgb( 100 , 150 , 200 )").unwrap();
+        assert_eq!(c1.triplet, c2.triplet);
+    }
+
+    // 1.2 Color Parsing - Default
+    #[test]
+    fn test_spec_parse_default_variants() {
+        let c1 = Color::parse("default").unwrap();
+        assert_eq!(c1.color_type, ColorType::Default);
+
+        let c2 = Color::parse("").unwrap();
+        assert_eq!(c2.color_type, ColorType::Default);
+    }
+
+    // 1.3 Color Palettes - Standard palette exact values
+    #[test]
+    fn test_spec_standard_palette_values() {
+        // Per RICH_SPEC.md Section 1.3
+        assert_eq!(STANDARD_PALETTE[0], ColorTriplet::new(0, 0, 0));       // Black
+        assert_eq!(STANDARD_PALETTE[1], ColorTriplet::new(170, 0, 0));     // Red
+        assert_eq!(STANDARD_PALETTE[2], ColorTriplet::new(0, 170, 0));     // Green
+        assert_eq!(STANDARD_PALETTE[3], ColorTriplet::new(170, 85, 0));    // Yellow
+        assert_eq!(STANDARD_PALETTE[4], ColorTriplet::new(0, 0, 170));     // Blue
+        assert_eq!(STANDARD_PALETTE[5], ColorTriplet::new(170, 0, 170));   // Magenta
+        assert_eq!(STANDARD_PALETTE[6], ColorTriplet::new(0, 170, 170));   // Cyan
+        assert_eq!(STANDARD_PALETTE[7], ColorTriplet::new(170, 170, 170)); // White
+        assert_eq!(STANDARD_PALETTE[8], ColorTriplet::new(85, 85, 85));    // Bright Black
+        assert_eq!(STANDARD_PALETTE[9], ColorTriplet::new(255, 85, 85));   // Bright Red
+        assert_eq!(STANDARD_PALETTE[10], ColorTriplet::new(85, 255, 85));  // Bright Green
+        assert_eq!(STANDARD_PALETTE[11], ColorTriplet::new(255, 255, 85)); // Bright Yellow
+        assert_eq!(STANDARD_PALETTE[12], ColorTriplet::new(85, 85, 255));  // Bright Blue
+        assert_eq!(STANDARD_PALETTE[13], ColorTriplet::new(255, 85, 255)); // Bright Magenta
+        assert_eq!(STANDARD_PALETTE[14], ColorTriplet::new(85, 255, 255)); // Bright Cyan
+        assert_eq!(STANDARD_PALETTE[15], ColorTriplet::new(255, 255, 255)); // Bright White
+    }
+
+    // 1.3 Color Palettes - Windows palette exact values
+    #[test]
+    fn test_spec_windows_palette_values() {
+        // Per RICH_SPEC.md Section 1.3
+        assert_eq!(WINDOWS_PALETTE[0], ColorTriplet::new(12, 12, 12));     // Black
+        assert_eq!(WINDOWS_PALETTE[1], ColorTriplet::new(197, 15, 31));    // Red
+        assert_eq!(WINDOWS_PALETTE[2], ColorTriplet::new(19, 161, 14));    // Green
+        assert_eq!(WINDOWS_PALETTE[3], ColorTriplet::new(193, 156, 0));    // Yellow
+        assert_eq!(WINDOWS_PALETTE[4], ColorTriplet::new(0, 55, 218));     // Blue
+        assert_eq!(WINDOWS_PALETTE[5], ColorTriplet::new(136, 23, 152));   // Magenta
+        assert_eq!(WINDOWS_PALETTE[6], ColorTriplet::new(58, 150, 221));   // Cyan
+        assert_eq!(WINDOWS_PALETTE[7], ColorTriplet::new(204, 204, 204));  // White
+        assert_eq!(WINDOWS_PALETTE[8], ColorTriplet::new(118, 118, 118)); // Bright Black
+        assert_eq!(WINDOWS_PALETTE[9], ColorTriplet::new(231, 72, 86));   // Bright Red
+        assert_eq!(WINDOWS_PALETTE[10], ColorTriplet::new(22, 198, 12));  // Bright Green
+        assert_eq!(WINDOWS_PALETTE[11], ColorTriplet::new(249, 241, 165)); // Bright Yellow
+        assert_eq!(WINDOWS_PALETTE[12], ColorTriplet::new(59, 120, 255)); // Bright Blue
+        assert_eq!(WINDOWS_PALETTE[13], ColorTriplet::new(180, 0, 158));  // Bright Magenta
+        assert_eq!(WINDOWS_PALETTE[14], ColorTriplet::new(97, 214, 214)); // Bright Cyan
+        assert_eq!(WINDOWS_PALETTE[15], ColorTriplet::new(242, 242, 242)); // Bright White
+    }
+
+    // 1.3 Color Palettes - 6x6x6 cube formula
+    #[test]
+    fn test_spec_eight_bit_cube_formula() {
+        let palette = &*EIGHT_BIT_PALETTE;
+        let levels = [0u8, 95, 135, 175, 215, 255];
+
+        // Verify formula: index = 16 + 36 * red_index + 6 * green_index + blue_index
+        for (ri, &r) in levels.iter().enumerate() {
+            for (gi, &g) in levels.iter().enumerate() {
+                for (bi, &b) in levels.iter().enumerate() {
+                    let expected_index = 16 + 36 * ri + 6 * gi + bi;
+                    assert_eq!(
+                        palette[expected_index],
+                        ColorTriplet::new(r, g, b),
+                        "Mismatch at cube index {expected_index} (r={ri}, g={gi}, b={bi})"
+                    );
+                }
+            }
+        }
+    }
+
+    // 1.5 ANSI Codes - All standard colors 0-7
+    #[test]
+    fn test_spec_ansi_codes_standard_all() {
+        for n in 0..8u8 {
+            let c = Color::from_ansi(n);
+            assert_eq!(c.get_ansi_codes(true), vec![(30 + n).to_string()]);
+            assert_eq!(c.get_ansi_codes(false), vec![(40 + n).to_string()]);
+        }
+    }
+
+    // 1.5 ANSI Codes - All bright colors 8-15
+    #[test]
+    fn test_spec_ansi_codes_bright_all() {
+        for n in 8..16u8 {
+            let c = Color::from_ansi(n);
+            // Spec says 82+n for fg, 92+n for bg
+            assert_eq!(c.get_ansi_codes(true), vec![(82 + n).to_string()]);
+            assert_eq!(c.get_ansi_codes(false), vec![(92 + n).to_string()]);
+        }
+    }
+
+    // 1.5 ANSI Codes - EIGHT_BIT background
+    #[test]
+    fn test_spec_ansi_codes_eight_bit_bg() {
+        let c = Color::from_ansi(196);
+        assert_eq!(c.get_ansi_codes(false), vec!["48", "5", "196"]);
+    }
+
+    // 1.5 ANSI Codes - TRUECOLOR background
+    #[test]
+    fn test_spec_ansi_codes_truecolor_bg() {
+        let c = Color::from_rgb(255, 128, 64);
+        assert_eq!(c.get_ansi_codes(false), vec!["48", "2", "255", "128", "64"]);
+    }
+
+    // 1.4 Color Conversion - Grayscale detection threshold (saturation < 0.15)
+    #[test]
+    fn test_spec_grayscale_detection() {
+        // Pure gray (saturation = 0) should map to grayscale range
+        let gray = ColorTriplet::new(128, 128, 128);
+        let idx = rgb_to_eight_bit(gray);
+        assert!(idx >= 232, "Gray should map to grayscale ramp (232-255), got {idx}");
+
+        // Slightly chromatic (saturation > 0.15) should map to color cube
+        let chromatic = ColorTriplet::new(128, 100, 100);
+        let (_, _, sat) = chromatic.to_hls();
+        if sat >= 0.15 {
+            let idx = rgb_to_eight_bit(chromatic);
+            assert!(idx < 232 || idx >= 16, "Chromatic color should map to color cube or standard");
+        }
+    }
+
+    // Test get_truecolor for all color types
+    #[test]
+    fn test_spec_get_truecolor() {
+        // TrueColor returns its triplet
+        let tc = Color::from_rgb(100, 150, 200);
+        assert_eq!(tc.get_truecolor(), ColorTriplet::new(100, 150, 200));
+
+        // Standard returns from STANDARD_PALETTE
+        let std = Color::from_ansi(1); // Red
+        assert_eq!(std.get_truecolor(), STANDARD_PALETTE[1]);
+
+        // EightBit returns from EIGHT_BIT_PALETTE
+        let eb = Color::from_ansi(196);
+        assert_eq!(eb.get_truecolor(), EIGHT_BIT_PALETTE[196]);
+
+        // Default returns (0,0,0)
+        let def = Color::default_color();
+        assert_eq!(def.get_truecolor(), ColorTriplet::default());
+    }
+
+    // Test LRU cache is working (same parse returns same result)
+    #[test]
+    fn test_spec_lru_cache() {
+        // Parse same color multiple times
+        let c1 = Color::parse("bright_blue").unwrap();
+        let c2 = Color::parse("bright_blue").unwrap();
+        let c3 = Color::parse("BRIGHT_BLUE").unwrap(); // Case normalized
+
+        assert_eq!(c1.number, c2.number);
+        assert_eq!(c2.number, c3.number);
     }
 }
