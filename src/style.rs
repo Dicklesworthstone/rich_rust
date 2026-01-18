@@ -393,11 +393,10 @@ impl Style {
 
         let normalized = style.trim().to_lowercase();
 
-        if let Ok(mut cache) = CACHE.lock() {
-            if let Some(cached) = cache.get(&normalized) {
+        if let Ok(mut cache) = CACHE.lock()
+            && let Some(cached) = cache.get(&normalized) {
                 return Ok(cached.clone());
             }
-        }
 
         let result = Self::parse_uncached(&normalized)?;
 
