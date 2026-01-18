@@ -8,6 +8,7 @@
 mod common;
 
 use common::init_test_logging;
+use rich_rust::cells;
 use rich_rust::prelude::*;
 
 // =============================================================================
@@ -98,6 +99,37 @@ fn e2e_table_with_title_and_caption() {
     assert!(output.contains("Active Users"), "Missing data");
 
     tracing::info!("E2E table with title and caption test PASSED");
+}
+
+#[test]
+fn e2e_table_title_alignment_width() {
+    init_test_logging();
+    tracing::info!("Starting E2E table title alignment width test");
+
+    let mut base = Table::new().title("Title").with_column(Column::new("A"));
+    base.add_row_cells(["1"]);
+
+    let width = 40;
+    let tables = [
+        base.clone().title_justify(JustifyMethod::Left),
+        base.clone().title_justify(JustifyMethod::Center),
+        base.title_justify(JustifyMethod::Right),
+    ];
+
+    for table in tables {
+        let output = table.render_plain(width);
+        let title_line = output
+            .lines()
+            .find(|line| line.contains("Title"))
+            .expect("missing title line");
+        assert_eq!(
+            cells::cell_len(title_line),
+            width,
+            "title line should match width"
+        );
+    }
+
+    tracing::info!("E2E table title alignment width test PASSED");
 }
 
 #[test]
