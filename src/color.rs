@@ -219,9 +219,9 @@ pub struct Color {
     pub name: String,
     /// Type of color.
     pub color_type: ColorType,
-    /// Color number (for Standard, EightBit, Windows).
+    /// Color number (for Standard, `EightBit`, Windows).
     pub number: Option<u8>,
-    /// RGB components (for TrueColor).
+    /// RGB components (for `TrueColor`).
     pub triplet: Option<ColorTriplet>,
 }
 
@@ -259,7 +259,7 @@ impl Color {
         }
     }
 
-    /// Create a color from RGB triplet as TrueColor.
+    /// Create a color from RGB triplet as `TrueColor`.
     #[must_use]
     pub fn from_triplet(triplet: ColorTriplet) -> Self {
         Self {
@@ -280,8 +280,7 @@ impl Color {
     #[must_use]
     pub const fn system(&self) -> ColorSystem {
         match self.color_type {
-            ColorType::Default => ColorSystem::Standard,
-            ColorType::Standard => ColorSystem::Standard,
+            ColorType::Default | ColorType::Standard => ColorSystem::Standard,
             ColorType::EightBit => ColorSystem::EightBit,
             ColorType::TrueColor => ColorSystem::TrueColor,
             ColorType::Windows => ColorSystem::Windows,
@@ -380,11 +379,6 @@ impl Color {
         }
 
         match (self.color_type, system) {
-            // Already at or below target system
-            (ColorType::Standard | ColorType::Windows, _) => self.clone(),
-            (ColorType::EightBit, ColorSystem::EightBit | ColorSystem::TrueColor) => self.clone(),
-            (ColorType::TrueColor, ColorSystem::TrueColor) => self.clone(),
-
             // Downgrade TrueColor to EightBit
             (ColorType::TrueColor, ColorSystem::EightBit) => {
                 let triplet = self.triplet.unwrap_or_default();
@@ -404,6 +398,7 @@ impl Color {
                 Self::from_ansi(number)
             }
 
+            // Already at or below target system - use wildcard to catch all remaining cases
             _ => self.clone(),
         }
     }
@@ -416,6 +411,15 @@ impl Color {
     /// - Color number: `color(196)`
     /// - RGB format: `rgb(255,0,0)`
     /// - Default: `default`
+    ///
+    /// # Errors
+    ///
+    /// Returns `ColorParseError` if the color string is invalid:
+    /// - `Empty` if the string is empty
+    /// - `InvalidHex` if hex format is malformed
+    /// - `InvalidColorNumber` if color(N) format is invalid
+    /// - `InvalidRgb` if rgb(r,g,b) format is invalid
+    /// - `UnknownColor` if the color name is not recognized
     pub fn parse(color: &str) -> Result<Self, ColorParseError> {
         // Check cache first
         static CACHE: LazyLock<Mutex<LruCache<String, Color>>> =
@@ -423,10 +427,10 @@ impl Color {
 
         let normalized = color.trim().to_lowercase();
 
-        if let Ok(mut cache) = CACHE.lock() {
-            if let Some(cached) = cache.get(&normalized) {
-                return Ok(cached.clone());
-            }
+        if let Ok(mut cache) = CACHE.lock()
+            && let Some(cached) = cache.get(&normalized)
+        {
+            return Ok(cached.clone());
         }
 
         let result = Self::parse_uncached(&normalized)?;
@@ -439,6 +443,13 @@ impl Color {
     }
 
     fn parse_uncached(color: &str) -> Result<Self, ColorParseError> {
+        static COLOR_NUM_RE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"^color\((\d{1,3})\)$").expect("valid regex"));
+        static RGB_RE: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r"^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$")
+                .expect("valid regex")
+        });
+
         // Empty string is an error
         if color.is_empty() {
             return Err(ColorParseError::Empty);
@@ -476,8 +487,6 @@ impl Color {
         }
 
         // Try color(N) format
-        static COLOR_NUM_RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^color\((\d{1,3})\)$").expect("valid regex"));
         if let Some(caps) = COLOR_NUM_RE.captures(color) {
             if let Ok(num) = caps[1].parse::<u16>() {
                 if num <= 255 {
@@ -488,10 +497,6 @@ impl Color {
         }
 
         // Try rgb(R,G,B) format
-        static RGB_RE: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$")
-                .expect("valid regex")
-        });
         if let Some(caps) = RGB_RE.captures(color) {
             if let (Ok(r), Ok(g), Ok(b)) = (
                 caps[1].parse::<u16>(),
