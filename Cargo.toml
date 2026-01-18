@@ -44,6 +44,9 @@ serde_json = { version = "1.0", optional = true }
 criterion = "0.8"
 serde_json = "1.0"
 
+# Property-based testing
+proptest = "1.6"
+
 # Snapshot testing for visual regression detection
 insta = { version = "1.46", features = ["glob", "filters"] }
 

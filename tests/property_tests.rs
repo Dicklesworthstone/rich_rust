@@ -1,0 +1,645 @@
+//! Property-based tests for rich_rust.
+//!
+//! Uses proptest to verify invariants with 1000+ generated test cases.
+//! These tests verify fundamental properties that should always hold.
+
+use proptest::prelude::*;
+
+use rich_rust::color::{Color, ColorSystem, ColorTriplet, ColorType};
+use rich_rust::measure::Measurement;
+use rich_rust::segment::Segment;
+use rich_rust::style::{Attributes, Style};
+use rich_rust::text::Text;
+
+// ============================================================================
+// Custom Strategies
+// ============================================================================
+
+/// Generate a valid RGB color triplet.
+fn rgb_triplet() -> impl Strategy<Value = (u8, u8, u8)> {
+    (any::<u8>(), any::<u8>(), any::<u8>())
+}
+
+/// Generate a valid ANSI color number (0-255).
+fn ansi_color_number() -> impl Strategy<Value = u8> {
+    0u8..=255u8
+}
+
+/// Generate random Attributes bitflags.
+fn random_attributes() -> impl Strategy<Value = Attributes> {
+    (0u16..8192u16).prop_map(|bits| Attributes::from_bits_truncate(bits))
+}
+
+/// Generate a random Style.
+fn random_style() -> impl Strategy<Value = Style> {
+    (
+        prop::option::of(rgb_triplet()),
+        prop::option::of(rgb_triplet()),
+        random_attributes(),
+        prop::option::of("[a-z]{0,20}"),
+    )
+        .prop_map(|(fg, bg, attrs, link)| {
+            let mut style = Style::new();
+            if let Some((r, g, b)) = fg {
+                style = style.color(Color::from_rgb(r, g, b));
+            }
+            if let Some((r, g, b)) = bg {
+                style = style.bgcolor(Color::from_rgb(r, g, b));
+            }
+            // Apply attributes through the style methods
+            if attrs.contains(Attributes::BOLD) {
+                style = style.bold();
+            }
+            if attrs.contains(Attributes::ITALIC) {
+                style = style.italic();
+            }
+            if attrs.contains(Attributes::UNDERLINE) {
+                style = style.underline();
+            }
+            if attrs.contains(Attributes::STRIKE) {
+                style = style.strike();
+            }
+            if let Some(url) = link {
+                if !url.is_empty() {
+                    style = style.link(url);
+                }
+            }
+            style
+        })
+}
+
+/// Generate a random Measurement with valid bounds.
+fn random_measurement() -> impl Strategy<Value = Measurement> {
+    (0usize..1000, 0usize..1000).prop_map(|(a, b)| Measurement::new(a, b))
+}
+
+/// Generate ASCII text (simpler than full Unicode for basic tests).
+fn ascii_text() -> impl Strategy<Value = String> {
+    "[a-zA-Z0-9 ]{0,100}"
+}
+
+// ============================================================================
+// Color Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// RGB roundtrip: from_rgb().get_truecolor() preserves values.
+    #[test]
+    fn prop_color_rgb_roundtrip(r in any::<u8>(), g in any::<u8>(), b in any::<u8>()) {
+        let color = Color::from_rgb(r, g, b);
+        let triplet = color.get_truecolor();
+        prop_assert_eq!(triplet.red, r);
+        prop_assert_eq!(triplet.green, g);
+        prop_assert_eq!(triplet.blue, b);
+    }
+
+    /// Hex parsing roundtrip: parse(hex).triplet matches original values.
+    #[test]
+    fn prop_color_hex_roundtrip(r in any::<u8>(), g in any::<u8>(), b in any::<u8>()) {
+        let hex = format!("#{r:02x}{g:02x}{b:02x}");
+        let color = Color::parse(&hex).expect("valid hex should parse");
+        let triplet = color.get_truecolor();
+        prop_assert_eq!(triplet.red, r);
+        prop_assert_eq!(triplet.green, g);
+        prop_assert_eq!(triplet.blue, b);
+    }
+
+    /// Downgrade never increases color resolution.
+    /// TrueColor > EightBit > Standard
+    #[test]
+    fn prop_color_downgrade_monotonic(r in any::<u8>(), g in any::<u8>(), b in any::<u8>()) {
+        let truecolor = Color::from_rgb(r, g, b);
+        prop_assert_eq!(truecolor.color_type, ColorType::TrueColor);
+
+        // Downgrade to EightBit
+        let eightbit = truecolor.downgrade(ColorSystem::EightBit);
+        prop_assert!(
+            matches!(eightbit.color_type, ColorType::Standard | ColorType::EightBit),
+            "downgrade to 8-bit should be Standard or EightBit"
+        );
+
+        // Downgrade to Standard
+        let standard = truecolor.downgrade(ColorSystem::Standard);
+        prop_assert!(
+            matches!(standard.color_type, ColorType::Standard),
+            "downgrade to standard should be Standard"
+        );
+
+        // Downgrade is idempotent for Standard
+        let standard_again = standard.downgrade(ColorSystem::Standard);
+        prop_assert_eq!(standard.color_type, standard_again.color_type);
+    }
+
+    /// Standard colors (0-15) remain standard after downgrade.
+    #[test]
+    fn prop_color_standard_stable(n in 0u8..16u8) {
+        let color = Color::from_ansi(n);
+        prop_assert!(matches!(color.color_type, ColorType::Standard));
+
+        let downgraded = color.downgrade(ColorSystem::Standard);
+        prop_assert!(matches!(downgraded.color_type, ColorType::Standard));
+    }
+
+    /// All standard colors produce valid ANSI codes.
+    #[test]
+    fn prop_color_standard_valid_codes(n in 0u8..16u8) {
+        let color = Color::from_ansi(n);
+        let fg_codes = color.get_ansi_codes(true);
+        let bg_codes = color.get_ansi_codes(false);
+
+        prop_assert!(!fg_codes.is_empty(), "foreground codes should not be empty");
+        prop_assert!(!bg_codes.is_empty(), "background codes should not be empty");
+
+        // Parse codes as numbers to verify they're valid
+        for code in &fg_codes {
+            let _: u32 = code.parse().expect("code should be numeric");
+        }
+        for code in &bg_codes {
+            let _: u32 = code.parse().expect("code should be numeric");
+        }
+    }
+
+    /// 8-bit colors produce valid ANSI codes.
+    #[test]
+    fn prop_color_eightbit_valid_codes(n in ansi_color_number()) {
+        let color = Color::from_ansi(n);
+        let fg_codes = color.get_ansi_codes(true);
+        let bg_codes = color.get_ansi_codes(false);
+
+        prop_assert!(!fg_codes.is_empty());
+        prop_assert!(!bg_codes.is_empty());
+    }
+
+    /// TrueColor produces valid ANSI codes.
+    #[test]
+    fn prop_color_truecolor_valid_codes((r, g, b) in rgb_triplet()) {
+        let color = Color::from_rgb(r, g, b);
+        let fg_codes = color.get_ansi_codes(true);
+        let bg_codes = color.get_ansi_codes(false);
+
+        // TrueColor should produce: ["38", "2", "r", "g", "b"] for foreground
+        prop_assert_eq!(fg_codes.len(), 5);
+        prop_assert_eq!(bg_codes.len(), 5);
+        prop_assert_eq!(&fg_codes[0], "38");
+        prop_assert_eq!(&bg_codes[0], "48");
+        prop_assert_eq!(&fg_codes[1], "2");
+        prop_assert_eq!(&bg_codes[1], "2");
+    }
+
+    /// ColorTriplet hex() produces valid 7-character hex string.
+    #[test]
+    fn prop_colortriplet_hex_format((r, g, b) in rgb_triplet()) {
+        let triplet = ColorTriplet::new(r, g, b);
+        let hex = triplet.hex();
+
+        prop_assert_eq!(hex.len(), 7, "hex should be 7 chars");
+        prop_assert!(hex.starts_with('#'), "hex should start with #");
+        prop_assert!(hex[1..].chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    /// ColorTriplet normalized values are in [0.0, 1.0].
+    #[test]
+    fn prop_colortriplet_normalized_range((r, g, b) in rgb_triplet()) {
+        let triplet = ColorTriplet::new(r, g, b);
+        let (nr, ng, nb) = triplet.normalized();
+
+        prop_assert!(nr >= 0.0 && nr <= 1.0);
+        prop_assert!(ng >= 0.0 && ng <= 1.0);
+        prop_assert!(nb >= 0.0 && nb <= 1.0);
+    }
+}
+
+// ============================================================================
+// Style Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Null style is left identity: null.combine(s) = s (for non-null s).
+    #[test]
+    fn prop_style_null_left_identity(style in random_style()) {
+        let null = Style::null();
+        let combined = null.combine(&style);
+
+        // Properties should match the non-null style
+        prop_assert_eq!(combined.color, style.color);
+        prop_assert_eq!(combined.bgcolor, style.bgcolor);
+        prop_assert_eq!(combined.link, style.link);
+    }
+
+    /// Null style is right identity: s.combine(null) = s.
+    #[test]
+    fn prop_style_null_right_identity(style in random_style()) {
+        let null = Style::null();
+        let combined = style.combine(&null);
+
+        // Properties should match the original style
+        prop_assert_eq!(combined.color, style.color);
+        prop_assert_eq!(combined.bgcolor, style.bgcolor);
+        prop_assert_eq!(combined.link, style.link);
+    }
+
+    /// Null combined with null is null.
+    #[test]
+    fn prop_style_null_combined_null(_n in 0..1i32) {
+        let null1 = Style::null();
+        let null2 = Style::null();
+        let combined = null1.combine(&null2);
+
+        // Combining two nulls should give original null
+        prop_assert!(combined.is_null() || (combined.color.is_none() && combined.bgcolor.is_none()));
+    }
+
+    /// Style render produces balanced ANSI sequences.
+    #[test]
+    fn prop_style_render_balanced(style in random_style(), text in ascii_text()) {
+        let rendered = style.render(&text, ColorSystem::TrueColor);
+
+        // Count escape sequence starts and resets
+        let sgr_starts = rendered.matches("\x1b[").count();
+        let sgr_resets = rendered.matches("\x1b[0m").count();
+
+        // For non-empty styles, should have balanced open/close
+        // (Note: this is a simplified check - actual ANSI can be complex)
+        if !style.is_null() && !rendered.is_empty() && style.color.is_some() || style.bgcolor.is_some() {
+            prop_assert!(sgr_resets > 0 || sgr_starts == 0,
+                "non-null style with colors should reset or have no codes");
+        }
+    }
+
+    /// Make_ansi_codes produces valid semicolon-separated codes.
+    #[test]
+    fn prop_style_ansi_codes_format(style in random_style()) {
+        let codes = style.make_ansi_codes(ColorSystem::TrueColor);
+
+        // Codes should be empty or valid semicolon-separated numbers
+        if !codes.is_empty() {
+            for part in codes.split(';') {
+                let _: u32 = part.parse().expect("code part should be numeric");
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Measurement Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Measurement invariant: minimum <= maximum after construction.
+    #[test]
+    fn prop_measurement_min_le_max(a in 0usize..10000, b in 0usize..10000) {
+        let m = Measurement::new(a, b);
+        prop_assert!(m.minimum <= m.maximum,
+            "minimum {} should be <= maximum {}", m.minimum, m.maximum);
+    }
+
+    /// Measurement::exact has min == max.
+    #[test]
+    fn prop_measurement_exact(size in 0usize..10000) {
+        let m = Measurement::exact(size);
+        prop_assert_eq!(m.minimum, size);
+        prop_assert_eq!(m.maximum, size);
+        prop_assert_eq!(m.span(), 0);
+    }
+
+    /// Normalize preserves the invariant.
+    #[test]
+    fn prop_measurement_normalize(a in 0usize..10000, b in 0usize..10000) {
+        let m = Measurement { minimum: a, maximum: b }; // Directly construct possibly invalid
+        let n = m.normalize();
+        prop_assert!(n.minimum <= n.maximum);
+    }
+
+    /// with_maximum clamps both values.
+    #[test]
+    fn prop_measurement_with_maximum(m in random_measurement(), cap in 0usize..2000) {
+        let capped = m.with_maximum(cap);
+        prop_assert!(capped.maximum <= cap,
+            "maximum {} should be <= cap {}", capped.maximum, cap);
+        prop_assert!(capped.minimum <= cap,
+            "minimum {} should be <= cap {}", capped.minimum, cap);
+    }
+
+    /// with_minimum raises both values if needed.
+    #[test]
+    fn prop_measurement_with_minimum(m in random_measurement(), floor in 0usize..2000) {
+        let floored = m.with_minimum(floor);
+        prop_assert!(floored.minimum >= floor,
+            "minimum {} should be >= floor {}", floored.minimum, floor);
+        prop_assert!(floored.maximum >= floor,
+            "maximum {} should be >= floor {}", floored.maximum, floor);
+    }
+
+    /// Clamp respects both bounds.
+    #[test]
+    fn prop_measurement_clamp(
+        m in random_measurement(),
+        min_bound in prop::option::of(0usize..500),
+        max_bound in prop::option::of(500usize..2000),
+    ) {
+        let clamped = m.clamp(min_bound, max_bound);
+
+        if let Some(min_b) = min_bound {
+            prop_assert!(clamped.minimum >= min_b.min(max_bound.unwrap_or(usize::MAX)),
+                "clamped minimum should respect lower bound");
+        }
+        if let Some(max_b) = max_bound {
+            prop_assert!(clamped.maximum <= max_b,
+                "clamped maximum should respect upper bound");
+        }
+    }
+
+    /// Union is commutative.
+    #[test]
+    fn prop_measurement_union_commutative(a in random_measurement(), b in random_measurement()) {
+        let ab = a.union(&b);
+        let ba = b.union(&a);
+        prop_assert_eq!(ab.minimum, ba.minimum);
+        prop_assert_eq!(ab.maximum, ba.maximum);
+    }
+
+    /// Union is associative.
+    #[test]
+    fn prop_measurement_union_associative(
+        a in random_measurement(),
+        b in random_measurement(),
+        c in random_measurement(),
+    ) {
+        let ab_c = a.union(&b).union(&c);
+        let a_bc = a.union(&b.union(&c));
+        prop_assert_eq!(ab_c.minimum, a_bc.minimum);
+        prop_assert_eq!(ab_c.maximum, a_bc.maximum);
+    }
+
+    /// Add operator is commutative.
+    #[test]
+    fn prop_measurement_add_commutative(a in random_measurement(), b in random_measurement()) {
+        let ab = a + b;
+        let ba = b + a;
+        prop_assert_eq!(ab.minimum, ba.minimum);
+        prop_assert_eq!(ab.maximum, ba.maximum);
+    }
+
+    /// Span is non-negative.
+    #[test]
+    fn prop_measurement_span_nonnegative(m in random_measurement()) {
+        let span = m.span();
+        prop_assert!(span <= m.maximum, "span should be <= maximum");
+    }
+
+    /// Fits is correct for boundary values.
+    #[test]
+    fn prop_measurement_fits(m in random_measurement()) {
+        // minimum should fit
+        prop_assert!(m.fits(m.minimum), "minimum should fit");
+        // maximum should fit
+        prop_assert!(m.fits(m.maximum), "maximum should fit");
+        // values outside should not fit (when there's a gap)
+        if m.minimum > 0 {
+            prop_assert!(!m.fits(m.minimum - 1), "below minimum should not fit");
+        }
+        if m.maximum < usize::MAX {
+            prop_assert!(!m.fits(m.maximum + 1), "above maximum should not fit");
+        }
+    }
+
+    /// Intersect returns None for non-overlapping ranges.
+    #[test]
+    fn prop_measurement_intersect_disjoint(
+        a_min in 0usize..100,
+        a_span in 0usize..50,
+        gap in 1usize..100,
+        b_span in 0usize..50,
+    ) {
+        let a = Measurement::new(a_min, a_min + a_span);
+        let b_min = a_min + a_span + gap;
+        let b = Measurement::new(b_min, b_min + b_span);
+
+        prop_assert!(a.intersect(&b).is_none(), "disjoint ranges should not intersect");
+    }
+}
+
+// ============================================================================
+// Segment Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Split at cell preserves total content.
+    #[test]
+    fn prop_segment_split_preserves_content(text in ascii_text(), pos in 0usize..200) {
+        let segment = Segment::plain(&text);
+        let (left, right) = segment.split_at_cell(pos);
+
+        let combined = format!("{}{}", left.text, right.text);
+        prop_assert_eq!(combined, text, "split should preserve content");
+    }
+
+    /// Split at 0 gives empty left.
+    #[test]
+    fn prop_segment_split_at_zero(text in ascii_text()) {
+        let segment = Segment::plain(&text);
+        let (left, right) = segment.split_at_cell(0);
+
+        prop_assert!(left.text.is_empty(), "split at 0 should give empty left");
+        prop_assert_eq!(right.text, text, "split at 0 should give full right");
+    }
+
+    /// Split beyond length gives full left.
+    #[test]
+    fn prop_segment_split_beyond_length(text in ascii_text()) {
+        let segment = Segment::plain(&text);
+        let text_width = segment.cell_length();
+        let (left, right) = segment.split_at_cell(text_width + 100);
+
+        prop_assert_eq!(left.text, text, "split beyond length should give full left");
+        prop_assert!(right.text.is_empty(), "split beyond length should give empty right");
+    }
+
+    /// Segment cell_length is consistent.
+    #[test]
+    fn prop_segment_cell_length_consistent(text in ascii_text()) {
+        let segment = Segment::plain(&text);
+        let len1 = segment.cell_length();
+        let len2 = segment.cell_length();
+        prop_assert_eq!(len1, len2, "cell_length should be consistent");
+    }
+
+    /// Control segments have zero width.
+    #[test]
+    fn prop_segment_control_zero_width(_n in 0..10i32) {
+        use rich_rust::segment::{ControlCode, ControlType};
+        let segment = Segment::control(vec![ControlCode::new(ControlType::Bell)]);
+        prop_assert_eq!(segment.cell_length(), 0, "control segments should have zero width");
+        prop_assert!(segment.is_control(), "should be marked as control");
+    }
+
+    /// Styled segment preserves style through split.
+    #[test]
+    fn prop_segment_split_preserves_style(text in ascii_text(), pos in 0usize..100) {
+        let style = Style::new().bold().italic();
+        let segment = Segment::styled(&text, style.clone());
+        let (left, right) = segment.split_at_cell(pos);
+
+        if !left.text.is_empty() {
+            prop_assert_eq!(left.style, Some(style.clone()), "left should preserve style");
+        }
+        if !right.text.is_empty() {
+            prop_assert_eq!(right.style, Some(style), "right should preserve style");
+        }
+    }
+
+    /// Empty segment is empty.
+    #[test]
+    fn prop_segment_empty(_n in 0..1i32) {
+        let segment = Segment::plain("");
+        prop_assert!(segment.is_empty(), "empty segment should be empty");
+        prop_assert_eq!(segment.cell_length(), 0, "empty segment should have zero width");
+    }
+}
+
+// ============================================================================
+// Text Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// Divide at no offsets returns original.
+    #[test]
+    fn prop_text_divide_empty_offsets(text in ascii_text()) {
+        let t = Text::new(&text);
+        let parts = t.divide(&[]);
+
+        prop_assert_eq!(parts.len(), 1, "divide with no offsets should return 1 part");
+        prop_assert_eq!(parts[0].plain(), text, "divide with no offsets should preserve content");
+    }
+
+    /// Divide then concatenate preserves content (with sorted, unique offsets).
+    #[test]
+    fn prop_text_divide_concat(text in ascii_text(), offsets in prop::collection::vec(0usize..200, 0..5)) {
+        let t = Text::new(&text);
+
+        // Sort and deduplicate offsets for correct divide behavior
+        let mut sorted_offsets: Vec<usize> = offsets.into_iter().collect();
+        sorted_offsets.sort();
+        sorted_offsets.dedup();
+
+        let parts = t.divide(&sorted_offsets);
+
+        let concatenated: String = parts.iter().map(|p| p.plain()).collect();
+        prop_assert_eq!(concatenated, text, "divide then concat should preserve content");
+    }
+
+    /// Slice within bounds produces valid result.
+    #[test]
+    fn prop_text_slice_bounds(text in ascii_text(), start in 0usize..150, len in 0usize..50) {
+        let t = Text::new(&text);
+        let text_len = t.len();
+        let end = (start + len).min(text_len);
+        let actual_start = start.min(text_len);
+
+        let sliced = t.slice(actual_start, end);
+        prop_assert!(sliced.len() <= end.saturating_sub(actual_start) + 1,
+            "slice length should be bounded");
+    }
+
+    /// Slice of entire text equals original.
+    #[test]
+    fn prop_text_slice_full(text in ascii_text()) {
+        let t = Text::new(&text);
+        let sliced = t.slice(0, t.len());
+        prop_assert_eq!(sliced.plain(), text, "full slice should equal original");
+    }
+
+    /// Empty slice is empty.
+    #[test]
+    fn prop_text_slice_empty(text in ascii_text()) {
+        let t = Text::new(&text);
+        let sliced = t.slice(0, 0);
+        prop_assert!(sliced.is_empty(), "zero-length slice should be empty");
+    }
+
+    /// Append preserves both parts.
+    #[test]
+    fn prop_text_append(text1 in ascii_text(), text2 in ascii_text()) {
+        let mut t = Text::new(&text1);
+        t.append(&text2);
+
+        let expected = format!("{text1}{text2}");
+        prop_assert_eq!(t.plain(), expected, "append should concatenate");
+    }
+
+    /// Split lines preserves content (modulo newlines).
+    #[test]
+    fn prop_text_split_lines_content(lines in prop::collection::vec(ascii_text(), 1..5)) {
+        let text = lines.join("\n");
+        let t = Text::new(&text);
+        let split = t.split_lines();
+
+        // Content should match (excluding newlines)
+        let rejoined: String = split.iter()
+            .map(|l| l.plain())
+            .collect::<Vec<_>>()
+            .join("\n");
+        prop_assert_eq!(rejoined, text, "split_lines then join should preserve content");
+    }
+
+    /// Text length equals character count.
+    #[test]
+    fn prop_text_len_char_count(text in ascii_text()) {
+        let t = Text::new(&text);
+        prop_assert_eq!(t.len(), text.chars().count(), "len should equal char count");
+    }
+
+    /// Stylize doesn't change plain text.
+    #[test]
+    fn prop_text_stylize_preserves_plain(text in ascii_text(), start in 0usize..50, len in 1usize..20) {
+        let mut t = Text::new(&text);
+        let end = start + len;
+        t.stylize(start, end, Style::new().bold());
+
+        prop_assert_eq!(t.plain(), text, "stylize should not change plain text");
+    }
+}
+
+// ============================================================================
+// Integration Property Tests
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
+
+    /// Style rendering with various color systems.
+    #[test]
+    fn prop_integration_style_color_systems((r, g, b) in rgb_triplet(), text in ascii_text()) {
+        let style = Style::new().color(Color::from_rgb(r, g, b));
+
+        // All color systems should produce valid output
+        let _truecolor = style.render(&text, ColorSystem::TrueColor);
+        let _eightbit = style.render(&text, ColorSystem::EightBit);
+        let _standard = style.render(&text, ColorSystem::Standard);
+
+        // Output should contain the original text
+        prop_assert!(_truecolor.contains(&text) || text.is_empty());
+        prop_assert!(_eightbit.contains(&text) || text.is_empty());
+        prop_assert!(_standard.contains(&text) || text.is_empty());
+    }
+
+    /// Segment from Text conversion.
+    #[test]
+    fn prop_integration_text_to_segment(text in ascii_text()) {
+        let t = Text::new(&text);
+        let plain = t.plain();
+        let segment = Segment::plain(plain);
+
+        prop_assert_eq!(segment.text, text, "text to segment should preserve content");
+    }
+}
