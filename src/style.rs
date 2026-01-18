@@ -1,7 +1,60 @@
 //! Style system for terminal text attributes.
 //!
-//! This module provides the `Style` struct for representing visual attributes
+//! This module provides the [`Style`] struct for representing visual attributes
 //! including colors, text decorations (bold, italic, etc.), and hyperlinks.
+//!
+//! # Examples
+//!
+//! ```
+//! use rich_rust::style::{Style, Attributes};
+//! use rich_rust::color::{Color, ColorSystem};
+//!
+//! // Create a style using the builder pattern
+//! let style = Style::new()
+//!     .bold()
+//!     .italic()
+//!     .color(Color::from_ansi(1));  // Red
+//!
+//! // Render text with the style
+//! let output = style.render("Hello!", ColorSystem::TrueColor);
+//! assert!(output.contains("\x1b["));  // Contains ANSI codes
+//!
+//! // Parse a style from a string
+//! let style = Style::parse("bold red on white").unwrap();
+//! assert!(style.attributes.contains(Attributes::BOLD));
+//! ```
+//!
+//! # Style Combination
+//!
+//! Styles can be combined using the `+` operator or [`Style::combine`], where the
+//! right-hand style takes precedence for conflicting properties:
+//!
+//! ```
+//! use rich_rust::style::Style;
+//! use rich_rust::color::Color;
+//!
+//! let base = Style::new().bold().color(Color::from_ansi(1));
+//! let highlight = Style::new().italic().color(Color::from_ansi(2));
+//!
+//! // highlight's color (green) overrides base's color (red)
+//! let combined = base + highlight;
+//! ```
+//!
+//! # Hyperlinks
+//!
+//! Styles support terminal hyperlinks via OSC 8 escape sequences:
+//!
+//! ```
+//! use rich_rust::style::Style;
+//! use rich_rust::color::ColorSystem;
+//!
+//! let style = Style::new()
+//!     .bold()
+//!     .link("https://example.com");
+//!
+//! let output = style.render("Click me", ColorSystem::TrueColor);
+//! assert!(output.contains("\x1b]8;"));  // Contains OSC 8 hyperlink
+//! ```
 
 use bitflags::bitflags;
 use lru::LruCache;
@@ -384,16 +437,44 @@ impl Style {
         result
     }
 
-    /// Get ANSI codes as (prefix, suffix) tuple.
+    /// Render ANSI escape codes for this style (cached).
     ///
-    /// The prefix contains the escape codes to apply the style,
-    /// and the suffix contains the reset codes.
+    /// Returns a tuple of (prefix, suffix) where:
+    /// - prefix: ANSI codes to apply the style
+    /// - suffix: ANSI codes to reset the style
+    ///
+    /// Results are cached for performance when the same style is rendered repeatedly.
     #[must_use]
     pub fn render_ansi(&self, color_system: ColorSystem) -> (String, String) {
+        // Fast path: null style returns empty strings without cache lookup
         if self.is_null() {
             return (String::new(), String::new());
         }
 
+        // Cache key is (Style, ColorSystem) since ANSI output varies by color system
+        static ANSI_CACHE: LazyLock<Mutex<LruCache<(Style, ColorSystem), (String, String)>>> =
+            LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(256).expect("non-zero"))));
+
+        // Try to get cached result
+        if let Ok(mut cache) = ANSI_CACHE.lock()
+            && let Some(cached) = cache.get(&(self.clone(), color_system))
+        {
+            return cached.clone();
+        }
+
+        // Compute result
+        let result = self.render_ansi_uncached(color_system);
+
+        // Cache the result
+        if let Ok(mut cache) = ANSI_CACHE.lock() {
+            cache.put((self.clone(), color_system), result.clone());
+        }
+
+        result
+    }
+
+    /// Render ANSI escape codes without caching (internal implementation).
+    fn render_ansi_uncached(&self, color_system: ColorSystem) -> (String, String) {
         let codes = self.make_ansi_codes(color_system);
         if codes.is_empty() && self.link.is_none() {
             return (String::new(), String::new());
@@ -1146,6 +1227,44 @@ mod tests {
         let style1 = Style::parse("bold red").unwrap();
         let style2 = Style::parse("bold red").unwrap();
         assert_eq!(style1, style2);
+    }
+
+    #[test]
+    fn test_style_render_ansi_caching() {
+        // Test that render_ansi caching works correctly
+        let style = Style::new().bold().color(Color::from_ansi(1));
+
+        // First call populates cache
+        let (prefix1, suffix1) = style.render_ansi(ColorSystem::TrueColor);
+
+        // Second call should return cached result
+        let (prefix2, suffix2) = style.render_ansi(ColorSystem::TrueColor);
+
+        assert_eq!(prefix1, prefix2);
+        assert_eq!(suffix1, suffix2);
+
+        // Different color system should produce different result
+        let (prefix_8bit, _suffix_8bit) = style.render_ansi(ColorSystem::EightBit);
+        // The prefix should still contain the style codes
+        assert!(prefix_8bit.contains("\x1b[1m") || prefix_8bit.contains("1;"));
+
+        // Verify result is correct
+        assert!(prefix1.contains("\x1b["));
+        assert!(suffix1.contains("\x1b[0m"));
+    }
+
+    #[test]
+    fn test_style_render_ansi_caching_different_styles() {
+        // Verify that different styles produce different cached results
+        let bold = Style::new().bold();
+        let italic = Style::new().italic();
+
+        let (bold_prefix, _) = bold.render_ansi(ColorSystem::TrueColor);
+        let (italic_prefix, _) = italic.render_ansi(ColorSystem::TrueColor);
+
+        assert_ne!(bold_prefix, italic_prefix);
+        assert!(bold_prefix.contains("1m")); // SGR 1 for bold
+        assert!(italic_prefix.contains("3m")); // SGR 3 for italic
     }
 
     // --- Additional Tests for 100% Coverage ---
