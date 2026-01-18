@@ -1276,6 +1276,58 @@ fn regression_table_caption_preserves_spans() {
     tracing::info!("Regression test PASSED: table caption spans preserved");
 }
 
+/// Regression test: Table caption alignment preserves line width
+#[test]
+fn regression_table_caption_alignment_width() {
+    init_test_logging();
+    log_test_context(
+        "regression_table_caption_alignment_width",
+        "Ensures caption alignment keeps line width consistent",
+    );
+
+    let _phase = test_phase("table_caption_align_width");
+
+    use rich_rust::cells;
+
+    let width = 24;
+    let base = Table::new()
+        .with_column(Column::new("H"))
+        .with_row_cells(["1"])
+        .caption("Caption");
+
+    let tables = [
+        base.clone().caption_justify(JustifyMethod::Left),
+        base.clone().caption_justify(JustifyMethod::Center),
+        base.caption_justify(JustifyMethod::Right),
+    ];
+
+    for table in tables {
+        let output: String = table
+            .render(width)
+            .into_iter()
+            .map(|seg| seg.text)
+            .collect();
+
+        let mut lines = output.lines().filter(|line| !line.is_empty());
+        let first_line = lines
+            .next()
+            .expect("table output should have at least one line");
+        let table_width = cells::cell_len(first_line);
+
+        let caption_line = lines
+            .next_back()
+            .expect("table output should include a caption line");
+
+        assert_eq!(
+            cells::cell_len(caption_line),
+            table_width,
+            "caption line should match table width"
+        );
+    }
+
+    tracing::info!("Regression test PASSED: caption alignment width");
+}
+
 /// Regression test: Rule title alignment preserves total width
 ///
 /// Bug: Rule titles could produce lines shorter/longer than width
