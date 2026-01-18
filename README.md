@@ -1,28 +1,29 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Dicklesworthstone/rich_rust/master/docs/logo.svg" alt="rich_rust" width="400"/>
-</p>
-
-<h1 align="center">rich_rust</h1>
-
-<p align="center">
-  <strong>Beautiful terminal output for Rust, inspired by Python's Rich</strong>
-</p>
-
-<p align="center">
-  <a href="https://github.com/Dicklesworthstone/rich_rust/actions"><img src="https://github.com/Dicklesworthstone/rich_rust/workflows/CI/badge.svg" alt="CI Status"></a>
-  <a href="https://crates.io/crates/rich_rust"><img src="https://img.shields.io/crates/v/rich_rust.svg" alt="Crates.io"></a>
-  <a href="https://docs.rs/rich_rust"><img src="https://docs.rs/rich_rust/badge.svg" alt="Documentation"></a>
-  <a href="https://github.com/Dicklesworthstone/rich_rust/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-</p>
+# rich_rust
 
 <div align="center">
   <img src="rich_rust_illustration.webp" alt="rich_rust - Beautiful terminal output for Rust">
 </div>
 
+<div align="center">
+
+[![CI](https://github.com/Dicklesworthstone/rich_rust/workflows/CI/badge.svg)](https://github.com/Dicklesworthstone/rich_rust/actions)
+[![Crates.io](https://img.shields.io/crates/v/rich_rust.svg)](https://crates.io/crates/rich_rust)
+[![Documentation](https://docs.rs/rich_rust/badge.svg)](https://docs.rs/rich_rust)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Dicklesworthstone/rich_rust/blob/master/LICENSE)
+
+</div>
+
+Beautiful terminal output for Rust, inspired by Python's Rich.
+
+<div align="center">
+<h3>Quick Install</h3>
+
 ```bash
-# Add to your Cargo.toml
 cargo add rich_rust
 ```
+
+<p><em>Or with all features: <code>cargo add rich_rust --features full</code></em></p>
+</div>
 
 ---
 
