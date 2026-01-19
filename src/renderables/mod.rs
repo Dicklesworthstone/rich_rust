@@ -87,6 +87,7 @@
 
 use crate::console::{Console, ConsoleOptions};
 use crate::segment::Segment;
+use crate::markup;
 
 /// Trait for objects that can be rendered to the console.
 pub trait Renderable {
@@ -133,12 +134,35 @@ impl Renderable for Table {
     }
 }
 
+impl Renderable for str {
+    fn render<'a>(&'a self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        markup::render_or_plain(self)
+            .render("")
+            .into_iter()
+            .map(|s| s.into_owned())
+            .collect()
+    }
+}
+
+impl Renderable for String {
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        self.as_str().render(console, options)
+    }
+}
+
 // Phase 3+: Syntax highlighting (requires "syntax" feature)
 #[cfg(feature = "syntax")]
 pub mod syntax;
 
 #[cfg(feature = "syntax")]
 pub use syntax::{Syntax, SyntaxError};
+
+#[cfg(feature = "syntax")]
+impl Renderable for Syntax<'_> {
+    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        self.render(options.max_width).into_iter().collect()
+    }
+}
 
 // Phase 3+: Markdown rendering (requires "markdown" feature)
 #[cfg(feature = "markdown")]
@@ -147,9 +171,23 @@ pub mod markdown;
 #[cfg(feature = "markdown")]
 pub use markdown::Markdown;
 
+#[cfg(feature = "markdown")]
+impl Renderable for Markdown<'_> {
+    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        self.render(options.max_width).into_iter().collect()
+    }
+}
+
 // Phase 4: JSON rendering (requires "json" feature)
 #[cfg(feature = "json")]
 pub mod json;
 
 #[cfg(feature = "json")]
 pub use json::{Json, JsonError, JsonTheme};
+
+#[cfg(feature = "json")]
+impl Renderable for Json<'_> {
+    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        self.render(options.max_width).into_iter().collect()
+    }
+}
