@@ -48,11 +48,8 @@ jobs:
             os: macos-14
             target: aarch64-apple-darwin
             artifact_name: rich_rust-macos-arm64
-          # macOS x64
-          - name: macOS x64
-            os: macos-15-large
-            target: x86_64-apple-darwin
-            artifact_name: rich_rust-macos-x64
+          # NOTE: macOS x64 removed - free runners (macos-13) retired
+          # and paid runners (macos-15-large) require billing setup
           # Windows x64
           - name: Windows x64
             os: windows-latest
