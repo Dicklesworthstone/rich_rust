@@ -86,8 +86,8 @@
 //! - **`json`**: [`Json`] - JSON formatting with syntax highlighting
 
 use crate::console::{Console, ConsoleOptions};
-use crate::segment::Segment;
 use crate::markup;
+use crate::segment::Segment;
 
 /// Trait for objects that can be rendered to the console.
 pub trait Renderable {
@@ -139,7 +139,7 @@ impl Renderable for str {
         markup::render_or_plain(self)
             .render("")
             .into_iter()
-            .map(|s| s.into_owned())
+            .map(Segment::into_owned)
             .collect()
     }
 }

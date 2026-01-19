@@ -13,3 +13,6 @@ legacy_rich/
 .env
 .env.*
 a.out
+
+# Test output artifacts
+golden_outputs/
