@@ -22,6 +22,9 @@ impl TestCase for MarkupTextTest {
     fn render(&self) -> Vec<Segment<'static>> {
         let text = markup::render_or_plain(self.markup);
         text.render("")
+            .into_iter()
+            .map(Segment::into_owned)
+            .collect()
     }
 
     fn python_rich_code(&self) -> Option<String> {
@@ -59,6 +62,9 @@ impl TestCase for StyledTextTest {
             text.stylize(self.start, self.end, style);
         }
         text.render("")
+            .into_iter()
+            .map(Segment::into_owned)
+            .collect()
     }
 
     fn python_rich_code(&self) -> Option<String> {

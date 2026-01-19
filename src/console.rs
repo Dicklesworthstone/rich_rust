@@ -1278,4 +1278,825 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         assert_eq!(text, "\n", "Expected single newline, got: {text:?}");
     }
+
+    // ========== ConsoleBuilder Tests ==========
+
+    #[test]
+    fn test_console_builder_color_system() {
+        let console = Console::builder()
+            .color_system(ColorSystem::TrueColor)
+            .build();
+        assert_eq!(console.color_system(), Some(ColorSystem::TrueColor));
+    }
+
+    #[test]
+    fn test_console_builder_no_color() {
+        let console = Console::builder().no_color().build();
+        assert_eq!(console.color_system, None);
+    }
+
+    #[test]
+    fn test_console_builder_force_terminal() {
+        let console = Console::builder().force_terminal(true).build();
+        assert!(console.is_terminal());
+    }
+
+    #[test]
+    fn test_console_builder_tab_size() {
+        let console = Console::builder().tab_size(4).build();
+        assert_eq!(console.tab_size(), 4);
+    }
+
+    #[test]
+    fn test_console_builder_emoji() {
+        let console = Console::builder().emoji(false).build();
+        assert!(!console.emoji);
+    }
+
+    #[test]
+    fn test_console_builder_highlight() {
+        let console = Console::builder().highlight(false).build();
+        assert!(!console.highlight);
+    }
+
+    #[test]
+    fn test_console_builder_safe_box() {
+        let console = Console::builder().safe_box(true).build();
+        assert!(console.safe_box);
+    }
+
+    #[test]
+    fn test_console_builder_all_options() {
+        let console = Console::builder()
+            .color_system(ColorSystem::EightBit)
+            .force_terminal(true)
+            .tab_size(2)
+            .markup(false)
+            .emoji(false)
+            .highlight(false)
+            .width(120)
+            .height(40)
+            .safe_box(true)
+            .build();
+
+        assert_eq!(console.color_system(), Some(ColorSystem::EightBit));
+        assert!(console.is_terminal());
+        assert_eq!(console.tab_size(), 2);
+        assert!(!console.markup);
+        assert!(!console.emoji);
+        assert!(!console.highlight);
+        assert_eq!(console.width(), 120);
+        assert_eq!(console.height(), 40);
+        assert!(console.safe_box);
+    }
+
+    // ========== Console Size Tests ==========
+
+    #[test]
+    fn test_console_size_returns_dimensions() {
+        let console = Console::builder().width(100).height(50).build();
+        let size = console.size();
+        assert_eq!(size.width, 100);
+        assert_eq!(size.height, 50);
+    }
+
+    #[test]
+    fn test_console_default_dimensions() {
+        let console = Console::new();
+        // Default should be reasonable terminal size
+        assert!(console.width() >= 40);
+        assert!(console.height() >= 10);
+    }
+
+    // ========== PrintOptions Tests ==========
+
+    #[test]
+    fn test_print_options_default() {
+        let options = PrintOptions::new();
+        assert_eq!(options.markup, None);
+        assert!(options.style.is_none());
+        assert_eq!(options.sep, " ");
+        assert_eq!(options.end, "\n");
+        assert_eq!(options.no_wrap, None);
+        assert!(!options.no_newline);
+    }
+
+    #[test]
+    fn test_print_options_with_sep() {
+        let options = PrintOptions::new().with_sep(", ");
+        assert_eq!(options.sep, ", ");
+    }
+
+    #[test]
+    fn test_print_options_with_end() {
+        let options = PrintOptions::new().with_end("\r\n");
+        assert_eq!(options.end, "\r\n");
+    }
+
+    #[test]
+    fn test_print_options_with_overflow() {
+        let options = PrintOptions::new().with_overflow(OverflowMethod::Crop);
+        assert_eq!(options.overflow, Some(OverflowMethod::Crop));
+    }
+
+    #[test]
+    fn test_print_options_with_crop() {
+        let options = PrintOptions::new().with_crop(true);
+        assert!(options.crop);
+    }
+
+    #[test]
+    fn test_print_options_with_soft_wrap() {
+        let options = PrintOptions::new().with_soft_wrap(true);
+        assert!(options.soft_wrap);
+    }
+
+    #[test]
+    fn test_print_options_chained() {
+        let style = Style::new().bold().italic();
+        let options = PrintOptions::new()
+            .with_markup(false)
+            .with_style(style.clone())
+            .with_sep(" | ")
+            .with_end("")
+            .with_justify(JustifyMethod::Right)
+            .with_overflow(OverflowMethod::Ellipsis)
+            .with_no_wrap(true)
+            .with_no_newline(true)
+            .with_highlight(true)
+            .with_width(40)
+            .with_crop(true)
+            .with_soft_wrap(true);
+
+        assert_eq!(options.markup, Some(false));
+        assert!(options.style.is_some());
+        assert_eq!(options.sep, " | ");
+        assert_eq!(options.end, "");
+        assert_eq!(options.justify, Some(JustifyMethod::Right));
+        assert_eq!(options.overflow, Some(OverflowMethod::Ellipsis));
+        assert_eq!(options.no_wrap, Some(true));
+        assert!(options.no_newline);
+        assert!(options.highlight);
+        assert_eq!(options.width, Some(40));
+        assert!(options.crop);
+        assert!(options.soft_wrap);
+    }
+
+    // ========== ConsoleOptions Tests ==========
+
+    #[test]
+    fn test_console_options_update_width() {
+        let console = Console::builder().width(80).build();
+        let options = console.options();
+        let updated = options.update_width(100);
+        assert_eq!(updated.max_width, 100);
+        assert_eq!(updated.size.width, 100);
+    }
+
+    #[test]
+    fn test_console_options_update_height() {
+        let console = Console::builder().height(24).build();
+        let options = console.options();
+        let updated = options.update_height(50);
+        assert_eq!(updated.size.height, 50);
+    }
+
+    // ========== Color System Tests ==========
+
+    #[test]
+    fn test_console_is_color_enabled_with_system() {
+        let console = Console::builder()
+            .color_system(ColorSystem::Standard)
+            .build();
+        assert!(console.is_color_enabled());
+    }
+
+    #[test]
+    fn test_console_is_color_enabled_no_color() {
+        let console = Console::builder().no_color().build();
+        assert!(!console.is_color_enabled());
+    }
+
+    // ========== Capture Mode Tests ==========
+
+    #[test]
+    fn test_capture_empty() {
+        let mut console = Console::new();
+        console.begin_capture();
+        let segments = console.end_capture();
+        assert!(segments.is_empty());
+    }
+
+    #[test]
+    fn test_capture_with_styled_text() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let mut console = Console::builder()
+            .width(80)
+            .markup(true)
+            .color_system(ColorSystem::TrueColor)
+            .file(Box::new(buffer))
+            .build();
+
+        console.begin_capture();
+        console.print("[bold]Test[/]");
+        let segments = console.end_capture();
+
+        // Should have captured at least one segment
+        assert!(!segments.is_empty());
+    }
+
+    #[test]
+    fn test_capture_multiple_prints() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let mut console = Console::builder()
+            .width(80)
+            .markup(false)
+            .file(Box::new(buffer))
+            .build();
+
+        console.begin_capture();
+        console.print_plain("First");
+        console.print_plain("Second");
+        let segments = console.end_capture();
+
+        let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
+        assert!(text.contains("First"));
+        assert!(text.contains("Second"));
+    }
+
+    // ========== Print Method Tests ==========
+
+    #[test]
+    fn test_print_text_direct() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let text = Text::new("Direct text");
+        console.print_text(&text);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Direct text"));
+    }
+
+    #[test]
+    fn test_print_styled() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .color_system(ColorSystem::TrueColor)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print_styled("Styled", Style::new().bold());
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Styled"));
+        // Should contain ANSI codes for bold
+        assert!(result.contains("\x1b["));
+    }
+
+    #[test]
+    fn test_print_to_writer() {
+        let console = Console::builder().width(80).markup(false).build();
+        let mut output = Vec::new();
+        let options = PrintOptions::new();
+
+        console
+            .print_to(&mut output, "Writer test", &options)
+            .expect("failed to print");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert!(text.contains("Writer test"));
+    }
+
+    #[test]
+    fn test_print_segments() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let segments = vec![
+            Segment::plain("Hello "),
+            Segment::plain("World"),
+        ];
+        console.print_segments(&segments);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Hello "));
+        assert!(result.contains("World"));
+    }
+
+    // ========== Rule Method Tests ==========
+
+    #[test]
+    fn test_rule_without_title() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(20)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.rule(None);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        // Rule should contain horizontal line characters
+        assert!(result.contains('─') || result.contains('-'));
+    }
+
+    #[test]
+    fn test_rule_with_title() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(40)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.rule(Some("Section"));
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Section"));
+    }
+
+    // ========== Log Method Tests ==========
+
+    #[test]
+    fn test_log_debug() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.log("Debug message", LogLevel::Debug);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Debug message"));
+    }
+
+    #[test]
+    fn test_log_info() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.log("Info message", LogLevel::Info);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Info message"));
+    }
+
+    #[test]
+    fn test_log_warning() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.log("Warning message", LogLevel::Warning);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Warning message"));
+    }
+
+    #[test]
+    fn test_log_error() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.log("Error message", LogLevel::Error);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("Error message"));
+    }
+
+    // ========== Markup Integration Tests ==========
+
+    #[test]
+    fn test_markup_enabled() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .markup(true)
+            .color_system(ColorSystem::TrueColor)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print("[bold]Bold text[/]");
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        // Should contain ANSI codes, not literal [bold]
+        assert!(!result.contains("[bold]"));
+        assert!(result.contains("\x1b["));
+    }
+
+    #[test]
+    fn test_markup_disabled() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print("[bold]Literal markup[/]");
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        // Should contain literal markup tags
+        assert!(result.contains("[bold]"));
+    }
+
+    // ========== Width Constraint Tests ==========
+
+    #[test]
+    fn test_print_with_width_constraint() {
+        let console = Console::builder().width(80).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new();
+        options.width = Some(10);
+
+        console
+            .print_to(&mut output, "This is a long text that should wrap", &options)
+            .expect("failed to print");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        // Text should be wrapped at width 10
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines.len() > 1);
+    }
+
+    #[test]
+    fn test_justify_left() {
+        let console = Console::builder().width(20).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new()
+            .with_justify(JustifyMethod::Left);
+        options.no_newline = true;
+
+        console
+            .print_to(&mut output, "Left", &options)
+            .expect("failed to print");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert!(text.starts_with("Left"));
+    }
+
+    #[test]
+    fn test_justify_right() {
+        let console = Console::builder().width(20).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new()
+            .with_justify(JustifyMethod::Right);
+        options.no_newline = true;
+
+        console
+            .print_to(&mut output, "Right", &options)
+            .expect("failed to print");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert!(text.ends_with("Right"));
+        assert!(text.len() == 20);
+    }
+
+    // ========== ConsoleDimensions Tests ==========
+
+    #[test]
+    fn test_console_dimensions_default() {
+        let dims = ConsoleDimensions::default();
+        assert_eq!(dims.width, 80);
+        assert_eq!(dims.height, 24);
+    }
+
+    #[test]
+    fn test_console_dimensions_custom() {
+        let dims = ConsoleDimensions {
+            width: 120,
+            height: 40,
+        };
+        assert_eq!(dims.width, 120);
+        assert_eq!(dims.height, 40);
+    }
+
+    // ========== PrintOptions Default Trait ==========
+
+    #[test]
+    fn test_print_options_implements_default() {
+        let options: PrintOptions = Default::default();
+        assert_eq!(options.sep, " ");
+        assert_eq!(options.end, "\n");
+    }
+
+    // ========== Edge Case Tests ==========
+
+    #[test]
+    fn test_print_empty_string() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print_plain("");
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        // Should only have newline
+        assert_eq!(result.trim(), "");
+    }
+
+    #[test]
+    fn test_print_unicode() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print_plain("Hello 世界 🌍");
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("世界"));
+        assert!(result.contains("🌍"));
+    }
+
+    #[test]
+    fn test_print_with_newlines() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        console.print_plain("Line 1\nLine 2\nLine 3");
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        let lines: Vec<&str> = result.lines().collect();
+        assert!(lines.len() >= 3);
+    }
+
+    #[test]
+    fn test_overflow_crop() {
+        let console = Console::builder().width(80).markup(false).build();
+        let mut output = Vec::new();
+        let mut options = PrintOptions::new()
+            .with_no_wrap(true)
+            .with_overflow(OverflowMethod::Crop);
+        options.width = Some(5);
+        options.no_newline = true;
+
+        console
+            .print_to(&mut output, "Hello World", &options)
+            .expect("failed to print");
+
+        let text = String::from_utf8(output).expect("invalid utf8");
+        assert_eq!(text, "Hello");
+    }
 }
