@@ -312,7 +312,7 @@ impl Markdown {
     /// Render the markdown to segments.
     #[must_use]
     #[allow(clippy::too_many_lines)]
-    pub fn render(&self, _max_width: usize) -> Vec<Segment> {
+    pub fn render(&self, _max_width: usize) -> Vec<Segment<'_>> {
         let mut segments = Vec::new();
         let mut style_stack: Vec<Style> = Vec::new();
         let mut list_stack: Vec<(bool, usize)> = Vec::new(); // (is_ordered, item_number)
@@ -332,7 +332,7 @@ impl Markdown {
         let mut current_row: Vec<String> = Vec::new();
         let mut current_cell_content = String::new();
         let mut in_table_head = false;
-        let mut header_row: Option<Vec<String>> = None;
+        let mut header_row = None;
 
         let options =
             Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_FOOTNOTES;
@@ -688,14 +688,14 @@ impl Markdown {
         // Helper to render a horizontal border
         let render_border =
             |segs: &mut Vec<Segment>, left: &str, mid: &str, right: &str, style: Option<Style>| {
-                segs.push(Segment::new(left, style.clone()));
+                segs.push(Segment::new(left.to_string(), style.clone()));
                 for (i, &width) in col_widths.iter().enumerate() {
                     segs.push(Segment::new("─".repeat(width + 2), style.clone()));
                     if i < col_widths.len() - 1 {
-                        segs.push(Segment::new(mid, style.clone()));
+                        segs.push(Segment::new(mid.to_string(), style.clone()));
                     }
                 }
-                segs.push(Segment::new(right, style));
+                segs.push(Segment::new(right.to_string(), style));
                 segs.push(Segment::new("\n", None));
             };
 

@@ -158,9 +158,13 @@ pub mod syntax;
 pub use syntax::{Syntax, SyntaxError};
 
 #[cfg(feature = "syntax")]
-impl Renderable for Syntax<'_> {
+impl Renderable for Syntax {
     fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
-        self.render(options.max_width).into_iter().collect()
+        self.render(Some(options.max_width))
+            .unwrap_or_default()
+            .into_iter()
+            .map(Segment::into_owned) // Ensure static/owned segments
+            .collect()
     }
 }
 
@@ -172,7 +176,7 @@ pub mod markdown;
 pub use markdown::Markdown;
 
 #[cfg(feature = "markdown")]
-impl Renderable for Markdown<'_> {
+impl Renderable for Markdown {
     fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
         self.render(options.max_width).into_iter().collect()
     }
@@ -186,8 +190,11 @@ pub mod json;
 pub use json::{Json, JsonError, JsonTheme};
 
 #[cfg(feature = "json")]
-impl Renderable for Json<'_> {
-    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
-        self.render(options.max_width).into_iter().collect()
+impl Renderable for Json {
+    fn render<'a>(&'a self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        self.render()
+            .into_iter()
+            .map(Segment::into_owned)
+            .collect()
     }
 }

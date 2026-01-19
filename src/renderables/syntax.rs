@@ -336,7 +336,7 @@ impl Syntax {
     /// # Errors
     ///
     /// Returns an error if the theme or language is not found.
-    pub fn render(&self, _max_width: Option<usize>) -> Result<Vec<Segment>, SyntaxError> {
+    pub fn render(&self, _max_width: Option<usize>) -> Result<Vec<Segment<'_>>, SyntaxError> {
         let ps = &*SYNTAX_SET;
         let ts = &*THEME_SET;
 
@@ -414,7 +414,8 @@ impl Syntax {
                     let mut parts = text.split('\n').peekable();
                     while let Some(part) = parts.next() {
                         if !part.is_empty() {
-                            segments.push(Segment::new(part, Some(rich_style.clone())));
+                            // Clone string to own it (Segment<'static>)
+                            segments.push(Segment::new(part.to_string(), Some(rich_style.clone())));
                         }
                         if parts.peek().is_some() {
                             if self.padding.1 > 0 {
@@ -425,7 +426,8 @@ impl Syntax {
                         }
                     }
                 } else if !text.is_empty() {
-                    segments.push(Segment::new(text, Some(rich_style)));
+                    // Clone string to own it
+                    segments.push(Segment::new(text.to_string(), Some(rich_style)));
                 }
             }
 

@@ -240,7 +240,7 @@ impl Json {
     }
 
     /// Render a JSON value at the given depth.
-    fn render_value(&self, value: &Value, depth: usize) -> Vec<Segment> {
+    fn render_value(&self, value: &Value, depth: usize) -> Vec<Segment<'_>> {
         match value {
             Value::Null => vec![Segment::new("null", self.style(&self.theme.null))],
             Value::Bool(b) => {
@@ -264,7 +264,7 @@ impl Json {
     }
 
     /// Render an array.
-    fn render_array(&self, arr: &[Value], depth: usize) -> Vec<Segment> {
+    fn render_array(&self, arr: &[Value], depth: usize) -> Vec<Segment<'_>> {
         if arr.is_empty() {
             return vec![Segment::new("[]", self.style(&self.theme.bracket))];
         }
@@ -299,7 +299,7 @@ impl Json {
     }
 
     /// Render an object.
-    fn render_object(&self, obj: &serde_json::Map<String, Value>, depth: usize) -> Vec<Segment> {
+    fn render_object(&self, obj: &serde_json::Map<String, Value>, depth: usize) -> Vec<Segment<'_>> {
         if obj.is_empty() {
             return vec![Segment::new("{}", self.style(&self.theme.bracket))];
         }
@@ -356,7 +356,7 @@ impl Json {
 
     /// Render the JSON to segments.
     #[must_use]
-    pub fn render(&self) -> Vec<Segment> {
+    pub fn render(&self) -> Vec<Segment<'_>> {
         self.render_value(&self.value, 0)
     }
 
