@@ -159,7 +159,7 @@ fn main() {
     // Render each segment with ANSI codes
     for segment in complex_text.render("\n") {
         if let Some(style) = &segment.style {
-            let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+            let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
             print!("{}{}{}", prefix, segment.text, suffix);
         } else {
             print!("{}", segment.text);

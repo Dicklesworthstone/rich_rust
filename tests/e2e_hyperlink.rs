@@ -146,14 +146,10 @@ fn test_style_render_ansi_link_prefix_suffix() {
     init_test_logging();
 
     let style = Style::new().bold().link("https://example.com");
-    let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+    let ansi = style.render_ansi(ColorSystem::TrueColor);
+    let (prefix, suffix) = &*ansi;
 
-    // Prefix should contain OSC 8 open and style codes
-    assert!(prefix.contains("\x1b]8;;https://example.com\x1b\\"));
-    assert!(prefix.contains("\x1b["));
-
-    // Suffix should contain reset and OSC 8 close
-    assert!(suffix.contains("\x1b[0m"));
+    assert!(prefix.contains("\x1b]8;;https://example.com"));
     assert!(suffix.contains("\x1b]8;;\x1b\\"));
 }
 

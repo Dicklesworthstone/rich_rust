@@ -254,7 +254,7 @@ fn main() {
     let styled_spinner = Spinner::dots().style(Style::parse("bold cyan").unwrap_or_default());
     let segment = styled_spinner.render();
     if let Some(style) = &segment.style {
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+        let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
         print!("{}Loading {}{}", prefix, segment.text, suffix);
     }
     println!("\n");

@@ -61,8 +61,7 @@ use lru::LruCache;
 use std::fmt::{self, Write as _};
 use std::num::NonZeroUsize;
 use std::str::FromStr;
-use std::sync::LazyLock;
-use std::sync::Mutex;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::color::{Color, ColorParseError, ColorSystem, ColorTriplet};
 
@@ -474,7 +473,7 @@ impl Style {
 
     /// Render ANSI escape codes for this style (cached).
     ///
-    /// Returns a tuple of (prefix, suffix) where:
+    /// Returns an `Arc` containing (prefix, suffix) where:
     /// - prefix: ANSI codes to apply the style
     /// - suffix: ANSI codes to reset the style
     ///
@@ -488,14 +487,16 @@ impl Style {
         clippy::type_complexity,
         reason = "LRU cache type is inherently complex"
     )]
-    pub fn render_ansi(&self, color_system: ColorSystem) -> (String, String) {
+    pub fn render_ansi(&self, color_system: ColorSystem) -> Arc<(String, String)> {
         // Fast path: null style returns empty strings without cache lookup
         if self.is_null() {
-            return (String::new(), String::new());
+            static EMPTY: LazyLock<Arc<(String, String)>> =
+                LazyLock::new(|| Arc::new((String::new(), String::new())));
+            return EMPTY.clone();
         }
 
         // Cache key is (Style, ColorSystem) since ANSI output varies by color system
-        static ANSI_CACHE: LazyLock<Mutex<LruCache<(Style, ColorSystem), (String, String)>>> =
+        static ANSI_CACHE: LazyLock<Mutex<LruCache<(Style, ColorSystem), Arc<(String, String)>>>> =
             LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(256).expect("non-zero"))));
 
         // Try to get cached result
@@ -506,7 +507,7 @@ impl Style {
         }
 
         // Compute result
-        let result = self.render_ansi_uncached(color_system);
+        let result = Arc::new(self.render_ansi_uncached(color_system));
 
         // Cache the result
         if let Ok(mut cache) = ANSI_CACHE.lock() {
@@ -1246,7 +1247,8 @@ mod tests {
     #[test]
     fn test_style_render_ansi_tuple() {
         let style = Style::new().bold();
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+        let ansi = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix, suffix) = &*ansi;
 
         assert!(prefix.contains("\x1b[1m"));
         assert!(suffix.contains("\x1b[0m"));
@@ -1255,10 +1257,57 @@ mod tests {
     #[test]
     fn test_style_render_ansi_with_link() {
         let style = Style::new().bold().link("https://test.com");
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+        let ansi = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix, suffix) = &*ansi;
 
         assert!(prefix.contains("\x1b]8;;https://test.com"));
         assert!(suffix.contains("\x1b]8;;\x1b\\"));
+    }
+
+    #[test]
+    fn test_style_render_ansi_with_link_id() {
+        let style = Style::new().bold().link_with_id("https://example.com", "test-id");
+        let rendered = style.render("click here", ColorSystem::TrueColor);
+
+        // Should contain OSC 8 sequences
+        assert!(rendered.contains("\x1b]8;id=test-id;https://example.com\x1b\\"));
+        assert!(rendered.contains("click here"));
+        assert!(rendered.contains("\x1b]8;;\x1b\\"));
+        // Should contain SGR reset since it is bold
+        assert!(rendered.contains("\x1b[0m"));
+    }
+
+    #[test]
+    fn test_style_render_ansi_link_only_with_id() {
+        // Link only (no other attributes) with id
+        let style = Style::new().link_with_id("https://test.com", "solo-id");
+        let ansi = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix, suffix) = &*ansi;
+
+        assert!(prefix.contains("\x1b]8;id=solo-id;https://test.com\x1b\\"));
+        // No SGR codes, so prefix shouldn't have \x1b[...m
+        assert!(!prefix.contains("\x1b["));
+        // Suffix should just close hyperlink, no reset needed
+        assert_eq!(suffix, "\x1b]8;;\x1b\\");
+    }
+
+    #[test]
+    fn test_style_render_ansi_null() {
+        let style = Style::null();
+        let ansi = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix, suffix) = &*ansi;
+        assert!(prefix.is_empty());
+        assert!(suffix.is_empty());
+    }
+
+    #[test]
+    fn test_style_render_ansi_empty_codes() {
+        // Style with no attributes and no colors
+        let style = Style::new();
+        let ansi = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix, suffix) = &*ansi;
+        assert!(prefix.is_empty());
+        assert!(suffix.is_empty());
     }
 
     #[test]
@@ -1282,16 +1331,19 @@ mod tests {
         let style = Style::new().bold().color(Color::from_ansi(1));
 
         // First call populates cache
-        let (prefix1, suffix1) = style.render_ansi(ColorSystem::TrueColor);
+        let ansi1 = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix1, suffix1) = &*ansi1;
 
         // Second call should return cached result
-        let (prefix2, suffix2) = style.render_ansi(ColorSystem::TrueColor);
+        let ansi2 = style.render_ansi(ColorSystem::TrueColor);
+        let (prefix2, suffix2) = &*ansi2;
 
         assert_eq!(prefix1, prefix2);
         assert_eq!(suffix1, suffix2);
 
         // Different color system should produce different result
-        let (prefix_8bit, _suffix_8bit) = style.render_ansi(ColorSystem::EightBit);
+        let ansi_8bit = style.render_ansi(ColorSystem::EightBit);
+        let (prefix_8bit, _suffix_8bit) = &*ansi_8bit;
         // The prefix should still contain the style codes
         assert!(prefix_8bit.contains("\x1b[1m") || prefix_8bit.contains("1;"));
 
@@ -1306,8 +1358,10 @@ mod tests {
         let bold = Style::new().bold();
         let italic = Style::new().italic();
 
-        let (bold_prefix, _) = bold.render_ansi(ColorSystem::TrueColor);
-        let (italic_prefix, _) = italic.render_ansi(ColorSystem::TrueColor);
+        let bold_ansi = bold.render_ansi(ColorSystem::TrueColor);
+        let (bold_prefix, _) = &*bold_ansi;
+        let italic_ansi = italic.render_ansi(ColorSystem::TrueColor);
+        let (italic_prefix, _) = &*italic_ansi;
 
         assert_ne!(bold_prefix, italic_prefix);
         assert!(bold_prefix.contains("1m")); // SGR 1 for bold
@@ -1438,23 +1492,6 @@ mod tests {
         let style = Style::new();
         let codes = style.make_ansi_codes(ColorSystem::TrueColor);
         assert!(codes.is_empty());
-    }
-
-    #[test]
-    fn test_style_render_ansi_null() {
-        let style = Style::null();
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
-        assert!(prefix.is_empty());
-        assert!(suffix.is_empty());
-    }
-
-    #[test]
-    fn test_style_render_ansi_empty_codes() {
-        // Style with no attributes and no colors
-        let style = Style::new();
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
-        assert!(prefix.is_empty());
-        assert!(suffix.is_empty());
     }
 
     #[test]
@@ -1659,33 +1696,8 @@ mod tests {
 
         // Should contain OSC 8 without id: \x1b]8;;{url}\x1b\\
         assert!(rendered.contains("\x1b]8;;https://example.com\x1b\\"));
+        assert!(rendered.contains("click"));
         assert!(!rendered.contains("id="));
-    }
-
-    #[test]
-    fn test_style_render_ansi_link_with_id() {
-        let style = Style::new()
-            .bold()
-            .link_with_id("https://example.com", "my-link");
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
-
-        // Prefix should contain OSC 8 with id
-        assert!(prefix.contains("\x1b]8;id=my-link;https://example.com\x1b\\"));
-        // Suffix should close the hyperlink
-        assert!(suffix.contains("\x1b]8;;\x1b\\"));
-    }
-
-    #[test]
-    fn test_style_render_ansi_link_only_with_id() {
-        // Link only (no other attributes) with id
-        let style = Style::new().link_with_id("https://test.com", "solo-id");
-        let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
-
-        assert!(prefix.contains("\x1b]8;id=solo-id;https://test.com\x1b\\"));
-        // No SGR codes, so prefix shouldn't have \x1b[...m
-        assert!(!prefix.contains("\x1b["));
-        // Suffix should just close hyperlink, no reset needed
-        assert_eq!(suffix, "\x1b]8;;\x1b\\");
     }
 
     #[test]
@@ -1702,7 +1714,7 @@ mod tests {
     #[test]
     fn test_style_combine_link_id_partial() {
         // First style has link_id, second doesn't have link_id but has link
-        let style1 = Style::new().link_with_id("https://a.com", "id-a");
+        let style1 = Style::new().link("https://a.com").link_id("id-a");
         let style2 = Style::new().link("https://b.com"); // No link_id
 
         let combined = style1.combine(&style2);
@@ -1715,7 +1727,7 @@ mod tests {
     #[test]
     fn test_style_combine_preserves_link_id() {
         // Second style has no link at all
-        let style1 = Style::new().link_with_id("https://a.com", "id-a");
+        let style1 = Style::new().link("https://a.com").link_id("id-a");
         let style2 = Style::new().bold();
 
         let combined = style1.combine(&style2);

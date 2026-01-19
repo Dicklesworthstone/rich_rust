@@ -672,7 +672,7 @@ fn regression_rendering_hyperlink_only_style() {
     assert!(!style.is_null(), "Style with link should not be null");
 
     // Render the style using render_ansi for (prefix, suffix) tuple
-    let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
 
     // The prefix should contain OSC 8 sequence for the link
     // OSC 8 format: \x1b]8;;URL\x1b\\
@@ -710,7 +710,7 @@ fn regression_rendering_hyperlink_with_attributes() {
 
     let style = Style::new().bold().link("https://example.com");
 
-    let (prefix, _suffix) = style.render_ansi(ColorSystem::TrueColor);
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, _suffix) = &*ansi;
 
     // Should have both bold (SGR 1) and hyperlink (OSC 8)
     assert!(
@@ -782,7 +782,7 @@ fn regression_rendering_null_style() {
     let style = Style::null();
     assert!(style.is_null(), "Style::null() should be null");
 
-    let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
 
     // Null style should produce empty prefix and suffix
     assert!(prefix.is_empty(), "Null style prefix should be empty");
@@ -811,7 +811,7 @@ fn regression_rendering_color_downgrade_truecolor_to_256() {
     let style = Style::parse("#ff5500").unwrap();
 
     // Render for 256-color system
-    let (prefix, _suffix) = style.render_ansi(ColorSystem::EightBit);
+    let ansi = style.render_ansi(ColorSystem::EightBit); let (prefix, _suffix) = &*ansi;
 
     // Should produce 256-color code (38;5;N format)
     assert!(
@@ -942,7 +942,7 @@ fn regression_rendering_ansi_strip_completeness() {
 
     // Create styled output
     let style = Style::parse("bold red on blue").unwrap();
-    let (prefix, suffix) = style.render_ansi(ColorSystem::TrueColor);
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
     let styled = format!("{prefix}Hello{suffix}");
 
     // Strip ANSI codes
@@ -1364,7 +1364,7 @@ fn regression_table_caption_alignment_width() {
         );
     }
 
-    tracing::info!("Regression test PASSED: caption alignment width");
+    tracing::info!("Regression test PASSED: table caption alignment width");
 }
 
 /// Regression test: Table leading inserts blank lines between rows
@@ -1660,4 +1660,206 @@ fn regression_console_control_set_window_title() {
     assert_eq!(output, expected, "Window title OSC sequence should match");
 
     tracing::info!("Regression test PASSED: set window title control");
+}
+
+/// Regression test: Verify that render_ansi handles link+attributes correctly
+#[test]
+fn regression_rendering_hyperlink_with_attributes_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_hyperlink_with_attributes_correctness",
+        "Ensures hyperlink + attributes render correctly",
+    );
+
+    let _phase = test_phase("hyperlink_with_attrs_correctness");
+
+    // Create a style with bold and hyperlink
+    let style = Style::new().bold().link("https://example.com");
+
+    // Render the style using render_ansi for (prefix, suffix) tuple
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
+
+    // The prefix should contain both bold (SGR 1) and hyperlink (OSC 8)
+    assert!(
+        prefix.contains("\x1b[1m") || prefix.contains(";1m") || prefix.contains("\x1b[1;"),
+        "Should render bold attribute: got '{}'",
+        prefix.escape_debug()
+    );
+    assert!(
+        prefix.contains("\x1b]8;"),
+        "Should render hyperlink OSC 8 sequence: got '{}'",
+        prefix.escape_debug()
+    );
+
+    // The suffix should close the hyperlink
+    assert!(
+        suffix.contains("\x1b]8;;") || suffix.contains("\x1b]8;"),
+        "Hyperlink-only style should render OSC 8 suffix: got '{}'",
+        suffix.escape_debug()
+    );
+
+    tracing::info!("Regression test PASSED: hyperlink + attributes");
+}
+
+/// Regression test: Verify that render_ansi handles link only correctly
+#[test]
+fn regression_rendering_hyperlink_only_style_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_hyperlink_only_style_correctness",
+        "Ensures hyperlink-only styles render correctly",
+    );
+
+    let _phase = test_phase("hyperlink_only_correctness");
+
+    // Create a style with ONLY a hyperlink (no colors, no attributes)
+    let mut style = Style::new();
+    style.link = Some("https://example.com".to_string());
+
+    // The style should NOT be null (it has a link)
+    assert!(!style.is_null(), "Style with link should not be null");
+
+    // Render the style using render_ansi for (prefix, suffix) tuple
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
+
+    // The prefix should contain OSC 8 sequence for the link
+    // OSC 8 format: \x1b]8;;URL\x1b\\
+    assert!(
+        prefix.contains("\x1b]8;;") || prefix.contains("\x1b]8;"),
+        "Hyperlink-only style should render OSC 8 prefix: got '{}'",
+        prefix.escape_debug()
+    );
+
+    // The suffix should close the hyperlink
+    assert!(
+        suffix.contains("\x1b]8;;") || suffix.contains("\x1b]8;"),
+        "Hyperlink-only style should render OSC 8 suffix: got '{}'",
+        suffix.escape_debug()
+    );
+
+    tracing::info!("Regression test PASSED: hyperlink-only style renders OSC 8");
+}
+
+/// Regression test: Verify style combination preserves hyperlink
+#[test]
+fn regression_rendering_style_combine_preserves_hyperlink_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_style_combine_preserves_hyperlink_correctness",
+        "Ensures style combination preserves hyperlinks",
+    );
+
+    let _phase = test_phase("combine_hyperlink_correctness");
+
+    // Create a style with bold and hyperlink
+    let s1 = Style::new().link("https://example.com");
+    let s2 = Style::new().bold();
+    let combined = s1.combine(&s2);
+
+    // Combined should have both bold and hyperlink
+    assert!(
+        combined.attributes.contains(Attributes::BOLD),
+        "Combined should have bold"
+    );
+    assert!(combined.link.is_some(), "Combined should have hyperlink");
+    assert_eq!(
+        combined.link.as_deref(),
+        Some("https://example.com"),
+        "Hyperlink URL should be preserved"
+    );
+
+    // Verify that render_ansi handles link+attributes correctly
+    let style = Style::new().bold().link("https://example.com");
+    let ansi = style.render_ansi(ColorSystem::TrueColor);
+    let (prefix, suffix) = &*ansi;
+    
+    assert!(prefix.contains("\x1b]8;;https://example.com\x1b\\"));
+    assert!(prefix.contains("\x1b[1m"));
+    assert!(suffix.contains("\x1b]8;;\x1b\\"));
+    assert!(suffix.contains("\x1b[0m"));
+
+    tracing::info!("Regression test PASSED: style combine preserves hyperlink");
+}
+
+/// Regression test: Verify color downgrade (TrueColor -> 8-bit)
+#[test]
+fn regression_rendering_color_downgrade_truecolor_to_8bit_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_color_downgrade_truecolor_to_8bit_correctness",
+        "Ensures color downgrade works correctly",
+    );
+
+    let _phase = test_phase("color_downgrade_correctness");
+
+    // Create a truecolor style
+    let color = Color::from_rgb(255, 0, 0); // Red
+    let style = Style::new().color(color);
+
+    // Render for 256-color system
+    let ansi = style.render_ansi(ColorSystem::EightBit); let (prefix, _suffix) = &*ansi;
+
+    // Should produce 256-color code (196 is standard red in 256-color)
+    // The exact mapping might vary, but it should be an 8-bit code
+    assert!(
+        prefix.contains("38;5;"),
+        "Should downgrade to 256-color format: got '{}'",
+        prefix.escape_debug()
+    );
+
+    tracing::info!("Regression test PASSED: color downgrade");
+}
+
+/// Regression test: Verify ANSI strip completeness
+#[test]
+fn regression_rendering_ansi_strip_completeness_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_ansi_strip_completeness_correctness",
+        "Ensures ANSI stripping is complete",
+    );
+
+    let _phase = test_phase("ansi_strip_correctness");
+
+    // Create styled output
+    let style = Style::parse("bold red on blue").unwrap();
+    let ansi = style.render_ansi(ColorSystem::TrueColor); let (prefix, suffix) = &*ansi;
+    let styled = format!("{prefix}Hello{suffix}");
+
+    // Strip ANSI codes
+    let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+    let stripped = ansi_regex.replace_all(&styled, "");
+
+    // Should only have the text
+    assert_eq!(stripped, "Hello", "ANSI stripping should leave only text");
+
+    tracing::info!("Regression test PASSED: ANSI strip completeness");
+}
+
+/// Regression test: Verify control character handling
+#[test]
+fn regression_rendering_control_character_width_correctness() {
+    init_test_logging();
+    log_test_context(
+        "regression_rendering_control_character_width_correctness",
+        "Ensures control characters have zero width",
+    );
+
+    let _phase = test_phase("control_chars_correctness");
+
+    use rich_rust::cells::cell_len;
+
+    // Control characters should have width 0
+    let control_chars = ['\x00', '\x01', '\x1f', '\x7f'];
+    for ch in control_chars {
+        let s = ch.to_string();
+        let width = cell_len(&s);
+        assert_eq!(
+            width, 0,
+            "Control character {:?} should have width 0, got {}",
+            ch, width
+        );
+    }
+
+    tracing::info!("Regression test PASSED: control character width");
 }

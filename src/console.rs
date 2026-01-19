@@ -635,14 +635,18 @@ impl Console {
             }
 
             // Get ANSI codes for style
+            let ansi_codes;
             let (prefix, suffix) = if let Some(ref style) = segment.style {
                 if let Some(cs) = color_system {
-                    style.render_ansi(cs)
+                    ansi_codes = style.render_ansi(cs);
+                    (&ansi_codes.0, &ansi_codes.1)
                 } else {
-                    (String::new(), String::new())
+                    static EMPTY: (String, String) = (String::new(), String::new());
+                    (&EMPTY.0, &EMPTY.1)
                 }
             } else {
-                (String::new(), String::new())
+                static EMPTY: (String, String) = (String::new(), String::new());
+                (&EMPTY.0, &EMPTY.1)
             };
 
             // Write styled text
