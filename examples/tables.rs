@@ -7,7 +7,7 @@ use rich_rust::prelude::*;
 
 fn main() {
     let console = Console::new();
-    let width = console.width().min(80);
+    let _width = console.width().min(80);
 
     // ========================================================================
     // Basic Table
@@ -23,9 +23,7 @@ fn main() {
     basic_table.add_row_cells(["Bob", "25", "San Francisco"]);
     basic_table.add_row_cells(["Charlie", "35", "Chicago"]);
 
-    for seg in basic_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&basic_table);
 
     // ========================================================================
     // Table with Title and Caption
@@ -43,9 +41,7 @@ fn main() {
     titled_table.add_row_cells(["002", "Bob Jones", "Marketing"]);
     titled_table.add_row_cells(["003", "Carol White", "Finance"]);
 
-    for seg in titled_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&titled_table);
 
     // ========================================================================
     // Column Alignment
@@ -63,9 +59,7 @@ fn main() {
     aligned_table.add_row_cells(["Widget B", "50", "$25.00", "$1,250.00"]);
     aligned_table.add_row_cells(["Widget C", "200", "$5.00", "$1,000.00"]);
 
-    for seg in aligned_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&aligned_table);
 
     // ========================================================================
     // Styled Headers and Borders
@@ -85,9 +79,7 @@ fn main() {
     styled_table.add_row_cells(["API Server", "Running", "99.5%"]);
     styled_table.add_row_cells(["Cache", "Degraded", "95.0%"]);
 
-    for seg in styled_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&styled_table);
 
     // ========================================================================
     // Different Box Styles
@@ -101,9 +93,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     rounded_table.add_row_cells(["1", "2"]);
-    for seg in rounded_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&rounded_table);
 
     // Square
     println!("Square:");
@@ -111,9 +101,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     square_table.add_row_cells(["1", "2"]);
-    for seg in square_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&square_table);
 
     // ASCII
     println!("ASCII:");
@@ -122,9 +110,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     ascii_table.add_row_cells(["1", "2"]);
-    for seg in ascii_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&ascii_table);
 
     // Double
     println!("Double:");
@@ -133,9 +119,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     double_table.add_row_cells(["1", "2"]);
-    for seg in double_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&double_table);
 
     // Heavy
     println!("Heavy:");
@@ -144,9 +128,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     heavy_table.add_row_cells(["1", "2"]);
-    for seg in heavy_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&heavy_table);
 
     // Minimal
     println!("Minimal:");
@@ -155,9 +137,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     minimal_table.add_row_cells(["1", "2"]);
-    for seg in minimal_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&minimal_table);
 
     // Simple
     println!("Simple:");
@@ -166,9 +146,7 @@ fn main() {
         .with_column(Column::new("A"))
         .with_column(Column::new("B"));
     simple_table.add_row_cells(["1", "2"]);
-    for seg in simple_table.render(40) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&simple_table);
 
     // ========================================================================
     // Table with Row Lines
@@ -185,9 +163,7 @@ fn main() {
     lined_table.add_row_cells(["3", "Start services"]);
     lined_table.add_row_cells(["4", "Ready"]);
 
-    for seg in lined_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&lined_table);
 
     // ========================================================================
     // Table without Header
@@ -203,9 +179,7 @@ fn main() {
     no_header_table.add_row_cells(["version", "0.1.0"]);
     no_header_table.add_row_cells(["license", "MIT"]);
 
-    for seg in no_header_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&no_header_table);
 
     // ========================================================================
     // Table without Edges
@@ -221,9 +195,7 @@ fn main() {
     no_edge_table.add_row_cells(["A1", "B1", "C1"]);
     no_edge_table.add_row_cells(["A2", "B2", "C2"]);
 
-    for seg in no_edge_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&no_edge_table);
 
     // ========================================================================
     // Compact Table (No Padding)
@@ -239,9 +211,7 @@ fn main() {
     compact_table.add_row_cells(["1", "2", "3"]);
     compact_table.add_row_cells(["4", "5", "6"]);
 
-    for seg in compact_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&compact_table);
 
     // ========================================================================
     // Table with Column Widths
@@ -258,9 +228,7 @@ fn main() {
     width_table.add_row_cells(["2", "Bob", "87"]);
     width_table.add_row_cells(["3", "Charlie", "92"]);
 
-    for seg in width_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&width_table);
 
     // ========================================================================
     // Alternating Row Styles
@@ -280,9 +248,7 @@ fn main() {
     zebra_table.add_row_cells(["Grapes", "2", "$6.00"]);
     zebra_table.add_row_cells(["Mangoes", "4", "$8.00"]);
 
-    for seg in zebra_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&zebra_table);
 
     // ========================================================================
     // Real-World Example: Server List
@@ -314,18 +280,14 @@ fn main() {
     server_table.add_row_cells(["db-prod-01", "10.0.3.10", "Running", "35%", "82%"]);
     server_table.add_row_cells(["cache-prod-01", "10.0.4.10", "Warning", "92%", "45%"]);
 
-    for seg in server_table.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&server_table);
 
     // ========================================================================
     // Section Divider
     // ========================================================================
     let rule =
         Rule::with_title("End of Table Demo").style(Style::parse("bold green").unwrap_or_default());
-    for seg in rule.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&rule);
 
     println!();
 }

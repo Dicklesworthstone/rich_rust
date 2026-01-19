@@ -79,18 +79,14 @@ fn main() {
     table.add_row_cells(["Alice", "Admin"]);
     table.add_row_cells(["Bob", "User"]);
 
-    for seg in table.render(80) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&table);
 
     // Panels
     let panel = Panel::from_text("Hello, World!")
         .title("Greeting")
         .width(40);
 
-    for seg in panel.render(80) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&panel);
 }
 ```
 
@@ -281,9 +277,7 @@ let mut table = Table::new()
 table.add_row_cells(["version", "1.0.0"]);
 table.add_row_cells(["status", "active"]);
 
-for seg in table.render(80) {
-    print!("{}", seg.text);
-}
+console.print_renderable(&table);
 ```
 
 ### 4. Create a Panel
@@ -294,9 +288,7 @@ let panel = Panel::from_text("Important message here")
     .subtitle("v1.0")
     .width(50);
 
-for seg in panel.render(80) {
-    print!("{}", seg.text);
-}
+console.print_renderable(&panel);
 ```
 
 ### 5. Print a Rule
@@ -312,6 +304,7 @@ console.rule(Some("Section"));
 let rule = Rule::with_title("Custom")
     .style(Style::parse("cyan bold").unwrap_or_default())
     .align_left();
+console.print_renderable(&rule);
 ```
 
 ---
@@ -372,9 +365,7 @@ let bar = ProgressBar::new()
     .total(100)
     .width(40);
 
-for seg in bar.render() {
-    print!("{}", seg.text);
-}
+console.print_renderable(&bar);
 ```
 
 ### Trees
@@ -385,9 +376,7 @@ root.add_child(TreeNode::new("Child 1"));
 root.add_child(TreeNode::new("Child 2"));
 
 let tree = Tree::new(root);
-for seg in tree.render(80) {
-    print!("{}", seg.text);
-}
+console.print_renderable(&tree);
 ```
 
 ### Syntax Highlighting (requires `syntax` feature)
@@ -400,9 +389,7 @@ let syntax = Syntax::new(code, "rust")
     .line_numbers(true)
     .theme("Solarized (dark)");
 
-for seg in syntax.render(80) {
-    print!("{}", seg.text);
-}
+console.print_renderable(&syntax);
 ```
 
 ### Markdown Rendering (requires `markdown` feature)
@@ -411,9 +398,7 @@ for seg in syntax.render(80) {
 use rich_rust::prelude::*;
 
 let md = Markdown::new("# Header\n\nParagraph with **bold**.");
-for seg in md.render(80) {
-    print!("{}", seg.text);
-}
+console.print_renderable(&md);
 ```
 
 ---

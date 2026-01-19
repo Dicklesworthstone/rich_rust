@@ -6,7 +6,7 @@ use rich_rust::prelude::*;
 
 fn main() {
     let console = Console::new();
-    let width = console.width().min(80);
+    let _width = console.width().min(80);
 
     // ========================================================================
     // Basic Tree
@@ -20,9 +20,7 @@ fn main() {
             .child(TreeNode::new("Child 3")),
     );
 
-    for seg in tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&tree);
 
     // ========================================================================
     // Nested Tree
@@ -50,9 +48,7 @@ fn main() {
             .child(TreeNode::new("README.md")),
     );
 
-    for seg in nested.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&nested);
 
     // ========================================================================
     // Tree with Icons
@@ -73,9 +69,7 @@ fn main() {
             ),
     );
 
-    for seg in with_icons.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&with_icons);
 
     // ========================================================================
     // Different Guide Styles
@@ -89,9 +83,7 @@ fn main() {
     )
     .guides(TreeGuides::Ascii);
 
-    for seg in ascii_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&ascii_tree);
 
     println!("\n=== Bold Guides ===\n");
 
@@ -102,9 +94,7 @@ fn main() {
     )
     .guides(TreeGuides::Bold);
 
-    for seg in bold_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&bold_tree);
 
     println!("\n=== Double Guides ===\n");
 
@@ -115,9 +105,7 @@ fn main() {
     )
     .guides(TreeGuides::Double);
 
-    for seg in double_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&double_tree);
 
     println!("\n=== Rounded Guides ===\n");
 
@@ -128,9 +116,7 @@ fn main() {
     )
     .guides(TreeGuides::Rounded);
 
-    for seg in rounded_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&rounded_tree);
 
     // ========================================================================
     // Styled Tree
@@ -152,9 +138,7 @@ fn main() {
     )
     .guide_style(Style::parse("dim cyan").unwrap_or_default());
 
-    for seg in styled_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&styled_tree);
 
     // ========================================================================
     // Hidden Root
@@ -170,9 +154,7 @@ fn main() {
     )
     .show_root(false);
 
-    for seg in hidden_root_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&hidden_root_tree);
 
     // ========================================================================
     // Collapsed Nodes
@@ -195,9 +177,7 @@ fn main() {
             .child(TreeNode::new("Tests").child(TreeNode::new("component_tests.rs"))),
     );
 
-    for seg in collapsed_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&collapsed_tree);
 
     // ========================================================================
     // Real-World Example: Directory Structure
@@ -235,18 +215,14 @@ fn main() {
     )
     .guides(TreeGuides::Unicode);
 
-    for seg in project_tree.render() {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&project_tree);
 
     // ========================================================================
     // Section Divider
     // ========================================================================
     let rule =
         Rule::with_title("End of Tree Demo").style(Style::parse("bold green").unwrap_or_default());
-    for seg in rule.render(width) {
-        print!("{}", seg.text);
-    }
+    console.print_renderable(&rule);
 
     println!();
 }

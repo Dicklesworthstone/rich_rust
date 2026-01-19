@@ -96,9 +96,7 @@
 //!     .add_row(Row::new().cell("Alice").cell("30"))
 //!     .add_row(Row::new().cell("Bob").cell("25"));
 //!
-//! for segment in table.render(80) {
-//!     print!("{}", segment.text);
-//! }
+//! console.print_renderable(&table);
 //! ```
 //!
 //! ### Panels
@@ -110,9 +108,7 @@
 //!     .title("My Panel")
 //!     .border_style(Style::new().color(Color::parse("blue").unwrap()));
 //!
-//! for segment in panel.render(60) {
-//!     print!("{}", segment.text);
-//! }
+//! console.print_renderable(&panel);
 //! ```
 //!
 //! ### Trees
@@ -128,9 +124,7 @@
 //!         .child(TreeNode::new("Cargo.toml")),
 //! );
 //!
-//! for segment in tree.render() {
-//!     print!("{}", segment.text);
-//! }
+//! console.print_renderable(&tree);
 //! ```
 
 #![forbid(unsafe_code)]
