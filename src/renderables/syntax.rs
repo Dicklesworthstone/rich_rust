@@ -381,7 +381,9 @@ impl Syntax {
             }
 
             // Expand tabs
-            let line_expanded = line.replace('\t', &" ".repeat(self.tab_size));
+            let line_expanded = line
+                .replace('\t', &" ".repeat(self.tab_size))
+                .replace("\r\n", "\n");
 
             // Add indentation guides if enabled
             if self.indent_guides {
@@ -398,7 +400,12 @@ impl Syntax {
             // Highlight the line
             let ranges = highlighter
                 .highlight_line(&line_expanded, &ps)
-                .unwrap_or_default();
+                .unwrap_or_else(|_| {
+                    vec![(
+                        syntect::highlighting::Style::default(),
+                        line_expanded.as_str(),
+                    )]
+                });
 
             let mut saw_newline = false;
             for (style, text) in ranges {
@@ -556,8 +563,8 @@ mod tests {
         let segments = result.unwrap();
         // Should contain line number segments
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
-        assert!(text.contains("1"));
-        assert!(text.contains("2"));
+        assert!(text.contains('1'));
+        assert!(text.contains('2'));
     }
 
     #[test]
@@ -611,7 +618,8 @@ mod tests {
 
     #[test]
     fn test_padding_does_not_shift_lines() {
-        let syntax = Syntax::new("a\nb", "text").padding(0, 2);
+        // Use "rust" as a valid language (syntect doesn't have a "text" syntax)
+        let syntax = Syntax::new("a\nb", "rust").padding(0, 2);
         let text = syntax
             .render(None)
             .expect("render should succeed")
@@ -620,5 +628,20 @@ mod tests {
             .collect::<String>();
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines, vec!["  a  ", "  b  "]);
+    }
+
+    #[test]
+    fn test_render_crlf_strips_carriage_returns() {
+        let code = "let x = 1;\r\nlet y = 2;\r\n";
+        let syntax = Syntax::new(code, "rust");
+        let text = syntax
+            .render(None)
+            .expect("render should succeed")
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<String>();
+        assert!(!text.contains('\r'));
+        assert!(text.contains("let x = 1;"));
+        assert!(text.contains("let y = 2;"));
     }
 }

@@ -297,18 +297,28 @@ impl Text {
     /// Highlight text matching a pattern with a style.
     pub fn highlight_regex(&mut self, pattern: &str, style: &Style) -> Result<(), regex::Error> {
         let re = regex::Regex::new(pattern)?;
-        let chars: Vec<char> = self.plain.chars().collect();
+
+        // Optimization: Map byte indices to char indices once
+        let char_starts: Vec<usize> = self.plain.char_indices().map(|(i, _)| i).collect();
+        let total_chars = char_starts.len();
+        let total_bytes = self.plain.len();
 
         // Find all matches and convert byte indices to char indices
         for mat in re.find_iter(&self.plain) {
             let byte_start = mat.start();
             let byte_end = mat.end();
 
-            // Convert byte indices to character indices
-            let char_start = self.plain[..byte_start].chars().count();
-            let char_end = self.plain[..byte_end].chars().count();
+            // Convert byte indices to character indices using binary search
+            // This is O(log N) instead of O(N) per match
+            let char_start = char_starts.binary_search(&byte_start).unwrap_or_else(|x| x);
 
-            if char_start < char_end && char_end <= chars.len() {
+            let char_end = if byte_end == total_bytes {
+                total_chars
+            } else {
+                char_starts.binary_search(&byte_end).unwrap_or_else(|x| x)
+            };
+
+            if char_start < char_end {
                 self.spans
                     .push(Span::new(char_start, char_end, style.clone()));
             }
@@ -324,6 +334,11 @@ impl Text {
         }
 
         if case_sensitive {
+            // Optimization: Map byte indices to char indices once
+            let char_starts: Vec<usize> = self.plain.char_indices().map(|(i, _)| i).collect();
+            let total_chars = char_starts.len();
+            let total_bytes = self.plain.len();
+
             for word in words {
                 if word.is_empty() {
                     continue;
@@ -333,9 +348,12 @@ impl Text {
                     let byte_start = search_start + pos;
                     let byte_end = byte_start + word.len();
 
-                    // Convert to char indices
-                    let char_start = self.plain[..byte_start].chars().count();
-                    let char_end = self.plain[..byte_end].chars().count();
+                    let char_start = char_starts.binary_search(&byte_start).unwrap_or_else(|x| x);
+                    let char_end = if byte_end == total_bytes {
+                        total_chars
+                    } else {
+                        char_starts.binary_search(&byte_end).unwrap_or_else(|x| x)
+                    };
 
                     if char_start < char_end {
                         self.spans
@@ -359,6 +377,11 @@ impl Text {
             }
         }
 
+        // Optimization: Map byte indices of lowered string to its char indices
+        let lowered_char_starts: Vec<usize> = lowered.char_indices().map(|(i, _)| i).collect();
+        let total_lowered_chars = lowered_char_starts.len();
+        let total_lowered_bytes = lowered.len();
+
         for word in words {
             let search_word = word.to_lowercase();
             if search_word.is_empty() {
@@ -370,12 +393,23 @@ impl Text {
                 let byte_start = search_start + pos;
                 let byte_end = byte_start + search_word.len();
 
-                let char_start = lowered[..byte_start].chars().count();
-                let char_end = lowered[..byte_end].chars().count();
+                // Convert byte indices in lowered string to char indices in lowered string
+                let char_start_lowered = lowered_char_starts
+                    .binary_search(&byte_start)
+                    .unwrap_or_else(|x| x);
+                let char_end_lowered = if byte_end == total_lowered_bytes {
+                    total_lowered_chars
+                } else {
+                    lowered_char_starts
+                        .binary_search(&byte_end)
+                        .unwrap_or_else(|x| x)
+                };
 
-                if char_start < char_end && char_end <= lower_to_original.len() {
-                    let orig_start = lower_to_original[char_start];
-                    let orig_end = lower_to_original[char_end - 1] + 1;
+                if char_start_lowered < char_end_lowered
+                    && char_end_lowered <= lower_to_original.len()
+                {
+                    let orig_start = lower_to_original[char_start_lowered];
+                    let orig_end = lower_to_original[char_end_lowered - 1] + 1;
                     if orig_start < orig_end {
                         self.spans
                             .push(Span::new(orig_start, orig_end, style.clone()));
@@ -519,16 +553,11 @@ impl Text {
         let mut new_spans = Vec::new();
         for span in &self.spans {
             // Find new start position
-            let new_start = char_map
-                .iter()
-                .position(|&old| old >= span.start)
-                .unwrap_or(new_len);
+            // Use binary search (partition_point) for O(log N) instead of O(N) linear scan
+            let new_start = char_map.partition_point(|&old| old < span.start);
 
             // Find new end position
-            let new_end = char_map
-                .iter()
-                .rposition(|&old| old < span.end)
-                .map_or(new_start, |p| p + 1);
+            let new_end = char_map.partition_point(|&old| old < span.end);
 
             if new_start < new_end {
                 new_spans.push(Span::new(new_start, new_end, span.style.clone()));

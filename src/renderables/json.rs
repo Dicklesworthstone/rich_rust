@@ -447,10 +447,10 @@ mod tests {
 
     #[test]
     fn test_json_number_float() {
-        let json = Json::new(serde_json::json!(3.14));
+        let json = Json::new(serde_json::json!(1.23));
         let segments = json.render();
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
-        assert_eq!(text, "3.14");
+        assert_eq!(text, "1.23");
     }
 
     #[test]
@@ -485,7 +485,7 @@ mod tests {
         assert!(text.contains("  1"));
         assert!(text.contains("  2"));
         assert!(text.contains("  3"));
-        assert!(text.contains("]"));
+        assert!(text.contains(']'));
     }
 
     #[test]
@@ -503,7 +503,7 @@ mod tests {
         assert!(text.contains("{\n"));
         assert!(text.contains("\"name\""));
         assert!(text.contains(": \"Alice\""));
-        assert!(text.contains("}"));
+        assert!(text.contains('}'));
     }
 
     #[test]
@@ -580,7 +580,7 @@ mod tests {
     fn test_json_mixed_array() {
         let json = Json::new(serde_json::json!([1, "two", true, null]));
         let text = json.to_plain_string();
-        assert!(text.contains("1"));
+        assert!(text.contains('1'));
         assert!(text.contains("\"two\""));
         assert!(text.contains("true"));
         assert!(text.contains("null"));
@@ -607,7 +607,7 @@ mod tests {
         assert!(text.contains("true"));
         assert!(text.contains("false"));
         assert!(text.contains("null"));
-        assert!(text.contains("2"));
+        assert!(text.contains('2'));
     }
 
     #[test]

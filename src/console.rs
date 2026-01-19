@@ -736,13 +736,25 @@ impl Console {
 
         let mut file = self.file.borrow_mut();
         if let Some(title) = title {
+            // Ensure title fits within width, accounting for 2 spaces padding
+            let max_title_width = width.saturating_sub(2);
             let title_len = crate::cells::cell_len(title);
-            let available = width.saturating_sub(title_len + 2);
+
+            let display_title = if title_len > max_title_width {
+                let mut t = Text::new(title);
+                t.truncate(max_title_width, OverflowMethod::Ellipsis, false);
+                t.plain().to_string()
+            } else {
+                title.to_string()
+            };
+
+            let display_len = crate::cells::cell_len(&display_title);
+            let available = width.saturating_sub(display_len + 2);
             let left_pad = available / 2;
             let right_pad = available - left_pad;
             let left = line_char.to_string().repeat(left_pad);
             let right = line_char.to_string().repeat(right_pad);
-            let _ = writeln!(file, "{left} {title} {right}");
+            let _ = writeln!(file, "{left} {display_title} {right}");
         } else {
             let _ = writeln!(file, "{}", line_char.to_string().repeat(width));
         }

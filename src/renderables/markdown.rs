@@ -316,8 +316,13 @@ impl Markdown {
         let mut segments = Vec::new();
         let mut style_stack: Vec<Style> = Vec::new();
         let mut list_stack: Vec<(bool, usize)> = Vec::new(); // (is_ordered, item_number)
+        let mut list_item_prefix_len: Vec<usize> = Vec::new();
+        let mut list_item_first_paragraph: Vec<bool> = Vec::new();
+        let mut list_item_prefix_pending = false;
         let mut in_code_block = false;
         let mut in_blockquote = false;
+        let mut blockquote_prefix_pending = false;
+        let mut blockquote_first_paragraph = false;
         let mut current_link_url = String::new();
 
         // Table state
@@ -345,6 +350,29 @@ impl Markdown {
             Some(combined)
         };
 
+        // Helper macros to inline prefix logic (avoids borrow issues with closures)
+        macro_rules! ensure_blockquote_prefix {
+            ($segs:expr) => {
+                if in_blockquote && blockquote_prefix_pending {
+                    $segs.push(Segment::new("│ ", Some(self.quote_style.clone())));
+                    blockquote_prefix_pending = false;
+                }
+            };
+        }
+
+        macro_rules! ensure_list_prefix {
+            ($segs:expr) => {
+                if list_item_prefix_pending {
+                    if let Some(prefix_len) = list_item_prefix_len.last() {
+                        if *prefix_len > 0 {
+                            $segs.push(Segment::new(" ".repeat(*prefix_len), None));
+                        }
+                    }
+                    list_item_prefix_pending = false;
+                }
+            };
+        }
+
         for event in parser {
             match event {
                 Event::Start(tag) => {
@@ -363,8 +391,28 @@ impl Markdown {
                             style_stack.push(style);
                         }
                         Tag::Paragraph => {
-                            if !segments.is_empty() && !in_blockquote && !in_table {
-                                segments.push(Segment::new("\n\n", None));
+                            if in_blockquote {
+                                if !blockquote_first_paragraph {
+                                    segments.push(Segment::new("\n", None));
+                                }
+                                blockquote_prefix_pending = true;
+                                blockquote_first_paragraph = false;
+                                if let Some(first) = list_item_first_paragraph.last_mut() {
+                                    if !*first {
+                                        list_item_prefix_pending = true;
+                                    }
+                                    *first = false;
+                                }
+                            } else if !segments.is_empty() && !in_table {
+                                if let Some(first) = list_item_first_paragraph.last_mut() {
+                                    if !*first {
+                                        segments.push(Segment::new("\n", None));
+                                        list_item_prefix_pending = true;
+                                    }
+                                    *first = false;
+                                } else {
+                                    segments.push(Segment::new("\n\n", None));
+                                }
                             }
                         }
                         Tag::Emphasis => {
@@ -389,10 +437,11 @@ impl Markdown {
                         }
                         Tag::BlockQuote(_) => {
                             in_blockquote = true;
+                            blockquote_first_paragraph = true;
+                            blockquote_prefix_pending = true;
                             if !segments.is_empty() {
                                 segments.push(Segment::new("\n", None));
                             }
-                            segments.push(Segment::new("│ ", Some(self.quote_style.clone())));
                             style_stack.push(self.quote_style.clone());
                         }
                         Tag::List(start_num) => {
@@ -405,20 +454,27 @@ impl Markdown {
                             list_stack.push((is_ordered, start));
                         }
                         Tag::Item => {
+                            ensure_blockquote_prefix!(segments);
                             // Add indent based on list nesting
-                            let indent =
-                                " ".repeat(list_stack.len().saturating_sub(1) * self.list_indent);
+                            let indent_len = list_stack.len().saturating_sub(1) * self.list_indent;
+                            let indent = " ".repeat(indent_len);
                             segments.push(Segment::new(indent, None));
 
                             if let Some((is_ordered, num)) = list_stack.last_mut() {
                                 if *is_ordered {
-                                    segments.push(Segment::new(format!("{num}. "), None));
+                                    let marker = format!("{num}. ");
+                                    let marker_len = marker.len();
+                                    segments.push(Segment::new(marker, None));
+                                    list_item_prefix_len.push(indent_len + marker_len);
                                     *num += 1;
                                 } else {
-                                    segments
-                                        .push(Segment::new(format!("{} ", self.bullet_char), None));
+                                    let marker = format!("{} ", self.bullet_char);
+                                    let marker_len = marker.len();
+                                    segments.push(Segment::new(marker, None));
+                                    list_item_prefix_len.push(indent_len + marker_len);
                                 }
                             }
+                            list_item_first_paragraph.push(true);
                         }
                         Tag::Table(alignments) => {
                             in_table = true;
@@ -470,6 +526,8 @@ impl Markdown {
                         }
                         TagEnd::BlockQuote(_) => {
                             in_blockquote = false;
+                            blockquote_prefix_pending = false;
+                            blockquote_first_paragraph = false;
                             style_stack.pop();
                         }
                         TagEnd::List(_) => {
@@ -477,6 +535,12 @@ impl Markdown {
                         }
                         TagEnd::Item => {
                             segments.push(Segment::new("\n", None));
+                            list_item_prefix_len.pop();
+                            list_item_first_paragraph.pop();
+                            list_item_prefix_pending = false;
+                            if in_blockquote {
+                                blockquote_prefix_pending = true;
+                            }
                         }
                         TagEnd::Table => {
                             // Render the collected table
@@ -513,11 +577,21 @@ impl Markdown {
                         if in_code_block {
                             // Preserve code block formatting
                             for line in text.lines() {
+                                ensure_blockquote_prefix!(segments);
+                                ensure_list_prefix!(segments);
                                 segments
                                     .push(Segment::new(format!("  {line}"), current_style.clone()));
                                 segments.push(Segment::new("\n", None));
+                                if in_blockquote {
+                                    blockquote_prefix_pending = true;
+                                }
+                                if !list_item_prefix_len.is_empty() {
+                                    list_item_prefix_pending = true;
+                                }
                             }
                         } else {
+                            ensure_blockquote_prefix!(segments);
+                            ensure_list_prefix!(segments);
                             segments.push(Segment::new(text.to_string(), current_style));
                         }
                     }
@@ -526,6 +600,8 @@ impl Markdown {
                     if in_table {
                         let _ = write!(current_cell_content, "`{code}`");
                     } else {
+                        ensure_blockquote_prefix!(segments);
+                        ensure_list_prefix!(segments);
                         segments.push(Segment::new(
                             format!(" {code} "),
                             Some(self.code_style.clone()),
@@ -544,6 +620,12 @@ impl Markdown {
                         current_cell_content.push(' ');
                     } else {
                         segments.push(Segment::new("\n", None));
+                        if in_blockquote {
+                            blockquote_prefix_pending = true;
+                        }
+                        if !list_item_prefix_len.is_empty() {
+                            list_item_prefix_pending = true;
+                        }
                     }
                 }
                 Event::Rule => {
@@ -790,6 +872,24 @@ mod tests {
     }
 
     #[test]
+    fn test_render_list_item_multiple_paragraphs_indent() {
+        let md = Markdown::new("- First\n\n  Second");
+        let segments = md.render(80);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        let lines: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
+
+        assert!(lines.len() >= 2, "expected list item to render two lines");
+        assert!(lines[0].contains("First"));
+        assert!(lines[1].contains("Second"));
+        assert!(
+            !lines[1].contains('•'),
+            "continuation line should not repeat bullet"
+        );
+        let leading_spaces = lines[1].chars().take_while(|c| *c == ' ').count();
+        assert!(leading_spaces >= 2, "continuation line should be indented");
+    }
+
+    #[test]
     fn test_render_link() {
         let md = Markdown::new("[Click here](https://example.com)");
         let segments = md.render(80);
@@ -814,6 +914,20 @@ mod tests {
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         assert!(text.contains("This is a quote"));
         assert!(text.contains("│")); // Quote prefix
+    }
+
+    #[test]
+    fn test_render_blockquote_multiple_paragraphs_prefix() {
+        let md = Markdown::new("> First\n>\n> Second");
+        let segments = md.render(80);
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        let lines: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
+
+        assert!(lines.len() >= 2, "expected multiple blockquote lines");
+        assert!(lines[0].starts_with("│ "));
+        assert!(lines[1].starts_with("│ "));
+        assert!(lines[0].contains("First"));
+        assert!(lines[1].contains("Second"));
     }
 
     #[test]
