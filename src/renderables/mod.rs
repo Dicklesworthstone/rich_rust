@@ -88,6 +88,7 @@
 use crate::console::{Console, ConsoleOptions};
 use crate::markup;
 use crate::segment::Segment;
+use crate::text::Text;
 
 /// Trait for objects that can be rendered to the console.
 pub trait Renderable {
@@ -135,9 +136,14 @@ impl Renderable for Table {
 }
 
 impl Renderable for str {
-    fn render<'a>(&'a self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
-        markup::render_or_plain(self)
-            .render("")
+    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        // Honor the markup setting from ConsoleOptions
+        let text = if options.markup.unwrap_or(true) {
+            markup::render_or_plain(self)
+        } else {
+            Text::new(self)
+        };
+        text.render("")
             .into_iter()
             .map(Segment::into_owned)
             .collect()
