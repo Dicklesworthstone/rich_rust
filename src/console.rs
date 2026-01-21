@@ -529,6 +529,27 @@ impl Console {
             .expect("failed to write to output stream");
     }
 
+    /// Export rendered text (no ANSI) using default print options.
+    #[must_use]
+    pub fn export_text(&self, content: &str) -> String {
+        self.export_text_with_options(content, &PrintOptions::new().with_markup(self.markup))
+    }
+
+    /// Export rendered text (no ANSI) using custom print options.
+    #[must_use]
+    pub fn export_text_with_options(&self, content: &str, options: &PrintOptions) -> String {
+        let segments = self.render_str_segments(content, options);
+        Self::segments_to_plain(&segments)
+    }
+
+    /// Export a renderable to plain text (no ANSI).
+    #[must_use]
+    pub fn export_renderable_text(&self, renderable: &impl Renderable) -> String {
+        let options = self.options();
+        let segments = renderable.render(self, &options);
+        Self::segments_to_plain(&segments)
+    }
+
     /// Print to a specific writer.
     pub fn print_to<W: Write>(
         &self,
@@ -536,6 +557,11 @@ impl Console {
         content: &str,
         options: &PrintOptions,
     ) -> io::Result<()> {
+        let segments = self.render_str_segments(content, options);
+        self.write_segments(writer, &segments)
+    }
+
+    fn render_str_segments(&self, content: &str, options: &PrintOptions) -> Vec<Segment<'static>> {
         // Parse markup if enabled
         let parse_markup = options.markup.unwrap_or(self.markup);
         let mut text = if parse_markup {
@@ -571,7 +597,7 @@ impl Console {
         });
 
         let end = if options.no_newline { "" } else { &options.end };
-        let segments = if let Some(width) = width {
+        let mut segments: Vec<Segment<'static>> = if let Some(width) = width {
             let mut rendered = Vec::new();
             let lines = if text.no_wrap {
                 text.split_lines()
@@ -598,38 +624,45 @@ impl Console {
                 }
 
                 let line_end = if index == last_index { end } else { "\n" };
-                rendered.extend(
-                    line.render(line_end)
-                        .into_iter()
-                        .map(super::segment::Segment::into_owned),
-                );
+                rendered.extend(line.render(line_end).into_iter().map(Segment::into_owned));
             }
 
             rendered
         } else {
             text.render(end)
+                .into_iter()
+                .map(Segment::into_owned)
+                .collect()
         };
 
         // Apply any overall style
-        let segments: Vec<Segment> = if let Some(ref style) = options.style {
-            segments
-                .into_iter()
-                .map(|mut seg| {
-                    if !seg.is_control() {
-                        seg.style = Some(match seg.style {
-                            Some(s) => style.combine(&s),
-                            None => style.clone(),
-                        });
-                    }
-                    seg
-                })
-                .collect()
-        } else {
-            segments
-        };
+        if let Some(ref style) = options.style {
+            for segment in &mut segments {
+                if !segment.is_control() {
+                    segment.style = Some(match segment.style {
+                        Some(ref s) => style.combine(s),
+                        None => style.clone(),
+                    });
+                }
+            }
+        }
 
-        // Write segments
-        self.write_segments(writer, &segments)
+        segments
+    }
+
+    fn segments_to_plain(segments: &[Segment<'_>]) -> String {
+        let capacity: usize = segments
+            .iter()
+            .filter(|segment| !segment.is_control())
+            .map(|segment| segment.text.len())
+            .sum();
+        let mut output = String::with_capacity(capacity);
+        for segment in segments {
+            if !segment.is_control() {
+                output.push_str(segment.text.as_ref());
+            }
+        }
+        output
     }
 
     /// Write segments to a writer.
@@ -1200,6 +1233,40 @@ mod tests {
             !text.contains("\x1b["),
             "Did not expect ANSI sequences in output, got: {text}"
         );
+    }
+
+    #[test]
+    fn test_export_text_defaults() {
+        let console = Console::builder().markup(true).build();
+        let output = console.export_text("[bold]Hello[/]");
+        assert_eq!(output, "Hello\n");
+    }
+
+    #[test]
+    fn test_export_text_respects_markup_setting() {
+        let console = Console::builder().markup(false).build();
+        let output = console.export_text("[bold]Hello[/]");
+        assert_eq!(output, "[bold]Hello[/]\n");
+    }
+
+    #[test]
+    fn test_export_text_with_options_no_newline() {
+        let console = Console::new();
+        let mut options = PrintOptions::new().with_markup(false);
+        options.no_newline = true;
+        let output = console.export_text_with_options("Hello", &options);
+        assert_eq!(output, "Hello");
+    }
+
+    #[test]
+    fn test_export_renderable_text() {
+        use crate::renderables::Rule;
+
+        let console = Console::builder().width(20).build();
+        let rule = Rule::with_title("Title");
+        let output = console.export_renderable_text(&rule);
+        assert!(output.contains("Title"));
+        assert!(output.ends_with('\n'));
     }
 
     #[test]

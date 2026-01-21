@@ -431,6 +431,15 @@ console.print_renderable(&md);
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Render Pipeline (Step-by-Step)
+
+1. **Input** — A string (optionally with markup) or a renderable (Table, Panel, Tree, etc.).
+2. **Markup parsing** — `[bold red]text[/]` is parsed into `Text` + styled spans.
+3. **Renderable layout** — Each renderable converts itself into `Vec<Segment>`.
+4. **Segment stream** — Segments carry plain text + optional `Style` + control codes.
+5. **ANSI generation** — Styles are diffed and rendered to ANSI SGR (or skipped if disabled).
+6. **Output** — `Console` writes the final stream to the configured `Write`.
+
 ### Module Structure
 
 ```
@@ -459,6 +468,24 @@ src/
     ├── markdown.rs  # Markdown rendering (optional)
     └── json.rs      # JSON pretty-print (optional)
 ```
+
+## Feature Parity (Python Rich)
+
+**Implemented**
+- Markup (`[bold red]text[/]`), styles, colors, hyperlinks
+- Tables, panels, rules, trees, columns, padding, alignment
+- Progress bars & spinners
+- Syntax highlighting (feature `syntax`)
+- Markdown rendering (feature `markdown`)
+- JSON pretty-print (feature `json`)
+- Unicode width handling + auto color downgrade
+
+**Not yet**
+- Live updating / dynamic refresh (`Live`)
+- Layout engine (`Layout`)
+- Logging handler integration
+- HTML/SVG export
+- Input widgets (out of scope for this library)
 
 ---
 
