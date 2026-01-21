@@ -582,6 +582,10 @@ impl Console {
         if options.crop {
             text.overflow = OverflowMethod::Crop;
         }
+        // soft_wrap enables wrapping by overriding text's no_wrap setting
+        if options.soft_wrap {
+            text.no_wrap = false;
+        }
 
         let width = options.width.or_else(|| {
             if options.justify.is_some()
