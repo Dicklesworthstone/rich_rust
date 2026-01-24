@@ -512,6 +512,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unused_variables)]
     fn test_term_linux() {
         // "linux" doesn't contain known keywords, falls through to TTY check
         let settings = make_env(None, None, None, Some("linux"));
@@ -527,6 +528,7 @@ mod tests {
     // =========================================================================
 
     #[test]
+    #[allow(unused_variables)]
     fn test_no_env_vars_tty_true() {
         let settings = make_env(None, None, None, None);
         #[cfg(not(windows))]
@@ -537,6 +539,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unused_variables)]
     fn test_no_env_vars_tty_false() {
         let settings = make_env(None, None, None, None);
         #[cfg(not(windows))]
