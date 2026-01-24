@@ -78,7 +78,10 @@ pub fn detect_color_system() -> Option<ColorSystem> {
     detect_color_system_with(&read_env_settings(), is_terminal())
 }
 
-fn detect_color_system_with(env: &EnvSettings, #[allow(unused_variables)] is_tty: bool) -> Option<ColorSystem> {
+fn detect_color_system_with(
+    env: &EnvSettings,
+    #[allow(unused_variables)] is_tty: bool,
+) -> Option<ColorSystem> {
     // Check NO_COLOR env var (https://no-color.org/)
     if env.no_color.is_some() {
         return None;
