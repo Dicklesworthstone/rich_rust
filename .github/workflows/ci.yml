@@ -210,8 +210,13 @@ jobs:
         with:
           tool: cargo-audit
 
+      - name: Checkout advisory DB (pinned)
+        run: |
+          git clone https://github.com/rustsec/advisory-db.git advisory-db
+          git -C advisory-db checkout 7a106b408b9c7f905dfc597a762f4606b69a0c14
+
       - name: Run security audit
-        run: cargo audit
+        run: cargo audit --db advisory-db --no-fetch
 
   # Documentation build check
   docs:
