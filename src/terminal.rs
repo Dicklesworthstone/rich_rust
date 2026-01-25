@@ -92,6 +92,15 @@ pub fn detect_color_system() -> Option<ColorSystem> {
     detect_color_system_with(&read_env_settings(), is_terminal())
 }
 
+/// Detect color system with an explicit TTY assumption.
+///
+/// This bypasses stdout/stderr detection and is intended for
+/// `ConsoleBuilder::force_terminal` handling.
+#[must_use]
+pub(crate) fn detect_color_system_forced(is_tty: bool) -> Option<ColorSystem> {
+    detect_color_system_with(&read_env_settings(), is_tty)
+}
+
 fn detect_color_system_with(
     env: &EnvSettings,
     #[allow(unused_variables)] is_tty: bool,

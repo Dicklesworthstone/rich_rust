@@ -1382,6 +1382,13 @@ impl ConsoleBuilder {
         }
         if let Some(ft) = self.force_terminal {
             console.force_terminal = Some(ft);
+            if console.color_system.is_none() {
+                console.detected_color_system = if ft {
+                    terminal::detect_color_system_forced(true)
+                } else {
+                    None
+                };
+            }
         }
         if let Some(ts) = self.tab_size {
             console.tab_size = ts;
