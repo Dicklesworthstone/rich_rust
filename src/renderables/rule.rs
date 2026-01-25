@@ -100,6 +100,13 @@ impl Rule {
         let mut segments = Vec::new();
 
         if let Some(title) = &self.title {
+            // Sanitize title to prevent broken layout
+            let mut title = title.clone();
+            if title.plain().contains('\n') {
+                let sanitized = title.plain().replace('\n', " ");
+                title = Text::new(sanitized);
+            }
+
             if title.plain().is_empty() {
                 let count = width / char_width;
                 let rule_text = self.character.repeat(count);
