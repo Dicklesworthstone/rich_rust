@@ -337,8 +337,9 @@ fn e2e_table_collapse_narrow() {
     let output = table.render_plain(25);
     tracing::debug!(output = %output, "Narrow table");
 
-    // Should still render without panic
-    assert!(!output.is_empty(), "Table should render something");
+    // Should still render the row values even when collapsed
+    assert!(output.contains("Short"), "Missing row value 'Short'");
+    assert!(output.contains("Values"), "Missing row value 'Values'");
 
     tracing::info!("E2E table collapse (narrow width) test PASSED");
 }
@@ -433,9 +434,9 @@ fn e2e_table_cell_wrapping() {
     let output = table.render_plain(30);
     tracing::debug!(output = %output, "Wrapped cell table");
 
-    // Should render something
-    assert!(!output.is_empty(), "Table should render");
+    // Should include header and some of the long content
     assert!(output.contains("Description"), "Should have header");
+    assert!(output.contains("This is"), "Should include row content");
 
     tracing::info!("E2E table cell wrapping test PASSED");
 }

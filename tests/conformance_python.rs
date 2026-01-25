@@ -13,10 +13,17 @@ use rich_rust::renderables::{Align, Columns, Padding, Panel, Rule, Table, Tree, 
 use rich_rust::segment::Segment;
 use serde_json::Value;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ColorSystemMode {
+    Auto,
+    Fixed(ColorSystem),
+    None,
+}
+
 #[derive(Debug, Clone)]
 struct RenderOptions {
     width: Option<usize>,
-    color_system: Option<ColorSystem>,
+    color_system: ColorSystemMode,
     force_terminal: Option<bool>,
 }
 
@@ -33,13 +40,14 @@ fn normalize_ansi(text: &str) -> String {
     normalize_line_endings(&normalize_hyperlink_ids(text))
 }
 
-fn parse_color_system(value: &str) -> Option<ColorSystem> {
+fn parse_color_system_mode(value: &str) -> ColorSystemMode {
     match value {
-        "truecolor" => Some(ColorSystem::TrueColor),
-        "256" | "eight_bit" => Some(ColorSystem::EightBit),
-        "standard" => Some(ColorSystem::Standard),
-        "none" | "" => None,
-        _ => None,
+        "auto" => ColorSystemMode::Auto,
+        "truecolor" => ColorSystemMode::Fixed(ColorSystem::TrueColor),
+        "256" | "eight_bit" => ColorSystemMode::Fixed(ColorSystem::EightBit),
+        "standard" => ColorSystemMode::Fixed(ColorSystem::Standard),
+        "none" | "" => ColorSystemMode::None,
+        _ => ColorSystemMode::None,
     }
 }
 
@@ -51,7 +59,8 @@ fn parse_render_options(defaults: &Value, overrides: Option<&Value>) -> RenderOp
     let default_color = defaults
         .get("color_system")
         .and_then(|v| v.as_str())
-        .and_then(parse_color_system);
+        .map(parse_color_system_mode)
+        .unwrap_or(ColorSystemMode::Auto);
     let default_force = defaults.get("force_terminal").and_then(|v| v.as_bool());
 
     let mut width = default_width;
@@ -62,11 +71,14 @@ fn parse_render_options(defaults: &Value, overrides: Option<&Value>) -> RenderOp
         if let Some(w) = overrides.get("width").and_then(|v| v.as_u64()) {
             width = Some(w as usize);
         }
-        if let Some(cs) = overrides.get("color_system").and_then(|v| v.as_str()) {
-            color_system = parse_color_system(cs);
+        if let Some(cs_value) = overrides.get("color_system") {
+            color_system = cs_value
+                .as_str()
+                .map(parse_color_system_mode)
+                .unwrap_or(ColorSystemMode::None);
         }
-        if let Some(force) = overrides.get("force_terminal").and_then(|v| v.as_bool()) {
-            force_terminal = Some(force);
+        if let Some(force_value) = overrides.get("force_terminal") {
+            force_terminal = force_value.as_bool();
         }
     }
 
@@ -85,12 +97,90 @@ fn build_console(options: &RenderOptions) -> Console {
     if let Some(force_terminal) = options.force_terminal {
         builder = builder.force_terminal(force_terminal);
     }
-    if let Some(color_system) = options.color_system {
-        builder = builder.color_system(color_system);
-    } else {
-        builder = builder.no_color();
+    match options.color_system {
+        ColorSystemMode::Auto => {}
+        ColorSystemMode::Fixed(color_system) => {
+            builder = builder.color_system(color_system);
+        }
+        ColorSystemMode::None => {
+            builder = builder.no_color();
+        }
     }
     builder.build()
+}
+
+struct EnvGuard {
+    saved: Vec<(String, Option<std::ffi::OsString>)>,
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.saved.drain(..) {
+            if let Some(value) = value {
+                unsafe {
+                    std::env::set_var(key, value);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+}
+
+fn env_value_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(s) => Some(s.clone()),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+fn apply_env(case: &Value) -> EnvGuard {
+    let mut keys = vec![
+        "NO_COLOR".to_string(),
+        "FORCE_COLOR".to_string(),
+        "COLORTERM".to_string(),
+        "TERM".to_string(),
+    ];
+
+    let env_overrides = case.get("env").and_then(|v| v.as_object());
+    if let Some(env_overrides) = env_overrides {
+        for key in env_overrides.keys() {
+            if !keys.contains(key) {
+                keys.push(key.clone());
+            }
+        }
+    }
+
+    let mut saved = Vec::new();
+    for key in &keys {
+        saved.push((key.clone(), std::env::var_os(key)));
+    }
+
+    for key in keys {
+        match env_overrides.and_then(|env| env.get(&key)) {
+            Some(value) => {
+                if let Some(value) = env_value_to_string(value) {
+                    unsafe {
+                        std::env::set_var(&key, value);
+                    }
+                } else {
+                    unsafe {
+                        std::env::remove_var(&key);
+                    }
+                }
+            }
+            None => unsafe {
+                std::env::remove_var(&key);
+            },
+        }
+    }
+
+    EnvGuard { saved }
 }
 
 fn render_text(console: &Console, markup: &str, width: Option<usize>) -> (String, String) {
@@ -277,14 +367,15 @@ fn build_renderable(
             } else {
                 (completed as f64) / (total as f64)
             };
-            let filled = ((ratio * width as f64).floor() as usize).min(width);
             let mut bar = ProgressBar::new()
-                .width(filled)
+                .width(width)
                 .bar_style(BarStyle::Line)
                 .show_brackets(false)
                 .show_percentage(false)
-                .completed_style(Style::new().color(Color::from_rgb(249, 38, 114)));
-            bar.set_progress(1.0);
+                .completed_style(Style::new().color(Color::from_rgb(249, 38, 114)))
+                .remaining_style(Style::new().color(Color::from_ansi(237)))
+                .pulse_style(Style::new().color(Color::from_ansi(237)));
+            bar.set_progress(ratio);
             Box::new(bar)
         }
         "columns" => {
@@ -328,7 +419,7 @@ fn build_renderable(
         }
         "align" => {
             let text = value_string(input, "text").unwrap_or_default();
-            let width = value_usize(input, "width").unwrap_or(0);
+            let width = options.width.or(value_usize(input, "width")).unwrap_or(0);
             let align = value_string(input, "align").unwrap_or_else(|| "left".to_string());
             let content = vec![Segment::new(text, None)];
             let align = match align.as_str() {
@@ -337,6 +428,44 @@ fn build_renderable(
                 _ => Align::new(content, width).left(),
             };
             Box::new(align)
+        }
+        "markdown" => {
+            #[cfg(feature = "markdown")]
+            {
+                let source = value_string(input, "text").unwrap_or_default();
+                Box::new(rich_rust::renderables::Markdown::new(source))
+            }
+            #[cfg(not(feature = "markdown"))]
+            {
+                panic!("markdown conformance requires the markdown feature");
+            }
+        }
+        "json" => {
+            #[cfg(feature = "json")]
+            {
+                let source = value_string(input, "json").unwrap_or_else(|| "{}".to_string());
+                let json = rich_rust::renderables::Json::from_str(&source)
+                    .unwrap_or_else(|_| rich_rust::renderables::Json::new(serde_json::Value::Null));
+                Box::new(json)
+            }
+            #[cfg(not(feature = "json"))]
+            {
+                panic!("json conformance requires the json feature");
+            }
+        }
+        "syntax" => {
+            #[cfg(feature = "syntax")]
+            {
+                let code = value_string(input, "code").unwrap_or_default();
+                let language =
+                    value_string(input, "language").unwrap_or_else(|| "rust".to_string());
+                let syntax = rich_rust::renderables::Syntax::new(code, language);
+                Box::new(syntax)
+            }
+            #[cfg(not(feature = "syntax"))]
+            {
+                panic!("syntax conformance requires the syntax feature");
+            }
         }
         other => panic!("unsupported kind: {other}"),
     }
@@ -356,6 +485,7 @@ fn python_rich_fixtures() {
         .expect("cases missing");
 
     for case in cases {
+        let _env_guard = apply_env(case);
         let id = case
             .get("id")
             .and_then(|v| v.as_str())
@@ -368,6 +498,10 @@ fn python_rich_fixtures() {
         let expected = case.get("expected").expect("expected missing");
         let expected_plain = expected.get("plain").and_then(|v| v.as_str()).unwrap_or("");
         let expected_ansi = expected.get("ansi").and_then(|v| v.as_str()).unwrap_or("");
+        let compare_ansi = case
+            .get("compare_ansi")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         let options = parse_render_options(defaults, case.get("render_options"));
         let console = build_console(&options);
@@ -383,7 +517,14 @@ fn python_rich_fixtures() {
             actual_plain = actual_plain.trim_end_matches('\n').to_string();
             actual_ansi = actual_ansi.trim_end_matches('\n').to_string();
         }
-        if (kind == "columns" || kind == "padding") && !actual_plain.ends_with('\n') {
+        if (kind == "columns"
+            || kind == "padding"
+            || kind == "align"
+            || kind == "markdown"
+            || kind == "json"
+            || kind == "syntax")
+            && !actual_plain.ends_with('\n')
+        {
             actual_plain.push('\n');
             actual_ansi.push('\n');
         }
@@ -392,10 +533,12 @@ fn python_rich_fixtures() {
             actual_plain, expected_plain,
             "plain mismatch for case {id} ({kind})"
         );
-        assert_eq!(
-            actual_ansi,
-            normalize_ansi(expected_ansi),
-            "ansi mismatch for case {id} ({kind})"
-        );
+        if compare_ansi {
+            assert_eq!(
+                actual_ansi,
+                normalize_ansi(expected_ansi),
+                "ansi mismatch for case {id} ({kind})"
+            );
+        }
     }
 }

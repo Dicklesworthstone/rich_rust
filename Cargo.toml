@@ -25,6 +25,16 @@ unicode-width = "0.2"
 # LRU cache for color parsing and style computation
 lru = "0.16"
 
+# Logging integration
+log = "0.4"
+
+# Time formatting for logging
+time = { version = "0.3.36", features = ["local-offset", "formatting"] }
+
+# Optional tracing integration
+tracing = { version = "0.1.44", optional = true }
+tracing-subscriber = { version = "0.3.22", optional = true, features = ["fmt"] }
+
 # Exact fraction arithmetic for ratio distribution
 num-rational = "0.4.2"
 
@@ -58,9 +68,11 @@ test-log = { version = "0.2.19", features = ["trace"] }
 
 [features]
 default = []
+conformance_test = []
 syntax = ["syntect"]
 markdown = ["pulldown-cmark"]
 json = ["serde_json"]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
 full = ["syntax", "markdown", "json"]
 
 [profile.release]

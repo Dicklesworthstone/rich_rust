@@ -1,0 +1,8 @@
+---
+source: tests/e2e_rendering.rs
+expression: plain
+---
+      Summary       
+┏━━━━━━━━━┳━━━━━━━━┓
+┃ Check   ┃ Result ┃┡━━━━━━━━━╇━━━━━━━━┩
+│ Compile │ OK     ││ Test    │ OK     ││ Lint    │ WARN   │└─────────┴────────┘

@@ -78,14 +78,19 @@
 //!
 //! You can override these with the builder pattern or by setting explicit values.
 
-use std::cell::{Cell, RefCell};
+use std::fmt::Write as FmtWrite;
 use std::io::{self, Write};
+use std::sync::{
+    Arc, Mutex, Weak,
+    atomic::{AtomicBool, Ordering},
+};
 
 use crate::color::ColorSystem;
+use crate::live::LiveInner;
 use crate::markup;
 use crate::renderables::Renderable;
-use crate::segment::Segment;
-use crate::style::Style;
+use crate::segment::{ControlCode, ControlType, Segment};
+use crate::style::{Attributes, Style};
 use crate::terminal;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
 
@@ -172,6 +177,18 @@ impl ConsoleOptions {
     #[must_use]
     pub fn update_height(&self, height: usize) -> Self {
         Self {
+            height: Some(height),
+            ..self.clone()
+        }
+    }
+
+    /// Create options with updated width and height.
+    #[must_use]
+    pub fn update_dimensions(&self, width: usize, height: usize) -> Self {
+        Self {
+            size: ConsoleDimensions { width, height },
+            max_width: width,
+            max_height: height,
             height: Some(height),
             ..self.clone()
         }
@@ -303,6 +320,11 @@ impl PrintOptions {
     }
 }
 
+/// Hook for intercepting rendered segments before output.
+pub trait RenderHook: Send + Sync {
+    fn process(&self, console: &Console, segments: &[Segment<'static>]) -> Vec<Segment<'static>>;
+}
+
 /// The main Console for rendering styled output.
 pub struct Console {
     /// Color system to use (None = auto-detect).
@@ -312,7 +334,7 @@ pub struct Console {
     /// Tab expansion size.
     tab_size: usize,
     /// Buffer output for export.
-    record: Cell<bool>,
+    record: AtomicBool,
     /// Parse markup by default.
     markup: bool,
     /// Enable emoji rendering.
@@ -326,13 +348,17 @@ pub struct Console {
     /// Use ASCII-safe box characters.
     safe_box: bool,
     /// Output stream (defaults to stdout).
-    file: RefCell<Box<dyn Write + Send>>,
+    file: Mutex<Box<dyn Write + Send>>,
     /// Recording buffer.
-    buffer: RefCell<Vec<Segment<'static>>>,
+    buffer: Mutex<Vec<Segment<'static>>>,
     /// Cached terminal detection.
     is_terminal: bool,
     /// Detected/configured color system.
     detected_color_system: Option<ColorSystem>,
+    /// Render hooks (Live uses this).
+    render_hooks: Mutex<Vec<Arc<dyn RenderHook>>>,
+    /// Active Live stack for nested Live handling.
+    live_stack: Mutex<Vec<Weak<LiveInner>>>,
 }
 
 impl std::fmt::Debug for Console {
@@ -341,7 +367,7 @@ impl std::fmt::Debug for Console {
             .field("color_system", &self.color_system)
             .field("force_terminal", &self.force_terminal)
             .field("tab_size", &self.tab_size)
-            .field("record", &self.record.get())
+            .field("record", &self.record.load(Ordering::Relaxed))
             .field("markup", &self.markup)
             .field("emoji", &self.emoji)
             .field("highlight", &self.highlight)
@@ -349,10 +375,13 @@ impl std::fmt::Debug for Console {
             .field("height", &self.height)
             .field("safe_box", &self.safe_box)
             .field("file", &"<dyn Write>")
-            .field("buffer_len", &self.buffer.borrow().len())
+            .field(
+                "buffer_len",
+                &self.buffer.lock().map(|b| b.len()).unwrap_or(0),
+            )
             .field("is_terminal", &self.is_terminal)
             .field("detected_color_system", &self.detected_color_system)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -377,17 +406,19 @@ impl Console {
             color_system: None,
             force_terminal: None,
             tab_size: 8,
-            record: Cell::new(false),
+            record: AtomicBool::new(false),
             markup: true,
             emoji: true,
             highlight: true,
             width: None,
             height: None,
             safe_box: false,
-            file: RefCell::new(Box::new(io::stdout())),
-            buffer: RefCell::new(Vec::new()),
+            file: Mutex::new(Box::new(io::stdout())),
+            buffer: Mutex::new(Vec::new()),
             is_terminal,
             detected_color_system,
+            render_hooks: Mutex::new(Vec::new()),
+            live_stack: Mutex::new(Vec::new()),
         }
     }
 
@@ -395,6 +426,12 @@ impl Console {
     #[must_use]
     pub fn builder() -> ConsoleBuilder {
         ConsoleBuilder::default()
+    }
+
+    /// Convert this Console into a shared reference-counted handle.
+    #[must_use]
+    pub fn shared(self) -> Arc<Self> {
+        Arc::new(self)
     }
 
     /// Get the console width.
@@ -462,16 +499,107 @@ impl Console {
         }
     }
 
+    /// Check if the terminal is "dumb".
+    #[must_use]
+    pub fn is_dumb_terminal(&self) -> bool {
+        terminal::is_dumb_terminal()
+    }
+
+    /// Check if the console is interactive (TTY and not dumb).
+    #[must_use]
+    pub fn is_interactive(&self) -> bool {
+        self.is_terminal() && !self.is_dumb_terminal()
+    }
+
+    pub(crate) fn push_render_hook(&self, hook: Arc<dyn RenderHook>) {
+        if let Ok(mut hooks) = self.render_hooks.lock() {
+            hooks.push(hook);
+        }
+    }
+
+    pub(crate) fn pop_render_hook(&self) -> Option<Arc<dyn RenderHook>> {
+        self.render_hooks
+            .lock()
+            .ok()
+            .and_then(|mut hooks| hooks.pop())
+    }
+
+    pub(crate) fn set_live(&self, live: &Arc<LiveInner>) -> bool {
+        if let Ok(mut stack) = self.live_stack.lock() {
+            stack.push(Arc::downgrade(live));
+            return stack.len() == 1;
+        }
+        true
+    }
+
+    pub(crate) fn clear_live(&self) {
+        if let Ok(mut stack) = self.live_stack.lock()
+            && !stack.is_empty()
+        {
+            stack.pop();
+        }
+    }
+
+    pub(crate) fn live_stack_snapshot(&self) -> Vec<Arc<LiveInner>> {
+        let mut result = Vec::new();
+        if let Ok(mut stack) = self.live_stack.lock() {
+            stack.retain(|entry| entry.strong_count() > 0);
+            for entry in stack.iter() {
+                if let Some(live) = entry.upgrade() {
+                    result.push(live);
+                }
+            }
+        }
+        result
+    }
+
+    pub(crate) fn write_control_codes(&self, control_codes: Vec<ControlCode>) -> io::Result<()> {
+        if control_codes.is_empty() {
+            return Ok(());
+        }
+        let segment = Segment::control(control_codes);
+        let mut file = self
+            .file
+            .lock()
+            .map_err(|_| io::Error::other("console output lock poisoned"))?;
+        self.write_segments_raw(&mut *file, &[segment])
+    }
+
+    /// Show or hide the cursor.
+    pub fn show_cursor(&self, show: bool) -> io::Result<()> {
+        let control = if show {
+            ControlCode::new(ControlType::ShowCursor)
+        } else {
+            ControlCode::new(ControlType::HideCursor)
+        };
+        self.write_control_codes(vec![control])
+    }
+
+    /// Enable or disable the alternate screen buffer.
+    pub fn set_alt_screen(&self, enable: bool) -> io::Result<()> {
+        let control = if enable {
+            ControlCode::new(ControlType::EnableAltScreen)
+        } else {
+            ControlCode::new(ControlType::DisableAltScreen)
+        };
+        self.write_control_codes(vec![control])
+    }
+
     /// Enable recording mode.
     pub fn begin_capture(&mut self) {
-        self.record.set(true);
-        self.buffer.borrow_mut().clear();
+        self.record.store(true, Ordering::Relaxed);
+        if let Ok(mut buffer) = self.buffer.lock() {
+            buffer.clear();
+        }
     }
 
     /// End recording and return captured segments.
     pub fn end_capture(&mut self) -> Vec<Segment<'static>> {
-        self.record.set(false);
-        std::mem::take(&mut *self.buffer.borrow_mut())
+        self.record.store(false, Ordering::Relaxed);
+        self.buffer
+            .lock()
+            .map(|mut buffer| std::mem::take(&mut *buffer))
+            .unwrap_or_default()
     }
 
     /// Print styled text to the console.
@@ -490,20 +618,27 @@ impl Console {
 
     /// Print a prepared Text object.
     pub fn print_text(&self, text: &Text) {
-        let mut file = self.file.borrow_mut();
-        let _ = self.print_text_to(&mut *file, text);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = self.print_text_to(&mut *file, text);
+        }
     }
 
     /// Print a prepared Text object to a specific writer.
     pub fn print_text_to<W: Write>(&self, writer: &mut W, text: &Text) -> io::Result<()> {
-        let segments = text.render(&text.end);
-        self.write_segments(writer, &segments)
+        let segments: Vec<Segment<'static>> = text
+            .render(&text.end)
+            .into_iter()
+            .map(Segment::into_owned)
+            .collect();
+        let segments = self.apply_render_hooks(segments);
+        self.write_segments_raw(writer, &segments)
     }
 
     /// Print prepared segments.
     pub fn print_segments(&self, segments: &[Segment<'_>]) {
-        let mut file = self.file.borrow_mut();
-        let _ = self.print_segments_to(&mut *file, segments);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = self.print_segments_to(&mut *file, segments);
+        }
     }
 
     /// Print prepared segments to a specific writer.
@@ -512,7 +647,10 @@ impl Console {
         writer: &mut W,
         segments: &[Segment<'_>],
     ) -> io::Result<()> {
-        self.write_segments(writer, segments)
+        let owned: Vec<Segment<'static>> =
+            segments.iter().cloned().map(Segment::into_owned).collect();
+        let processed = self.apply_render_hooks(owned);
+        self.write_segments_raw(writer, &processed)
     }
 
     /// Print any object implementing the Renderable trait.
@@ -524,9 +662,10 @@ impl Console {
 
     /// Print with custom options.
     pub fn print_with_options(&self, content: &str, options: &PrintOptions) {
-        let mut file = self.file.borrow_mut();
-        self.print_to(&mut *file, content, options)
-            .expect("failed to write to output stream");
+        if let Ok(mut file) = self.file.lock() {
+            self.print_to(&mut *file, content, options)
+                .expect("failed to write to output stream");
+        }
     }
 
     /// Export rendered text (no ANSI) using default print options.
@@ -550,6 +689,20 @@ impl Console {
         Self::segments_to_plain(&segments)
     }
 
+    /// Export recorded output to HTML.
+    #[must_use]
+    pub fn export_html(&self, clear: bool) -> String {
+        let segments = self.recorded_segments(clear);
+        export_segments_to_html(&segments)
+    }
+
+    /// Export recorded output to SVG.
+    #[must_use]
+    pub fn export_svg(&self, clear: bool) -> String {
+        let segments = self.recorded_segments(clear);
+        export_segments_to_svg(&segments)
+    }
+
     /// Print to a specific writer.
     pub fn print_to<W: Write>(
         &self,
@@ -558,7 +711,8 @@ impl Console {
         options: &PrintOptions,
     ) -> io::Result<()> {
         let segments = self.render_str_segments(content, options);
-        self.write_segments(writer, &segments)
+        let segments = self.apply_render_hooks(segments);
+        self.write_segments_raw(writer, &segments)
     }
 
     fn render_str_segments(&self, content: &str, options: &PrintOptions) -> Vec<Segment<'static>> {
@@ -669,19 +823,50 @@ impl Console {
         output
     }
 
-    /// Write segments to a writer.
-    fn write_segments<W: Write>(&self, writer: &mut W, segments: &[Segment<'_>]) -> io::Result<()> {
-        if self.record.get() {
-            self.buffer
-                .borrow_mut()
-                .extend(segments.iter().map(|s| s.clone().into_owned()));
+    fn recorded_segments(&self, clear: bool) -> Vec<Segment<'static>> {
+        let Ok(mut buffer) = self.buffer.lock() else {
+            return Vec::new();
+        };
+        let segments = buffer.clone();
+        if clear {
+            buffer.clear();
+        }
+        segments
+    }
+
+    fn apply_render_hooks(&self, segments: Vec<Segment<'static>>) -> Vec<Segment<'static>> {
+        let hooks = self
+            .render_hooks
+            .lock()
+            .map(|hooks| hooks.clone())
+            .unwrap_or_default();
+        if hooks.is_empty() {
+            return segments;
+        }
+        let mut current = segments;
+        for hook in hooks {
+            current = hook.process(self, &current);
+        }
+        current
+    }
+
+    /// Write segments to a writer without invoking render hooks.
+    fn write_segments_raw<W: Write>(
+        &self,
+        writer: &mut W,
+        segments: &[Segment<'_>],
+    ) -> io::Result<()> {
+        if self.record.load(Ordering::Relaxed)
+            && let Ok(mut buffer) = self.buffer.lock()
+        {
+            buffer.extend(segments.iter().cloned().map(Segment::into_owned));
         }
 
         let color_system = self.color_system();
 
         for segment in segments {
             if segment.is_control() {
-                self.write_control_codes(writer, segment)?;
+                self.write_control_segment(writer, segment)?;
                 continue;
             }
 
@@ -707,7 +892,7 @@ impl Console {
         writer.flush()
     }
 
-    fn write_control_codes<W: Write>(
+    fn write_control_segment<W: Write>(
         &self,
         writer: &mut W,
         segment: &Segment<'_>,
@@ -784,8 +969,9 @@ impl Console {
 
     /// Print a blank line.
     pub fn line(&self) {
-        let mut file = self.file.borrow_mut();
-        let _ = writeln!(file);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = writeln!(file);
+        }
     }
 
     /// Print a rule (horizontal line).
@@ -793,7 +979,9 @@ impl Console {
         let width = self.width();
         let line_char = if self.safe_box { '-' } else { '\u{2500}' };
 
-        let mut file = self.file.borrow_mut();
+        let Ok(mut file) = self.file.lock() else {
+            return;
+        };
         if let Some(title) = title {
             // Ensure title fits within width, accounting for 2 spaces padding
             let max_title_width = width.saturating_sub(2);
@@ -821,26 +1009,30 @@ impl Console {
 
     /// Clear the screen.
     pub fn clear(&self) {
-        let mut file = self.file.borrow_mut();
-        let _ = terminal::control::clear_screen(&mut *file);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = terminal::control::clear_screen(&mut *file);
+        }
     }
 
     /// Clear the current line.
     pub fn clear_line(&self) {
-        let mut file = self.file.borrow_mut();
-        let _ = terminal::control::clear_line(&mut *file);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = terminal::control::clear_line(&mut *file);
+        }
     }
 
     /// Set the terminal title.
     pub fn set_title(&self, title: &str) {
-        let mut file = self.file.borrow_mut();
-        let _ = terminal::control::set_title(&mut *file, title);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = terminal::control::set_title(&mut *file, title);
+        }
     }
 
     /// Ring the terminal bell.
     pub fn bell(&self) {
-        let mut file = self.file.borrow_mut();
-        let _ = terminal::control::bell(&mut *file);
+        if let Ok(mut file) = self.file.lock() {
+            let _ = terminal::control::bell(&mut *file);
+        }
     }
 
     /// Print text without parsing markup.
@@ -867,18 +1059,19 @@ impl Console {
             LogLevel::Error => ("[ERROR]", Style::parse("bold red").unwrap_or_default()),
         };
 
-        let mut file = self.file.borrow_mut();
-        let _ = self.print_to(
-            &mut *file,
-            prefix,
-            &PrintOptions::new().with_markup(false).with_style(style),
-        );
-        let _ = write!(file, " ");
-        let _ = self.print_to(
-            &mut *file,
-            message,
-            &PrintOptions::new().with_markup(self.markup),
-        );
+        if let Ok(mut file) = self.file.lock() {
+            let _ = self.print_to(
+                &mut *file,
+                prefix,
+                &PrintOptions::new().with_markup(false).with_style(style),
+            );
+            let _ = write!(file, " ");
+            let _ = self.print_to(
+                &mut *file,
+                message,
+                &PrintOptions::new().with_markup(self.markup),
+            );
+        }
     }
 }
 
@@ -916,6 +1109,149 @@ fn control_title(segment: &Segment<'_>, control: &crate::segment::ControlCode) -
     }
 
     if title.is_empty() { None } else { Some(title) }
+}
+
+fn export_segments_to_html(segments: &[Segment<'_>]) -> String {
+    let body = export_segments_to_html_body(segments);
+    format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{body}</body></html>")
+}
+
+fn export_segments_to_svg(segments: &[Segment<'_>]) -> String {
+    let (width_cells, height_cells) = segments_shape(segments);
+    let cell_width = 8usize;
+    let cell_height = 16usize;
+    let width_px = width_cells.saturating_mul(cell_width);
+    let height_px = height_cells.saturating_mul(cell_height);
+    let body = export_segments_to_html_body(segments);
+
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width_px}\" height=\"{height_px}\">\
+<foreignObject width=\"100%\" height=\"100%\">{body}</foreignObject></svg>"
+    )
+}
+
+fn export_segments_to_html_body(segments: &[Segment<'_>]) -> String {
+    let mut html = String::new();
+    html.push_str("<pre style=\"margin:0; font-family: monospace;\">");
+    for segment in segments {
+        if segment.is_control() {
+            continue;
+        }
+        let text = escape_html(segment.text.as_ref());
+        if let Some(style) = &segment.style {
+            let css = style_to_css(style);
+            if let Some(link) = &style.link {
+                let href = escape_attr(link);
+                if css.is_empty() {
+                    let _ = FmtWrite::write_fmt(
+                        &mut html,
+                        format_args!("<a href=\"{href}\">{text}</a>"),
+                    );
+                } else {
+                    let _ = FmtWrite::write_fmt(
+                        &mut html,
+                        format_args!("<a href=\"{href}\" style=\"{css}\">{text}</a>"),
+                    );
+                }
+            } else if css.is_empty() {
+                html.push_str(&text);
+            } else {
+                let _ = FmtWrite::write_fmt(
+                    &mut html,
+                    format_args!("<span style=\"{css}\">{text}</span>"),
+                );
+            }
+        } else {
+            html.push_str(&text);
+        }
+    }
+    html.push_str("</pre>");
+    html
+}
+
+fn segments_shape(segments: &[Segment<'_>]) -> (usize, usize) {
+    let lines = crate::segment::split_lines(segments.iter().cloned().map(Segment::into_owned));
+    let mut max_width = 0usize;
+    for line in &lines {
+        let width: usize = line.iter().map(Segment::cell_length).sum();
+        if width > max_width {
+            max_width = width;
+        }
+    }
+    (max_width, lines.len())
+}
+
+fn style_to_css(style: &Style) -> String {
+    if style.is_null() {
+        return String::new();
+    }
+
+    let mut fg = style.color.as_ref().map(|c| c.get_truecolor().hex());
+    let mut bg = style.bgcolor.as_ref().map(|c| c.get_truecolor().hex());
+
+    if style.attributes.contains(Attributes::REVERSE) {
+        std::mem::swap(&mut fg, &mut bg);
+    }
+
+    let mut css = String::new();
+    if let Some(color) = fg {
+        let _ = FmtWrite::write_fmt(&mut css, format_args!("color:{color};"));
+    }
+    if let Some(color) = bg {
+        let _ = FmtWrite::write_fmt(&mut css, format_args!("background-color:{color};"));
+    }
+    if style.attributes.contains(Attributes::BOLD) {
+        css.push_str("font-weight:bold;");
+    }
+    if style.attributes.contains(Attributes::ITALIC) {
+        css.push_str("font-style:italic;");
+    }
+
+    let mut decorations = Vec::new();
+    if style
+        .attributes
+        .contains(Attributes::UNDERLINE | Attributes::UNDERLINE2)
+    {
+        decorations.push("underline");
+    }
+    if style.attributes.contains(Attributes::STRIKE) {
+        decorations.push("line-through");
+    }
+    if style.attributes.contains(Attributes::OVERLINE) {
+        decorations.push("overline");
+    }
+    if !decorations.is_empty() {
+        let _ = FmtWrite::write_fmt(
+            &mut css,
+            format_args!("text-decoration:{};", decorations.join(" ")),
+        );
+    }
+
+    if style.attributes.contains(Attributes::DIM) {
+        css.push_str("opacity:0.7;");
+    }
+
+    css
+}
+
+fn escape_html(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+fn escape_attr(text: &str) -> String {
+    escape_html(text)
 }
 
 /// Log level for `console.log()`.
@@ -1070,7 +1406,7 @@ impl ConsoleBuilder {
             console.safe_box = sb;
         }
         if let Some(f) = self.file {
-            console.file = RefCell::new(f);
+            console.file = Mutex::new(f);
         }
 
         console
@@ -1271,6 +1607,43 @@ mod tests {
         let output = console.export_renderable_text(&rule);
         assert!(output.contains("Title"));
         assert!(output.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_export_html_svg_capture() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let mut console = Console::builder()
+            .markup(false)
+            .file(Box::new(buffer))
+            .build();
+
+        console.begin_capture();
+        console.print_plain("Hello");
+
+        let html = console.export_html(false);
+        assert!(html.contains("<pre"));
+        assert!(html.contains("Hello"));
+
+        let svg = console.export_svg(true);
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("Hello"));
+
+        let cleared = console.export_html(false);
+        assert!(!cleared.contains("Hello"));
     }
 
     #[test]

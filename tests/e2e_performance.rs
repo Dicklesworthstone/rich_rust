@@ -196,7 +196,10 @@ fn perf_large_table_100x10() {
 
     // Verify rendering produced output
     let output: String = segments.iter().map(|s| s.text.as_ref()).collect();
-    assert!(!output.is_empty(), "Table should produce output");
+    assert!(
+        output.contains("Column 1") && output.contains("Row 1 Col 1"),
+        "Rendered table should include headers and cell values"
+    );
 
     tracing::info!(
         rows = 100,
@@ -222,7 +225,10 @@ fn perf_large_table_500x20() {
     let elapsed = start.elapsed();
 
     let output: String = segments.iter().map(|s| s.text.as_ref()).collect();
-    assert!(!output.is_empty(), "Table should produce output");
+    assert!(
+        output.contains("Column 1") && output.contains("Row 1 Col 1"),
+        "Rendered table should include headers and cell values"
+    );
 
     tracing::info!(
         rows = 500,
@@ -333,7 +339,10 @@ fn perf_text_wrap_10000_chars() {
         "Text wrapping complete"
     );
 
-    assert!(!wrapped.is_empty(), "Should produce wrapped lines");
+    assert!(
+        !wrapped.is_empty() && wrapped.iter().all(|line| line.cell_len() <= 80),
+        "Wrapped lines should be non-empty and respect the width constraint"
+    );
     assert_perf_within_threshold("text_wrap_10000_chars_ms", elapsed.as_millis());
 }
 
@@ -356,7 +365,10 @@ fn perf_text_wrap_50000_chars() {
         "Large text wrapping complete"
     );
 
-    assert!(!wrapped.is_empty(), "Should produce wrapped lines");
+    assert!(
+        !wrapped.is_empty() && wrapped.iter().all(|line| line.cell_len() <= 80),
+        "Wrapped lines should be non-empty and respect the width constraint"
+    );
     assert_perf_within_threshold("text_wrap_50000_chars_ms", elapsed.as_millis());
 }
 

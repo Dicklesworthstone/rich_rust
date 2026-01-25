@@ -44,11 +44,8 @@ fn test_text_types_are_send_sync() {
 
 #[test]
 fn test_console_types_are_send_sync() {
-    // Console is Send but NOT Sync due to RefCell<Box<dyn Write + Send>> for output stream.
-    // This is intentional - Console is designed for single-threaded usage.
-    // Use Arc<Mutex<Console>> if thread-safe access is needed.
-    fn assert_send<T: Send>() {}
-    assert_send::<Console>();
+    // Console is Send + Sync; output stream is guarded by a Mutex.
+    assert_send_sync::<Console>();
     assert_send_sync::<ConsoleOptions>();
 }
 
@@ -71,6 +68,7 @@ fn test_renderable_types_are_send_sync() {
     assert_send_sync::<Rule>();
     assert_send_sync::<Panel>();
     assert_send_sync::<Table>();
+    assert_send_sync::<Layout>();
     assert_send_sync::<Column>();
     assert_send_sync::<Row>();
     assert_send_sync::<Cell>();

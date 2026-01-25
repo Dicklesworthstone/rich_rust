@@ -98,6 +98,7 @@ pub trait Renderable {
 
 pub mod align;
 pub mod columns;
+pub mod layout;
 pub mod padding;
 pub mod panel;
 pub mod progress;
@@ -108,6 +109,7 @@ pub mod tree;
 // Re-export commonly used types
 pub use align::{Align, AlignLines, AlignMethod, VerticalAlignMethod, align_text};
 pub use columns::Columns;
+pub use layout::{Layout, LayoutSplitter, Region};
 pub use padding::{Padding, PaddingDimensions};
 pub use panel::Panel;
 pub use progress::{BarStyle, ProgressBar, Spinner};

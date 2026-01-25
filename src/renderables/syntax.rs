@@ -83,6 +83,7 @@
 //! - **Large files**: Rendering very large files may be slow due to per-line highlighting.
 //! - **Word wrap**: The `word_wrap` option is defined but not yet fully implemented.
 
+use crate::cells;
 use crate::color::Color;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -336,7 +337,7 @@ impl Syntax {
     /// # Errors
     ///
     /// Returns an error if the theme or language is not found.
-    pub fn render(&self, _max_width: Option<usize>) -> Result<Vec<Segment<'_>>, SyntaxError> {
+    pub fn render(&self, max_width: Option<usize>) -> Result<Vec<Segment<'_>>, SyntaxError> {
         let ps = &*SYNTAX_SET;
         let ts = &*THEME_SET;
 
@@ -442,7 +443,11 @@ impl Syntax {
             segments.push(Segment::new("\n", None));
         }
 
-        Ok(segments)
+        if let Some(width) = max_width.filter(|value| *value > 0) {
+            Ok(pad_segments_to_width(segments, width))
+        } else {
+            Ok(segments)
+        }
     }
 
     /// Convert syntect style to rich Style.
@@ -489,6 +494,54 @@ impl Syntax {
     pub fn plain_text(&self) -> String {
         self.code.clone()
     }
+}
+
+fn pad_segments_to_width<'a>(segments: Vec<Segment<'a>>, width: usize) -> Vec<Segment<'a>> {
+    let mut padded = Vec::new();
+    let mut line_width = 0usize;
+
+    for segment in segments {
+        if segment.is_control() {
+            padded.push(segment);
+            continue;
+        }
+
+        let style = segment.style.clone();
+        let text = segment.text;
+        let text_ref = text.as_ref();
+        let mut start = 0usize;
+
+        for (idx, ch) in text_ref.char_indices() {
+            if ch == '\n' {
+                let part = &text_ref[start..idx];
+                if !part.is_empty() {
+                    padded.push(Segment::new(part.to_string(), style.clone()));
+                    line_width += cells::cell_len(part);
+                }
+                if line_width < width {
+                    padded.push(Segment::new(" ".repeat(width - line_width), None));
+                }
+                padded.push(Segment::line());
+                line_width = 0;
+                start = idx + 1;
+            }
+        }
+
+        let tail = &text_ref[start..];
+        if !tail.is_empty() {
+            padded.push(Segment::new(tail.to_string(), style));
+            line_width += cells::cell_len(tail);
+        }
+    }
+
+    if line_width > 0 {
+        if line_width < width {
+            padded.push(Segment::new(" ".repeat(width - line_width), None));
+        }
+        padded.push(Segment::line());
+    }
+
+    padded
 }
 
 #[cfg(test)]

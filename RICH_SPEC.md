@@ -23,6 +23,10 @@
 13. [Text Wrapping](#13-text-wrapping)
 14. [Ratio Distribution](#14-ratio-distribution)
 15. [Exclusions](#15-exclusions)
+16. [Live Display System](#16-live-display-system)
+17. [Layout System](#17-layout-system)
+18. [Logging Handler Integration](#18-logging-handler-integration)
+19. [HTML/SVG Export](#19-htmlsvg-export)
 
 ---
 
@@ -2754,25 +2758,1944 @@ fn ratio_distribute(
 
 ---
 
-## 15. Exclusions
+## 15. Exclusions and Not-Yet-Implemented Features
 
-The following are explicitly **NOT** being ported:
+This section is the authoritative scope boundary. It separates **out-of-scope**
+features (not planned) from **planned-but-not-yet-implemented** features.
+
+### 15.1 Out of Scope (Not Planned)
 
 | Feature | Reason |
 |---------|--------|
 | Jupyter/IPython integration | Python-specific |
 | `inspect` module | Python runtime reflection |
 | `traceback` module | Python exception handling |
-| `logging` handler | Python stdlib integration |
 | Legacy Windows (cmd.exe) | Use modern VT sequences via crossterm |
 | Emoji code database (`:smile:`) | Use native unicode |
-| Theme .ini files | Code-defined themes only |
-| Progress bars | Separate concern, Phase 2+ |
-| Live display | Separate concern, Phase 2+ |
-| Syntax highlighting | Use syntect, Phase 2+ |
-| Markdown rendering | Use pulldown-cmark, Phase 2+ |
+| Theme `.ini` files | Code-defined themes only |
+| Input widgets | Out of scope for this output-focused library |
 | Pretty-printing Python objects | Python-specific |
-| Console file export (HTML/SVG) | Phase 2+ |
+
+### 15.2 Implemented (With Notes)
+
+| Feature | Status |
+|---------|--------|
+| Live display (`Live`) | Implemented (stdout/stderr redirection is best-effort; no Jupyter integration) |
+| Layout engine (`Layout`) | Implemented (ratio splits + named lookup; no render-map caching) |
+| Logging handler integration | Implemented (`RichLogger` for `log` crate; no traceback rendering) |
+| Console export (HTML/SVG) | Implemented (minimal HTML/SVG export; no full theme templates) |
+
+### 15.3 Implemented (No Longer Excluded)
+
+The following were previously listed as Phase 2+ items and are **now implemented**
+in `rich_rust` (some behind feature flags):
+
+- Progress bars & spinners (`renderables::progress`)
+- Syntax highlighting (feature `syntax`, `renderables::syntax`)
+- Markdown rendering (feature `markdown`, `renderables::markdown`)
+- JSON pretty-printing (feature `json`, `renderables::json`)
+
+---
+
+## 16. Live Display System
+
+> Source: `rich/live.py` (401 lines), `rich/live_render.py` (107 lines)
+
+The `Live` class provides auto-updating display of renderables with cursor manipulation
+and screen refresh. It's the foundation for progress bars, status spinners, and any
+dynamic terminal UI.
+
+**Implementation note (Rust):** `src/live.rs` implements Live with nested Live stacking,
+alternate screen support, overflow handling, and an auto-refresh thread. Stdout/stderr
+redirection is **best-effort only** (console output is intercepted; global IO redirection
+is not performed). Use `Live::stdout_proxy()` / `Live::stderr_proxy()` to route external
+writes through the Console. Jupyter-specific behavior is not supported.
+
+### 16.1 Data Structures
+
+#### VerticalOverflowMethod
+
+```rust
+enum VerticalOverflowMethod {
+    Crop,      // Truncate lines that exceed terminal height
+    Ellipsis,  // Show "..." indicator for overflow
+    Visible,   // Allow content to overflow (used on final render)
+}
+```
+
+#### Live Configuration
+
+```rust
+struct Live {
+    // Core state
+    renderable: Option<Box<dyn Renderable>>,
+    console: Console,
+    started: bool,
+    nested: bool,                              // True if nested inside another Live
+
+    // Display options
+    screen: bool,                              // Use alternate screen buffer
+    alt_screen: bool,                          // Alternate screen is currently active
+    transient: bool,                           // Clear output on exit (auto-true if screen=true)
+    vertical_overflow: VerticalOverflowMethod, // Default: Ellipsis
+
+    // Refresh control
+    auto_refresh: bool,                        // Default: true
+    refresh_per_second: f64,                   // Default: 4.0
+    refresh_thread: Option<RefreshThread>,
+
+    // I/O redirection
+    redirect_stdout: bool,                     // Default: true
+    redirect_stderr: bool,                     // Default: true
+    restore_stdout: Option<Box<dyn Write>>,
+    restore_stderr: Option<Box<dyn Write>>,
+
+    // Internal
+    lock: RwLock<()>,                          // Thread-safe refresh
+    live_render: LiveRender,
+    get_renderable: Option<Box<dyn Fn() -> Box<dyn Renderable>>>,
+}
+```
+
+### 16.2 Constructor Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `renderable` | `Option<RenderableType>` | `None` | Initial content to display |
+| `console` | `Option<Console>` | Global console | Target console for output |
+| `screen` | `bool` | `false` | Use alternate screen mode |
+| `auto_refresh` | `bool` | `true` | Enable automatic refresh thread |
+| `refresh_per_second` | `f64` | `4.0` | Refresh rate (must be > 0) |
+| `transient` | `bool` | `false` | Clear display on exit |
+| `redirect_stdout` | `bool` | `true` | Redirect stdout through console |
+| `redirect_stderr` | `bool` | `true` | Redirect stderr through console |
+| `vertical_overflow` | `VerticalOverflowMethod` | `Ellipsis` | Overflow handling |
+| `get_renderable` | `Option<Fn() -> Renderable>` | `None` | Dynamic content callback |
+
+**Validation:**
+- `refresh_per_second` must be > 0 (assertion in Python)
+- If `screen=true`, `transient` is forced to `true`
+
+### 16.3 Refresh Thread
+
+When `auto_refresh=true`, a daemon thread periodically calls `refresh()`:
+
+```rust
+struct RefreshThread {
+    live: Arc<Live>,
+    refresh_per_second: f64,
+    done: AtomicBool,
+}
+
+impl RefreshThread {
+    fn run(&self) {
+        let interval = Duration::from_secs_f64(1.0 / self.refresh_per_second);
+        while !self.done.load(Ordering::Relaxed) {
+            thread::sleep(interval);
+            if !self.done.load(Ordering::Relaxed) {
+                self.live.refresh();
+            }
+        }
+    }
+
+    fn stop(&self) {
+        self.done.store(true, Ordering::Relaxed);
+    }
+}
+```
+
+### 16.4 Lifecycle: start() and stop()
+
+#### start() Sequence
+
+```rust
+fn start(&mut self, refresh: bool) {
+    if self.started { return; }
+    self.started = true;
+
+    // 1. Register with console (returns false if already has active Live)
+    if !self.console.set_live(self) {
+        self.nested = true;
+        return;  // Nested Live delegates to parent
+    }
+
+    // 2. Enable alternate screen if requested
+    if self.screen {
+        self.alt_screen = self.console.set_alt_screen(true);
+    }
+
+    // 3. Hide cursor
+    self.console.show_cursor(false);
+
+    // 4. Enable I/O redirection
+    self.enable_redirect_io();
+
+    // 5. Push render hook for output interception
+    self.console.push_render_hook(self);
+
+    // 6. Initial refresh (optional, if renderable provided)
+    if refresh {
+        if let Err(e) = self.refresh() {
+            self.stop();  // Clean up on error
+            return Err(e);
+        }
+    }
+
+    // 7. Start refresh thread
+    if self.auto_refresh {
+        self.refresh_thread = Some(RefreshThread::new(self, self.refresh_per_second));
+        self.refresh_thread.as_ref().unwrap().start();
+    }
+}
+```
+
+#### stop() Sequence
+
+```rust
+fn stop(&mut self) {
+    if !self.started { return; }
+    self.started = false;
+
+    // 1. Clear console's live reference
+    self.console.clear_live();
+
+    // 2. Handle nested case
+    if self.nested {
+        if !self.transient {
+            self.console.print(&self.renderable);
+        }
+        return;
+    }
+
+    // 3. Stop refresh thread
+    if self.auto_refresh {
+        if let Some(thread) = self.refresh_thread.take() {
+            thread.stop();
+        }
+    }
+
+    // 4. Final render with full overflow visibility
+    self.vertical_overflow = VerticalOverflowMethod::Visible;
+
+    // 5. Clean up
+    if !self.alt_screen && !self.console.is_jupyter() {
+        self.refresh();
+    }
+
+    self.disable_redirect_io();
+    self.console.pop_render_hook();
+
+    if !self.alt_screen && self.console.is_terminal() {
+        self.console.line();  // Add final newline
+    }
+
+    self.console.show_cursor(true);
+
+    if self.alt_screen {
+        self.console.set_alt_screen(false);
+    }
+
+    // 6. Clear transient output
+    if self.transient && !self.alt_screen {
+        self.console.control(self.live_render.restore_cursor());
+    }
+}
+```
+
+### 16.5 Context Manager Usage
+
+```rust
+impl Live {
+    fn enter(&mut self) -> &mut Self {
+        self.start(self.renderable.is_some());
+        self
+    }
+
+    fn exit(&mut self) {
+        self.stop();
+    }
+}
+
+// Usage:
+// with Live(table) as live:
+//     live.update(new_table)
+```
+
+### 16.6 LiveRender: Cursor Positioning
+
+`LiveRender` tracks the rendered shape for cursor restoration:
+
+```rust
+struct LiveRender {
+    renderable: Box<dyn Renderable>,
+    style: Style,
+    vertical_overflow: VerticalOverflowMethod,
+    shape: Option<(usize, usize)>,  // (width, height) of last render
+}
+
+impl LiveRender {
+    /// Generate control codes to position cursor at render start
+    fn position_cursor(&self) -> Control {
+        if let Some((_, height)) = self.shape {
+            Control::new(vec![
+                ControlCode::CarriageReturn,
+                ControlCode::EraseInLine(2),
+                // Move up and erase for each line
+                ...(0..height-1).flat_map(|_| vec![
+                    ControlCode::CursorUp(1),
+                    ControlCode::EraseInLine(2),
+                ])
+            ])
+        } else {
+            Control::new(vec![])
+        }
+    }
+
+    /// Generate control codes to clear render and restore cursor
+    fn restore_cursor(&self) -> Control {
+        if let Some((_, height)) = self.shape {
+            Control::new(vec![
+                ControlCode::CarriageReturn,
+                ...(0..height).flat_map(|_| vec![
+                    ControlCode::CursorUp(1),
+                    ControlCode::EraseInLine(2),
+                ])
+            ])
+        } else {
+            Control::new(vec![])
+        }
+    }
+}
+```
+
+### 16.7 Rendering with Overflow Handling
+
+```rust
+impl Renderable for LiveRender {
+    fn rich_console(&self, console: &Console, options: &ConsoleOptions) -> Vec<RenderItem> {
+        let lines = console.render_lines(&*self.renderable, options, Some(&self.style), false);
+        let shape = Segment::get_shape(&lines);
+        let (_, height) = shape;
+
+        let mut result_lines = lines;
+
+        // Handle overflow
+        if height > options.size.height {
+            match self.vertical_overflow {
+                VerticalOverflowMethod::Crop => {
+                    result_lines = result_lines[..options.size.height].to_vec();
+                }
+                VerticalOverflowMethod::Ellipsis => {
+                    result_lines = result_lines[..options.size.height - 1].to_vec();
+                    let ellipsis = Text::new("...")
+                        .overflow(OverflowMethod::Crop)
+                        .justify(JustifyMethod::Center)
+                        .style_name("live.ellipsis");
+                    result_lines.push(console.render(&ellipsis));
+                }
+                VerticalOverflowMethod::Visible => {
+                    // Allow overflow (used for final render)
+                }
+            }
+        }
+
+        // Update shape for cursor positioning
+        self.shape = Some(Segment::get_shape(&result_lines));
+
+        // Yield lines with newlines
+        let mut segments = Vec::new();
+        for (idx, line) in result_lines.iter().enumerate() {
+            segments.extend(line.clone());
+            if idx < result_lines.len() - 1 {
+                segments.push(Segment::line());
+            }
+        }
+        segments
+    }
+}
+```
+
+### 16.8 Console Integration: RenderHook
+
+Live implements `RenderHook` to intercept all console output:
+
+```rust
+trait RenderHook {
+    fn process_renderables(&self, renderables: Vec<ConsoleRenderable>) -> Vec<ConsoleRenderable>;
+}
+
+impl RenderHook for Live {
+    fn process_renderables(&self, renderables: Vec<ConsoleRenderable>) -> Vec<ConsoleRenderable> {
+        self.live_render.vertical_overflow = self.vertical_overflow;
+
+        if self.console.is_interactive() {
+            // Active terminal: prepend cursor reset, append live render
+            let reset = if self.alt_screen {
+                Control::home()
+            } else {
+                self.live_render.position_cursor()
+            };
+            vec![reset, ...renderables, self.live_render.clone()]
+        } else if !self.started && !self.transient {
+            // Non-TTY final output
+            vec![...renderables, self.live_render.clone()]
+        } else {
+            renderables
+        }
+    }
+}
+```
+
+### 16.9 Nested Live Handling
+
+Multiple Live instances can be active simultaneously via the Console's `_live_stack`:
+
+```rust
+// In Console:
+struct Console {
+    live_stack: Vec<Arc<Live>>,
+    // ...
+}
+
+impl Console {
+    fn set_live(&mut self, live: &Live) -> bool {
+        if self.live_stack.is_empty() {
+            self.live_stack.push(Arc::new(live.clone()));
+            true  // First Live, proceed normally
+        } else {
+            self.live_stack.push(Arc::new(live.clone()));
+            false // Nested Live
+        }
+    }
+
+    fn clear_live(&mut self) {
+        self.live_stack.pop();
+    }
+}
+
+// In Live.renderable property:
+fn renderable(&self) -> Box<dyn Renderable> {
+    let live_stack = &self.console.live_stack;
+    if !live_stack.is_empty() && Arc::ptr_eq(&live_stack[0], &Arc::new(self)) {
+        // First Live renders entire stack as Group
+        Group::new(live_stack.iter().map(|l| l.get_renderable()).collect())
+    } else {
+        self.get_renderable()
+    }
+}
+```
+
+### 16.10 I/O Redirection
+
+When active, Live intercepts stdout/stderr to prevent output from disrupting the display:
+
+```rust
+struct FileProxy {
+    console: Console,
+    original: Box<dyn Write>,
+}
+
+impl Write for FileProxy {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Route through console which handles cursor positioning
+        let text = String::from_utf8_lossy(buf);
+        self.console.print(&text);
+        Ok(buf.len())
+    }
+}
+
+impl Live {
+    fn enable_redirect_io(&mut self) {
+        if self.console.is_terminal() || self.console.is_jupyter() {
+            if self.redirect_stdout {
+                self.restore_stdout = Some(io::stdout());
+                // Redirect stdout to FileProxy
+            }
+            if self.redirect_stderr {
+                self.restore_stderr = Some(io::stderr());
+                // Redirect stderr to FileProxy
+            }
+        }
+    }
+
+    fn disable_redirect_io(&mut self) {
+        if let Some(stdout) = self.restore_stdout.take() {
+            // Restore original stdout
+        }
+        if let Some(stderr) = self.restore_stderr.take() {
+            // Restore original stderr
+        }
+    }
+}
+```
+
+### 16.11 update() and refresh()
+
+```rust
+impl Live {
+    /// Update the renderable content
+    fn update(&mut self, renderable: impl Into<RenderableType>, refresh: bool) {
+        let renderable = renderable.into();
+
+        // Convert string to Text if needed
+        let renderable = if let RenderableType::String(s) = renderable {
+            self.console.render_str(&s)
+        } else {
+            renderable
+        };
+
+        let _guard = self.lock.write();
+        self.renderable = Some(Box::new(renderable));
+
+        if refresh {
+            self.refresh();
+        }
+    }
+
+    /// Refresh the display
+    fn refresh(&self) {
+        let _guard = self.lock.read();
+        self.live_render.set_renderable(self.renderable());
+
+        if self.nested {
+            // Delegate to parent Live
+            if let Some(parent) = self.console.live_stack.first() {
+                parent.refresh();
+            }
+            return;
+        }
+
+        if self.console.is_terminal() && !self.console.is_dumb_terminal() {
+            self.console.print(Control::new(vec![]));  // Triggers render hook
+        } else if !self.started && !self.transient {
+            // Non-TTY or dumb terminal: allow final output
+            self.console.print(Control::new(vec![]));
+        }
+    }
+}
+```
+
+### 16.12 Non-TTY and Dumb Terminal Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Interactive TTY | Full live updating with cursor positioning |
+| Non-interactive (piped) | No live updates; final render only if `transient=false` |
+| Dumb terminal | No live updates; final render only if `transient=false` |
+| Jupyter | IPython widget display with `clear_output(wait=True)` |
+
+### 16.13 Alternate Screen Mode
+
+When `screen=true`, Live uses the alternate screen buffer:
+
+- On start: `set_alt_screen(true)` switches to alternate buffer
+- Cursor positioning uses `Control::home()` instead of `position_cursor()`
+- On stop: `set_alt_screen(false)` restores primary buffer
+- `transient` is forced to `true` (alternate screen is always cleared)
+
+### 16.14 Default Styles
+
+| Style Name | Purpose |
+|------------|---------|
+| `live.ellipsis` | Style for the "..." overflow indicator |
+
+### 16.15 Thread Safety
+
+- `_lock` (RLock in Python, RwLock in Rust) protects all state modifications
+- Refresh thread acquires lock before calling refresh()
+- User code calling update()/refresh() also acquires lock
+- Nested Live instances delegate refreshes atomically
+
+### 16.16 Edge Cases
+
+1. **Exception during refresh:** If initial refresh fails, `stop()` is called to clean up
+2. **Zero-height terminal:** Overflow handling still applies; content may be fully cropped
+3. **Rapid updates:** Lock ensures only one refresh at a time; missed updates are fine
+4. **Nested Live with transient parent:** Each Live tracks its own transient flag
+5. **Already started:** Calling `start()` when already started is a no-op
+6. **Already stopped:** Calling `stop()` when not started is a no-op
+
+---
+
+## 17. Layout System
+
+> Source: `rich/layout.py` (443 lines), `rich/region.py` (11 lines)
+
+The `Layout` class divides a fixed-height terminal area into rows and columns,
+enabling dashboard-style interfaces with multiple panes. It uses ratio-based
+distribution for flexible sizing.
+
+**Implementation note (Rust):** `src/renderables/layout.rs` provides ratio-based
+row/column splitting, named lookup, and placeholder rendering. It does not maintain
+an internal render-map cache or debug tree view.
+
+### 17.1 Data Structures
+
+#### Region
+
+```rust
+/// Rectangular region of the screen
+struct Region {
+    x: usize,      // Horizontal position (0 = left edge)
+    y: usize,      // Vertical position (0 = top edge)
+    width: usize,  // Width in cells
+    height: usize, // Height in lines
+}
+```
+
+#### LayoutRender
+
+```rust
+/// Result of rendering a single layout region
+struct LayoutRender {
+    region: Region,
+    render: Vec<Vec<Segment>>,  // Lines of segments
+}
+
+type RegionMap = HashMap<Layout, Region>;
+type RenderMap = HashMap<Layout, LayoutRender>;
+```
+
+#### Layout Configuration
+
+```rust
+struct Layout {
+    // Content
+    renderable: Box<dyn Renderable>,  // Content or placeholder
+    name: Option<String>,             // Identifier for lookup
+
+    // Size constraints
+    size: Option<usize>,              // Fixed size (None = flexible)
+    minimum_size: usize,              // Default: 1
+    ratio: usize,                     // Flex ratio, default: 1
+
+    // State
+    visible: bool,                    // Default: true
+    splitter: Box<dyn Splitter>,      // Row or Column, default: Column
+    children: Vec<Layout>,            // Sub-layouts
+
+    // Internal
+    render_map: RenderMap,            // Last render result
+    lock: RwLock<()>,                 // Thread safety
+}
+```
+
+### 17.2 Constructor Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `renderable` | `Option<RenderableType>` | Placeholder | Content to display |
+| `name` | `Option<String>` | `None` | Identifier for `layout["name"]` lookup |
+| `size` | `Option<usize>` | `None` | Fixed size in cells/lines |
+| `minimum_size` | `usize` | `1` | Minimum allowed size |
+| `ratio` | `usize` | `1` | Flex ratio for size distribution |
+| `visible` | `bool` | `true` | Whether to render this layout |
+
+### 17.3 Splitter Abstraction
+
+```rust
+trait Splitter {
+    fn name(&self) -> &str;
+    fn get_tree_icon(&self) -> &str;
+    fn divide(&self, children: &[Layout], region: Region) -> Vec<(Layout, Region)>;
+}
+```
+
+#### RowSplitter (Horizontal)
+
+Divides region horizontally (children side by side):
+
+```rust
+struct RowSplitter;
+
+impl Splitter for RowSplitter {
+    fn name(&self) -> &str { "row" }
+    fn get_tree_icon(&self) -> &str { "[layout.tree.row]⬌" }
+
+    fn divide(&self, children: &[Layout], region: Region) -> Vec<(Layout, Region)> {
+        let Region { x, y, width, height } = region;
+        let render_widths = ratio_resolve(width, children);  // Uses ratio algorithm
+
+        let mut result = Vec::new();
+        let mut offset = 0;
+
+        for (child, child_width) in children.iter().zip(render_widths) {
+            result.push((child.clone(), Region {
+                x: x + offset,
+                y,
+                width: child_width,
+                height,
+            }));
+            offset += child_width;
+        }
+        result
+    }
+}
+```
+
+#### ColumnSplitter (Vertical)
+
+Divides region vertically (children stacked):
+
+```rust
+struct ColumnSplitter;
+
+impl Splitter for ColumnSplitter {
+    fn name(&self) -> &str { "column" }
+    fn get_tree_icon(&self) -> &str { "[layout.tree.column]⬍" }
+
+    fn divide(&self, children: &[Layout], region: Region) -> Vec<(Layout, Region)> {
+        let Region { x, y, width, height } = region;
+        let render_heights = ratio_resolve(height, children);
+
+        let mut result = Vec::new();
+        let mut offset = 0;
+
+        for (child, child_height) in children.iter().zip(render_heights) {
+            result.push((child.clone(), Region {
+                x,
+                y: y + offset,
+                width,
+                height: child_height,
+            }));
+            offset += child_height;
+        }
+        result
+    }
+}
+```
+
+### 17.4 Edge Protocol for Ratio Resolution
+
+Layout implements the Edge protocol for ratio_resolve():
+
+```rust
+impl Edge for Layout {
+    fn size(&self) -> Option<usize> {
+        self.size  // Fixed size if set
+    }
+
+    fn ratio(&self) -> usize {
+        self.ratio  // Flex ratio
+    }
+
+    fn minimum_size(&self) -> usize {
+        self.minimum_size
+    }
+}
+```
+
+### 17.5 Split Operations
+
+```rust
+impl Layout {
+    /// Split into multiple sub-layouts
+    fn split(&mut self, layouts: Vec<impl Into<Layout>>, splitter: impl Into<Splitter>) {
+        let layouts: Vec<Layout> = layouts.into_iter()
+            .map(|l| l.into())  // Convert RenderableType to Layout if needed
+            .collect();
+
+        self.splitter = splitter.into();
+        self.children = layouts;
+    }
+
+    /// Convenience: split horizontally (row)
+    fn split_row(&mut self, layouts: Vec<impl Into<Layout>>) {
+        self.split(layouts, RowSplitter);
+    }
+
+    /// Convenience: split vertically (column)
+    fn split_column(&mut self, layouts: Vec<impl Into<Layout>>) {
+        self.split(layouts, ColumnSplitter);
+    }
+
+    /// Add to existing split
+    fn add_split(&mut self, layouts: Vec<impl Into<Layout>>) {
+        self.children.extend(layouts.into_iter().map(|l| l.into()));
+    }
+
+    /// Remove all children
+    fn unsplit(&mut self) {
+        self.children.clear();
+    }
+}
+```
+
+### 17.6 Named Layout Lookup
+
+```rust
+impl Layout {
+    /// Get layout by name (recursive search)
+    fn get(&self, name: &str) -> Option<&Layout> {
+        if self.name.as_deref() == Some(name) {
+            return Some(self);
+        }
+        for child in &self.children {
+            if let Some(found) = child.get(name) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    /// Get layout by name, panic if not found
+    fn index(&self, name: &str) -> &Layout {
+        self.get(name).unwrap_or_else(|| panic!("No layout with name {name:?}"))
+    }
+
+    /// Mutable access by name
+    fn get_mut(&mut self, name: &str) -> Option<&mut Layout> {
+        if self.name.as_deref() == Some(name) {
+            return Some(self);
+        }
+        for child in &mut self.children {
+            if let Some(found) = child.get_mut(name) {
+                return Some(found);
+            }
+        }
+        None
+    }
+}
+
+// Usage: layout["header"].update(content)
+impl Index<&str> for Layout {
+    type Output = Layout;
+    fn index(&self, name: &str) -> &Self::Output {
+        self.get(name).expect("Layout not found")
+    }
+}
+```
+
+### 17.7 Visibility Filtering
+
+The `children` property returns only visible children:
+
+```rust
+impl Layout {
+    fn children(&self) -> Vec<&Layout> {
+        self.children.iter()
+            .filter(|c| c.visible)
+            .collect()
+    }
+}
+```
+
+Hidden layouts are skipped during splitting but still exist in the tree.
+
+### 17.8 Placeholder Rendering
+
+When no renderable is set, Layout shows a placeholder panel:
+
+```rust
+struct Placeholder {
+    layout: Layout,
+    style: Style,
+}
+
+impl Renderable for Placeholder {
+    fn rich_console(&self, console: &Console, options: &ConsoleOptions) -> Vec<RenderItem> {
+        let width = options.max_width;
+        let height = options.height.unwrap_or(options.size.height);
+
+        let title = match &self.layout.name {
+            Some(name) => format!("{name:?} ({width} x {height})"),
+            None => format!("({width} x {height})"),
+        };
+
+        Panel::new(
+            Align::center(Pretty::new(&self.layout)).vertical_middle()
+        )
+        .style(self.style.clone())
+        .title(ReprHighlighter::highlight(&title))
+        .border_style(Style::parse("blue").unwrap())
+        .height(height)
+        .rich_console(console, options)
+    }
+}
+```
+
+### 17.9 Region Map Generation
+
+The `_make_region_map` method recursively assigns regions to all layouts:
+
+```rust
+impl Layout {
+    fn make_region_map(&self, width: usize, height: usize) -> RegionMap {
+        let mut stack = vec![(self, Region { x: 0, y: 0, width, height })];
+        let mut layout_regions = Vec::new();
+
+        // Depth-first traversal
+        while let Some((layout, region)) = stack.pop() {
+            layout_regions.push((layout, region));
+
+            let children = layout.children();
+            if !children.is_empty() {
+                // Divide region among children
+                for (child, child_region) in layout.splitter.divide(&children, region) {
+                    stack.push((child, child_region));
+                }
+            }
+        }
+
+        // Sort by region (top-to-bottom, left-to-right)
+        layout_regions.sort_by_key(|(_, r)| (r.y, r.x));
+        layout_regions.into_iter().collect()
+    }
+}
+```
+
+### 17.10 Rendering Algorithm
+
+```rust
+impl Layout {
+    fn render(&self, console: &Console, options: &ConsoleOptions) -> RenderMap {
+        let render_width = options.max_width;
+        let render_height = options.height.unwrap_or(console.height());
+
+        // Build region map
+        let region_map = self.make_region_map(render_width, render_height);
+
+        // Render only leaf layouts (no children)
+        let leaf_layouts: Vec<_> = region_map.iter()
+            .filter(|(layout, _)| layout.children().is_empty())
+            .collect();
+
+        let mut render_map = RenderMap::new();
+
+        for (layout, region) in leaf_layouts {
+            let lines = console.render_lines(
+                layout.renderable(),
+                &options.update_dimensions(region.width, region.height),
+            );
+            render_map.insert(layout.clone(), LayoutRender {
+                region: *region,
+                render: lines,
+            });
+        }
+
+        render_map
+    }
+}
+
+impl Renderable for Layout {
+    fn rich_console(&self, console: &Console, options: &ConsoleOptions) -> Vec<RenderItem> {
+        let _guard = self.lock.read();
+
+        let width = options.max_width.unwrap_or(console.width());
+        let height = options.height.unwrap_or(console.height());
+
+        let render_map = self.render(console, &options.update_dimensions(width, height));
+        self.render_map = render_map.clone();
+
+        // Build output buffer (height lines)
+        let mut layout_lines: Vec<Vec<Segment>> = (0..height).map(|_| Vec::new()).collect();
+
+        // Place each rendered region into the buffer
+        for LayoutRender { region, render } in render_map.values() {
+            for (row_idx, line) in render.iter().enumerate() {
+                let y = region.y + row_idx;
+                if y < height {
+                    layout_lines[y].extend(line.clone());
+                }
+            }
+        }
+
+        // Yield lines with newlines
+        let mut segments = Vec::new();
+        for line in layout_lines {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+        segments
+    }
+}
+```
+
+### 17.11 Partial Screen Refresh
+
+For efficiency, individual layouts can be refreshed without re-rendering everything:
+
+```rust
+impl Layout {
+    fn refresh_screen(&mut self, console: &Console, layout_name: &str) {
+        let _guard = self.lock.write();
+
+        let layout = self.get_mut(layout_name).expect("Layout not found");
+        let LayoutRender { region, .. } = self.render_map.get(layout).expect("Layout not rendered");
+
+        let Region { x, y, width, height } = *region;
+
+        // Re-render just this layout
+        let lines = console.render_lines(
+            layout.renderable(),
+            &console.options.update_dimensions(width, height),
+        );
+
+        // Update render map
+        self.render_map.insert(layout.clone(), LayoutRender {
+            region: *region,
+            render: lines.clone(),
+        });
+
+        // Write directly to screen at position
+        console.update_screen_lines(&lines, x, y);
+    }
+}
+```
+
+### 17.12 Update Content
+
+```rust
+impl Layout {
+    fn update(&mut self, renderable: impl Into<RenderableType>) {
+        let _guard = self.lock.write();
+        self.renderable = Box::new(renderable.into());
+    }
+
+    /// Get the renderable (self if has children, otherwise content)
+    fn renderable(&self) -> &dyn Renderable {
+        if self.children.is_empty() {
+            &*self.renderable
+        } else {
+            self
+        }
+    }
+}
+```
+
+### 17.13 Tree Visualization
+
+Layout provides a tree view for debugging structure:
+
+```rust
+impl Layout {
+    fn tree(&self) -> Tree {
+        fn summary(layout: &Layout) -> Table {
+            let icon = layout.splitter.get_tree_icon();
+            let text = if layout.visible {
+                Pretty::new(layout)
+            } else {
+                Styled::new(Pretty::new(layout), "dim")
+            };
+
+            Table::grid().padding((0, 1, 0, 0))
+                .add_row(vec![icon, text])
+        }
+
+        fn recurse(tree: &mut Tree, layout: &Layout) {
+            for child in &layout.children {
+                let child_tree = tree.add(
+                    summary(child),
+                    format!("layout.tree.{}", child.splitter.name()),
+                );
+                recurse(child_tree, child);
+            }
+        }
+
+        let mut tree = Tree::new(summary(self))
+            .guide_style(format!("layout.tree.{}", self.splitter.name()))
+            .highlight(true);
+
+        recurse(&mut tree, self);
+        tree
+    }
+}
+```
+
+### 17.14 Default Styles
+
+| Style Name | Purpose |
+|------------|---------|
+| `layout.tree.row` | Guide style for row splits in tree view |
+| `layout.tree.column` | Guide style for column splits in tree view |
+
+### 17.15 Error Types
+
+```rust
+/// Layout-related errors
+enum LayoutError {
+    /// Requested splitter does not exist
+    NoSplitter(String),
+    /// Named layout not found
+    NotFound(String),
+}
+```
+
+### 17.16 Usage Example
+
+```rust
+// Create root layout
+let mut layout = Layout::new();
+
+// Split into header, main, footer
+layout.split_column(vec![
+    Layout::new().name("header").size(3),
+    Layout::new().name("main").ratio(1),
+    Layout::new().name("footer").size(10),
+]);
+
+// Split main into sidebar and body
+layout["main"].split_row(vec![
+    Layout::new().name("side"),
+    Layout::new().name("body").ratio(2),
+]);
+
+// Update content
+layout["header"].update(Clock::new());
+layout["body"].update(some_content);
+
+// Render with Live
+with Live(layout, screen=true) {
+    // Updates happen automatically
+}
+```
+
+### 17.17 Edge Cases
+
+1. **Zero-size region:** minimum_size ensures at least 1 cell/line
+2. **More children than space:** ratio_resolve handles gracefully
+3. **Hidden children:** Excluded from division, remaining children get more space
+4. **Deeply nested:** Stack-based traversal avoids recursion limits
+5. **Thread safety:** Lock protects all mutations and render_map updates
+6. **Empty layout:** Shows placeholder with dimensions
+
+---
+
+## 18. Logging Handler Integration
+
+**Implementation note (Rust):** `src/logging.rs` provides `RichLogger`, a `log`-crate
+logger with level/time/path formatting and keyword highlighting. An optional
+`RichTracingLayer` is available behind the `tracing` feature. Traceback rendering
+is out of scope for now.
+
+> Source: `rich/logging.py` (298 lines), `rich/_log_render.py` (95 lines)
+
+### 18.1 Overview
+
+Rich provides `RichHandler`, a Python logging handler that renders log records with syntax highlighting, colored log levels, and optional rich tracebacks. In Rust, this integrates with the `log` or `tracing` ecosystems.
+
+### 18.2 RichHandler Constructor
+
+```rust
+struct RichHandler {
+    // Display configuration
+    console: Console,                    // Output console (default: global console)
+    show_time: bool,                     // Show time column (default: true)
+    omit_repeated_times: bool,           // Skip duplicate times (default: true)
+    show_level: bool,                    // Show level column (default: true)
+    show_path: bool,                     // Show file:line column (default: true)
+    enable_link_path: bool,              // Enable terminal hyperlinks (default: true)
+
+    // Message rendering
+    highlighter: Option<Box<dyn Highlighter>>,  // Message highlighter (default: ReprHighlighter)
+    markup: bool,                        // Parse Rich markup in messages (default: false)
+    keywords: Option<Vec<String>>,       // Words to highlight (default: HTTP methods)
+    log_time_format: TimeFormat,         // strftime or callable (default: "[%x %X]")
+
+    // Traceback configuration
+    rich_tracebacks: bool,               // Enable rich tracebacks (default: false)
+    tracebacks_width: Option<usize>,     // Traceback width (default: None = full)
+    tracebacks_code_width: Option<usize>, // Code width (default: 88)
+    tracebacks_extra_lines: usize,       // Context lines (default: 3)
+    tracebacks_theme: Option<String>,    // Pygments theme override
+    tracebacks_word_wrap: bool,          // Wrap long lines (default: true)
+    tracebacks_show_locals: bool,        // Show local variables (default: false)
+    tracebacks_suppress: Vec<PathBuf>,   // Modules/paths to exclude
+    tracebacks_max_frames: usize,        // Max stack frames (default: 100)
+    locals_max_length: usize,            // Container abbreviation limit (default: 10)
+    locals_max_string: usize,            // String truncation limit (default: 80)
+}
+```
+
+### 18.3 Default Keywords
+
+Class variable `KEYWORDS` contains HTTP method names for automatic highlighting:
+
+```rust
+const KEYWORDS: &[&str] = &[
+    "GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE", "PATCH"
+];
+```
+
+These are highlighted with style `logging.keyword`.
+
+### 18.4 Level Styling
+
+Log levels are styled using semantic style names:
+
+| Level    | Style Name               | Typical Rendering    |
+|----------|--------------------------|----------------------|
+| DEBUG    | `logging.level.debug`    | Blue, dim            |
+| INFO     | `logging.level.info`     | Green                |
+| WARNING  | `logging.level.warning`  | Yellow               |
+| ERROR    | `logging.level.error`    | Red, bold            |
+| CRITICAL | `logging.level.critical` | Red background, bold |
+
+**Implementation:**
+
+```rust
+fn get_level_text(&self, level: Level) -> Text {
+    let name = level.as_str();
+    // Left-justify to 8 characters for alignment
+    let padded = format!("{:<8}", name);
+    let style_name = format!("logging.level.{}", name.to_lowercase());
+    Text::styled(padded, style_name)
+}
+```
+
+### 18.5 LogRender: Columnar Output
+
+The `LogRender` helper formats log records as a grid table with columns:
+
+```
+| TIME       | LEVEL    | MESSAGE                  | PATH:LINE |
+|------------|----------|--------------------------|-----------|
+| [12:34:56] | INFO     | Server starting...       | main.rs:42|
+```
+
+**Column Styles:**
+- Time column: `log.time`
+- Level column: `log.level` (fixed width 8)
+- Message column: `log.message` (ratio=1, overflow=fold)
+- Path column: `log.path`
+
+**Grid Construction:**
+
+```rust
+fn render_log(
+    &self,
+    console: &Console,
+    renderables: Vec<Box<dyn Renderable>>,
+    log_time: Option<DateTime>,
+    level: Text,
+    path: Option<&str>,
+    line_no: Option<u32>,
+    link_path: Option<&Path>,
+) -> Table {
+    let mut grid = Table::grid().padding((0, 1));
+    grid.expand = true;
+
+    if self.show_time {
+        grid.add_column(Column::new().style("log.time"));
+    }
+    if self.show_level {
+        grid.add_column(Column::new().style("log.level").width(self.level_width));
+    }
+    grid.add_column(Column::new().ratio(1).style("log.message").overflow(Overflow::Fold));
+    if self.show_path && path.is_some() {
+        grid.add_column(Column::new().style("log.path"));
+    }
+
+    // Build row...
+    grid
+}
+```
+
+### 18.6 Time Format
+
+**Time Display Options:**
+
+1. **strftime string** (default `"[%x %X]"`):
+   - `%x` = locale-appropriate date
+   - `%X` = locale-appropriate time
+
+2. **Callable**: `fn(DateTime) -> Text` for custom formatting
+
+**Repeated Time Omission:**
+
+When `omit_repeated_times` is true, consecutive identical times are replaced with spaces:
+
+```rust
+if log_time_display == self.last_time && self.omit_repeated_times {
+    row.push(Text::new(" ".repeat(log_time_display.len())));
+} else {
+    row.push(log_time_display.clone());
+    self.last_time = Some(log_time_display);
+}
+```
+
+### 18.7 Path Column with Hyperlinks
+
+The path column shows `filename:line` with optional terminal hyperlinks:
+
+```rust
+fn render_path(&self, path: &str, line_no: u32, link_path: Option<&Path>) -> Text {
+    let mut text = Text::new();
+
+    if let Some(link) = link_path {
+        // Terminal hyperlink to file
+        text.append(path, Style::new().link(format!("file://{}", link.display())));
+    } else {
+        text.append(path, Style::default());
+    }
+
+    text.append(":", Style::default());
+
+    if let Some(link) = link_path {
+        // Hyperlink to specific line
+        text.append(
+            &line_no.to_string(),
+            Style::new().link(format!("file://{}#{}", link.display(), line_no))
+        );
+    } else {
+        text.append(&line_no.to_string(), Style::default());
+    }
+
+    text
+}
+```
+
+### 18.8 Message Rendering Pipeline
+
+1. **Format message** using standard logging formatter
+2. **Parse markup** if enabled (per-record override via `record.markup`)
+3. **Apply highlighter** (per-record override via `record.highlighter`)
+4. **Highlight keywords** from the keywords list
+
+```rust
+fn render_message(&self, record: &LogRecord, message: &str) -> Box<dyn Renderable> {
+    // Check for per-record markup override
+    let use_markup = record.extras.get("markup")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(self.markup);
+
+    let mut text = if use_markup {
+        Text::from_markup(message)
+    } else {
+        Text::new(message)
+    };
+
+    // Apply highlighter (may be overridden per-record)
+    let highlighter = record.extras.get("highlighter")
+        .and_then(|v| v.as_highlighter())
+        .or(self.highlighter.as_ref());
+
+    if let Some(h) = highlighter {
+        text = h.highlight(text);
+    }
+
+    // Highlight keywords
+    if let Some(keywords) = &self.keywords {
+        text.highlight_words(keywords, "logging.keyword");
+    }
+
+    Box::new(text)
+}
+```
+
+### 18.9 Rich Tracebacks
+
+When `rich_tracebacks` is enabled and an exception is attached to the record:
+
+```rust
+fn emit(&mut self, record: &LogRecord) {
+    let traceback = if self.rich_tracebacks && record.exc_info.is_some() {
+        let (exc_type, exc_value, exc_tb) = record.exc_info.unwrap();
+        Some(Traceback::from_exception(
+            exc_type,
+            exc_value,
+            exc_tb,
+            TracebackConfig {
+                width: self.tracebacks_width,
+                code_width: self.tracebacks_code_width,
+                extra_lines: self.tracebacks_extra_lines,
+                theme: self.tracebacks_theme.clone(),
+                word_wrap: self.tracebacks_word_wrap,
+                show_locals: self.tracebacks_show_locals,
+                locals_max_length: self.locals_max_length,
+                locals_max_string: self.locals_max_string,
+                suppress: self.tracebacks_suppress.clone(),
+                max_frames: self.tracebacks_max_frames,
+            }
+        ))
+    } else {
+        None
+    };
+
+    // When traceback exists, message content changes
+    let message = if traceback.is_some() {
+        record.get_message()  // Raw message without formatter processing
+    } else {
+        self.format(record)   // Full formatted message
+    };
+
+    // Combine message and optional traceback
+    let renderables: Vec<Box<dyn Renderable>> = if let Some(tb) = traceback {
+        vec![Box::new(message_text), Box::new(tb)]
+    } else {
+        vec![Box::new(message_text)]
+    };
+
+    // Render and output
+    let log_output = self.render(record, &renderables);
+    self.console.print(log_output);
+}
+```
+
+### 18.10 NullFile Handling
+
+For environments where stdout/stderr are null (e.g., `pythonw` on Windows):
+
+```rust
+fn emit(&mut self, record: &LogRecord) {
+    // ... render log_output ...
+
+    if self.console.file().is_null() {
+        // Still create the record for compatibility, but don't output
+        self.handle_error(record);
+    } else {
+        if let Err(e) = self.console.print(log_output) {
+            self.handle_error(record);
+        }
+    }
+}
+```
+
+### 18.11 Per-Record Overrides
+
+Individual log records can override handler settings via extras:
+
+```python
+# Python example
+log.info("Message with [bold]markup[/bold]", extra={"markup": True})
+log.info("Custom highlighting", extra={"highlighter": my_highlighter})
+```
+
+**Supported Overrides:**
+- `markup: bool` - Enable/disable Rich markup parsing
+- `highlighter: Highlighter` - Custom highlighter instance
+
+### 18.12 Rust Integration Considerations
+
+**For `log` crate:**
+```rust
+use log::{Log, Record, Level, Metadata};
+
+impl Log for RichHandler {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= self.level
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            self.emit(record);
+        }
+    }
+
+    fn flush(&self) {
+        // Console handles buffering
+    }
+}
+```
+
+**For `tracing` crate:**
+```rust
+use tracing_subscriber::Layer;
+
+impl<S> Layer<S> for RichLayer
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        // Convert tracing event to Rich log output
+    }
+}
+```
+
+### 18.13 Output Format Example
+
+```
+[01/24/26 14:30:45] INFO     Server starting...                          main.rs:42
+                    INFO     Listening on http://127.0.0.1:8080           main.rs:43
+                    WARNING  GET /favicon.ico 404 242                     server.rs:128
+                    ERROR    Unable to find 'pomelo' in database!         db.rs:256
+```
+
+Note how:
+- Time is omitted when repeated (replaced with spaces)
+- Level names are left-padded to 8 chars
+- HTTP methods (GET) are highlighted with `logging.keyword`
+- Each level has distinct styling
+
+### 18.14 Edge Cases
+
+1. **Null console file:** Log record created but no output written
+2. **Markup in untrusted logs:** Disable `markup` for third-party libraries
+3. **Very long paths:** Use only filename, not full path
+4. **Concurrent logging:** Console mutex protects output
+5. **Exception without traceback:** Normal message formatting used
+6. **Custom time formats:** Callable allows arbitrary Text return
+7. **Empty keywords list:** No keyword highlighting applied
+
+---
+
+## 19. HTML/SVG Export
+
+> Source: `rich/console.py` (export_html, export_svg, save_html, save_svg methods), `rich/_export_format.py`, `rich/terminal_theme.py`, `rich/style.py` (get_html_style)
+
+### 19.1 Overview
+
+Rich can export recorded console output to HTML and SVG formats, preserving colors, styles, and formatting. This enables sharing Rich output as static documents, embedding in web pages, or generating terminal screenshots.
+
+**Implementation note (Rust):** `Console::export_html` and `Console::export_svg` provide
+minimal exports using inline CSS and an SVG `<foreignObject>` wrapper. Full Rich theme
+templates and window chrome are not implemented.
+
+**Requirements:**
+- Console must be created with `record=True` to capture output
+- Export reads from internal `_record_buffer` which stores all printed segments
+- Buffer can optionally be cleared after export
+
+### 19.2 TerminalTheme
+
+Color themes define how ANSI colors map to RGB values for export:
+
+```rust
+struct TerminalTheme {
+    background_color: ColorTriplet,   // Default background
+    foreground_color: ColorTriplet,   // Default text color
+    ansi_colors: Palette,             // 16 ANSI colors (8 normal + 8 bright)
+}
+```
+
+**Constructor:**
+```rust
+impl TerminalTheme {
+    fn new(
+        background: (u8, u8, u8),
+        foreground: (u8, u8, u8),
+        normal: [(u8, u8, u8); 8],    // Colors 0-7 (black, red, green, yellow, blue, magenta, cyan, white)
+        bright: Option<[(u8, u8, u8); 8]>,  // Colors 8-15, defaults to normal if None
+    ) -> Self;
+}
+```
+
+**Built-in Themes:**
+
+| Theme                    | Background     | Foreground     | Use Case                  |
+|-------------------------|----------------|----------------|---------------------------|
+| `DEFAULT_TERMINAL_THEME`| White          | Black          | Light HTML export         |
+| `MONOKAI`               | Dark (#0C0C0C) | Light (#D9D9D9)| Dark theme export         |
+| `DIMMED_MONOKAI`        | Dark (#191919) | Muted          | Subdued dark export       |
+| `NIGHT_OWLISH`          | White          | Dark           | Night Owl-inspired        |
+| `SVG_EXPORT_THEME`      | Dark (#292929) | Light (#C5C8C6)| Default for SVG export    |
+
+### 19.3 HTML Export
+
+#### 19.3.1 API
+
+```rust
+impl Console {
+    fn export_html(
+        &self,
+        theme: Option<&TerminalTheme>,  // Default: DEFAULT_TERMINAL_THEME
+        clear: bool,                     // Clear buffer after export (default: true)
+        code_format: Option<&str>,       // Custom template (default: CONSOLE_HTML_FORMAT)
+        inline_styles: bool,             // Inline vs stylesheet styles (default: false)
+    ) -> String;
+
+    fn save_html(
+        &self,
+        path: &Path,
+        theme: Option<&TerminalTheme>,
+        clear: bool,
+        code_format: &str,
+        inline_styles: bool,
+    ) -> io::Result<()>;
+}
+```
+
+#### 19.3.2 HTML Template
+
+Default `CONSOLE_HTML_FORMAT`:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+{stylesheet}
+body {
+    color: {foreground};
+    background-color: {background};
+}
+</style>
+</head>
+<body>
+    <pre style="font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">
+        <code style="font-family:inherit">{code}</code>
+    </pre>
+</body>
+</html>
+```
+
+**Template Variables:**
+- `{stylesheet}` - CSS rules (when `inline_styles=false`)
+- `{foreground}` - Theme foreground hex color
+- `{background}` - Theme background hex color
+- `{code}` - Rendered HTML content
+
+#### 19.3.3 Style Modes
+
+**Inline Styles (`inline_styles=true`):**
+```html
+<span style="color: #ff0000; font-weight: bold">text</span>
+```
+- Larger file size
+- Easier to copy/paste fragments
+- Each styled segment gets inline CSS
+
+**Stylesheet Mode (`inline_styles=false`):**
+```html
+<style>
+.r1 {color: #ff0000; font-weight: bold}
+.r2 {color: #00ff00}
+</style>
+...
+<span class="r1">text</span>
+```
+- Smaller file size
+- Classes named `.r1`, `.r2`, etc.
+- Styles deduplicated in stylesheet
+
+#### 19.3.4 Style to CSS Conversion
+
+The `get_html_style` method converts Rich styles to CSS:
+
+```rust
+impl Style {
+    fn get_html_style(&self, theme: &TerminalTheme) -> String {
+        let mut css = Vec::new();
+
+        // Handle reverse (swap fg/bg)
+        let (color, bgcolor) = if self.reverse {
+            (self.bgcolor, self.color)
+        } else {
+            (self.color, self.bgcolor)
+        };
+
+        // Dim: blend foreground toward background
+        let color = if self.dim {
+            let fg = color.unwrap_or(theme.foreground_color);
+            Some(blend_rgb(fg, theme.background_color, 0.5))
+        } else {
+            color
+        };
+
+        // Foreground color
+        if let Some(c) = color {
+            let hex = c.get_truecolor(theme).hex();
+            css.push(format!("color: {}", hex));
+            css.push(format!("text-decoration-color: {}", hex));
+        }
+
+        // Background color
+        if let Some(c) = bgcolor {
+            let hex = c.get_truecolor(theme).hex();
+            css.push(format!("background-color: {}", hex));
+        }
+
+        // Text attributes
+        if self.bold { css.push("font-weight: bold".into()); }
+        if self.italic { css.push("font-style: italic".into()); }
+        if self.underline { css.push("text-decoration: underline".into()); }
+        if self.strike { css.push("text-decoration: line-through".into()); }
+        if self.overline { css.push("text-decoration: overline".into()); }
+
+        css.join("; ")
+    }
+}
+```
+
+#### 19.3.5 Link Handling
+
+Hyperlinks are preserved as HTML `<a>` tags:
+
+```rust
+if let Some(link) = &style.link {
+    if inline_styles {
+        format!(r#"<a href="{}">{}</a>"#, link, text)
+    } else {
+        format!(r#"<a class="r{}" href="{}">{}</a>"#, class_num, link, text)
+    }
+}
+```
+
+### 19.4 SVG Export
+
+#### 19.4.1 API
+
+```rust
+impl Console {
+    fn export_svg(
+        &self,
+        title: &str,                     // Tab title (default: "Rich")
+        theme: Option<&TerminalTheme>,   // Default: SVG_EXPORT_THEME
+        clear: bool,                     // Clear buffer (default: true)
+        code_format: &str,               // SVG template (default: CONSOLE_SVG_FORMAT)
+        font_aspect_ratio: f64,          // Width/height ratio (default: 0.61 for Fira Code)
+        unique_id: Option<&str>,         // CSS/element ID prefix (default: computed)
+    ) -> String;
+
+    fn save_svg(
+        &self,
+        path: &Path,
+        title: &str,
+        theme: Option<&TerminalTheme>,
+        clear: bool,
+        code_format: &str,
+        font_aspect_ratio: f64,
+        unique_id: Option<&str>,
+    ) -> io::Result<()>;
+}
+```
+
+#### 19.4.2 SVG Structure
+
+The SVG output creates a terminal-style window with:
+
+1. **Window Chrome:** Rounded rectangle with macOS-style traffic lights (red/yellow/green circles)
+2. **Title Bar:** Centered title text
+3. **Content Area:** Clipped region containing text
+4. **Text Matrix:** Positioned `<text>` elements for each styled segment
+5. **Backgrounds:** `<rect>` elements behind text with background colors
+
+```
+┌──────────────────────────────────────┐
+│ 🔴 🟡 🟢        Rich                 │  ← Chrome + Title
+├──────────────────────────────────────┤
+│                                      │
+│  [Rendered terminal content here]    │  ← Matrix (clipped)
+│                                      │
+└──────────────────────────────────────┘
+```
+
+#### 19.4.3 SVG Template Variables
+
+```rust
+struct SvgTemplateVars {
+    unique_id: String,          // Prefix for CSS classes and IDs
+    char_width: f64,            // Character width in pixels
+    char_height: f64,           // Character height (default: 20)
+    line_height: f64,           // Line height (char_height * 1.22)
+    terminal_width: f64,        // Content area width
+    terminal_height: f64,       // Content area height
+    width: f64,                 // Total SVG width
+    height: f64,                // Total SVG height
+    terminal_x: f64,            // Content X offset
+    terminal_y: f64,            // Content Y offset
+    styles: String,             // Generated CSS rules
+    chrome: String,             // Window decoration SVG
+    backgrounds: String,        // Background rects
+    matrix: String,             // Text elements
+    lines: String,              // ClipPath definitions
+}
+```
+
+#### 19.4.4 Font Configuration
+
+Default uses Fira Code with web font fallback:
+
+```css
+@font-face {
+    font-family: "Fira Code";
+    src: local("FiraCode-Regular"),
+         url("https://cdnjs.cloudflare.com/...") format("woff2");
+    font-weight: 400;
+}
+@font-face {
+    font-family: "Fira Code";
+    src: local("FiraCode-Bold"),
+         url("https://cdnjs.cloudflare.com/...") format("woff2");
+    font-weight: 700;
+}
+```
+
+**Font Aspect Ratio:** The `font_aspect_ratio` (default 0.61) determines character positioning:
+```rust
+let char_width = char_height * font_aspect_ratio;  // 20 * 0.61 = 12.2px
+```
+
+#### 19.4.5 Text Positioning
+
+Each text segment is positioned precisely:
+
+```rust
+fn render_text_element(
+    text: &str,
+    style: &Style,
+    x: usize,      // Character column
+    y: usize,      // Line number
+    unique_id: &str,
+    class_name: &str,
+    char_width: f64,
+    char_height: f64,
+    line_height: f64,
+) -> String {
+    format!(
+        r#"<text class="{}-{}" x="{}" y="{}" textLength="{}" clip-path="url(#{}-line-{})">{}</text>"#,
+        unique_id,
+        class_name,
+        x as f64 * char_width,
+        y as f64 * line_height + char_height,
+        char_width * text.len() as f64,
+        unique_id,
+        y,
+        escape_text(text)
+    )
+}
+```
+
+#### 19.4.6 Background Rectangles
+
+Styled backgrounds are rendered as `<rect>` elements:
+
+```rust
+fn render_background(
+    x: usize,
+    y: usize,
+    width: usize,
+    color: &str,
+    char_width: f64,
+    line_height: f64,
+) -> String {
+    format!(
+        r#"<rect fill="{}" x="{}" y="{}" width="{}" height="{}" shape-rendering="crispEdges"/>"#,
+        color,
+        x as f64 * char_width,
+        y as f64 * line_height + 1.5,
+        char_width * width as f64,
+        line_height + 0.25
+    )
+}
+```
+
+#### 19.4.7 Unique ID Generation
+
+When not provided, `unique_id` is computed from content hash:
+
+```rust
+fn compute_unique_id(segments: &[Segment], title: &str) -> String {
+    let content = segments.iter()
+        .map(|s| format!("{:?}", s))
+        .collect::<String>();
+    let hash = adler32(&[content.as_bytes(), title.as_bytes()].concat());
+    format!("terminal-{}", hash)
+}
+```
+
+#### 19.4.8 Style to SVG CSS
+
+SVG uses `fill` instead of `color`:
+
+```rust
+fn get_svg_style(&self, theme: &TerminalTheme) -> String {
+    let mut css = Vec::new();
+
+    let (color, bgcolor) = if self.reverse {
+        (self.bgcolor, self.color)
+    } else {
+        (self.color, self.bgcolor)
+    };
+
+    // Dim: blend toward background
+    let color = if self.dim {
+        blend_rgb(color, bgcolor, 0.4)
+    } else {
+        color
+    };
+
+    css.push(format!("fill: {}", color.hex()));
+
+    if self.bold { css.push("font-weight: bold".into()); }
+    if self.italic { css.push("font-style: italic".into()); }
+    if self.underline { css.push("text-decoration: underline".into()); }
+    if self.strike { css.push("text-decoration: line-through".into()); }
+
+    css.join(";")
+}
+```
+
+### 19.5 Segment Processing
+
+Both export methods process segments similarly:
+
+1. **Filter Control:** Remove control segments (cursor movement, etc.)
+2. **Simplify:** Merge adjacent segments with identical styles
+3. **Split Lines:** Break into lines for SVG row positioning
+4. **Escape Text:** Convert special chars (`<`, `>`, `&`, spaces → `&#160;`)
+
+```rust
+fn process_for_export(buffer: &[Segment]) -> Vec<Segment> {
+    Segment::simplify(
+        Segment::filter_control(buffer.iter().cloned())
+    ).collect()
+}
+```
+
+### 19.6 Layout Constants (SVG)
+
+```rust
+// Character dimensions
+const CHAR_HEIGHT: f64 = 20.0;
+const LINE_HEIGHT_FACTOR: f64 = 1.22;
+
+// Margins (around entire SVG)
+const MARGIN_TOP: f64 = 1.0;
+const MARGIN_RIGHT: f64 = 1.0;
+const MARGIN_BOTTOM: f64 = 1.0;
+const MARGIN_LEFT: f64 = 1.0;
+
+// Padding (inside terminal window)
+const PADDING_TOP: f64 = 40.0;    // Space for title bar
+const PADDING_RIGHT: f64 = 8.0;
+const PADDING_BOTTOM: f64 = 8.0;
+const PADDING_LEFT: f64 = 8.0;
+
+// Window chrome
+const CORNER_RADIUS: f64 = 8.0;
+const TRAFFIC_LIGHT_RADIUS: f64 = 7.0;
+const TRAFFIC_LIGHT_SPACING: f64 = 22.0;
+```
+
+### 19.7 Edge Cases
+
+1. **Empty buffer:** Exports minimal valid HTML/SVG with just theme colors
+2. **Control characters:** Filtered out before export
+3. **Very long lines:** Clipped to console width in SVG
+4. **Unicode width:** `cell_len()` used for proper character positioning
+5. **Missing theme:** Falls back to `DEFAULT_TERMINAL_THEME` (HTML) or `SVG_EXPORT_THEME` (SVG)
+6. **Concurrent access:** `_record_buffer_lock` protects buffer during export
+7. **Whitespace-only text:** Skipped in SVG matrix (backgrounds still rendered)
+8. **HTML special chars:** Properly escaped (`<` → `&lt;`, etc.)
+
+### 19.8 Rust Implementation Notes
+
+```rust
+// Re-export format templates
+pub const CONSOLE_HTML_FORMAT: &str = include_str!("html_template.html");
+pub const CONSOLE_SVG_FORMAT: &str = include_str!("svg_template.svg");
+
+// Theme presets
+pub static DEFAULT_TERMINAL_THEME: Lazy<TerminalTheme> = Lazy::new(|| {
+    TerminalTheme::new(
+        (255, 255, 255),  // white background
+        (0, 0, 0),        // black foreground
+        STANDARD_NORMAL_COLORS,
+        Some(STANDARD_BRIGHT_COLORS),
+    )
+});
+
+pub static SVG_EXPORT_THEME: Lazy<TerminalTheme> = Lazy::new(|| {
+    TerminalTheme::new(
+        (41, 41, 41),      // dark background
+        (197, 200, 198),   // light foreground
+        SVG_NORMAL_COLORS,
+        Some(SVG_BRIGHT_COLORS),
+    )
+});
+```
 
 ---
 

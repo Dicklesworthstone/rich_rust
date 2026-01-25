@@ -435,9 +435,24 @@ impl Text {
             return Self::new("");
         }
 
-        // Extract the substring
-        let chars: Vec<char> = self.plain.chars().collect();
-        let plain: String = chars[clamped_start..clamped_end].iter().collect();
+        // Find byte offsets without allocating Vec<char>
+        let mut indices = self.plain.char_indices();
+        let byte_start = indices
+            .nth(clamped_start)
+            .map_or(self.plain.len(), |(i, _)| i);
+
+        let byte_end = if clamped_end > clamped_start {
+            // We have consumed `clamped_start` items (last was at index clamped_start)
+            // We want index `clamped_end`.
+            // Delta = clamped_end - (clamped_start + 1)
+            indices
+                .nth(clamped_end - clamped_start - 1)
+                .map_or(self.plain.len(), |(i, _)| i)
+        } else {
+            byte_start
+        };
+
+        let plain = self.plain[byte_start..byte_end].to_string();
 
         // Adjust spans that overlap with the slice
         let mut spans = Vec::new();
@@ -472,19 +487,77 @@ impl Text {
     #[must_use]
     pub fn split_lines(&self) -> Vec<Self> {
         let mut lines = Vec::new();
-        let mut start = 0;
+        let mut start_byte = 0;
+        let mut start_char = 0;
 
-        for (i, c) in self.plain.char_indices() {
+        for (char_idx, (byte_idx, c)) in self.plain.char_indices().enumerate() {
             if c == '\n' {
-                let char_pos = self.plain[..i].chars().count();
-                lines.push(self.slice(start, char_pos));
-                start = char_pos + 1;
+                // Slice plain text using byte indices (O(1) copy)
+                let plain = self.plain[start_byte..byte_idx].to_string();
+                let length = char_idx - start_char;
+
+                // Adjust spans for this line (O(S))
+                let mut spans = Vec::new();
+                for span in &self.spans {
+                    // Check intersection with line range [start_char, char_idx)
+                    if span.end <= start_char || span.start >= char_idx {
+                        continue;
+                    }
+                    // Adjust to new coordinates relative to start_char
+                    let new_start = span.start.max(start_char) - start_char;
+                    let new_end = span.end.min(char_idx) - start_char;
+
+                    if new_start < new_end {
+                        spans.push(Span::new(new_start, new_end, span.style.clone()));
+                    }
+                }
+
+                lines.push(Self {
+                    plain,
+                    spans,
+                    length,
+                    style: self.style.clone(),
+                    justify: self.justify,
+                    overflow: self.overflow,
+                    no_wrap: self.no_wrap,
+                    end: self.end.clone(),
+                    tab_size: self.tab_size,
+                });
+
+                start_byte = byte_idx + c.len_utf8();
+                start_char = char_idx + 1;
             }
         }
 
         // Add the remaining text (or empty line if ends with \n)
-        if start <= self.length {
-            lines.push(self.slice(start, self.length));
+        if start_byte <= self.plain.len() {
+            // Logic for the last segment
+            let plain = self.plain[start_byte..].to_string();
+            let length = self.length - start_char;
+
+            let mut spans = Vec::new();
+            for span in &self.spans {
+                if span.end <= start_char || span.start >= self.length {
+                    continue;
+                }
+                let new_start = span.start.max(start_char) - start_char;
+                let new_end = span.end.min(self.length) - start_char;
+                if new_start < new_end {
+                    spans.push(Span::new(new_start, new_end, span.style.clone()));
+                }
+            }
+
+            lines.push(Self {
+                plain,
+                spans,
+                length,
+                style: self.style.clone(),
+                justify: self.justify,
+                overflow: self.overflow,
+                no_wrap: self.no_wrap,
+                end: self.end.clone(),
+                tab_size: self.tab_size,
+            });
         }
 
         if lines.is_empty() {

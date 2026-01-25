@@ -498,8 +498,8 @@ fn e2e_panel_narrow_width() {
     let output = panel.render_plain(10);
     tracing::debug!(output = %output, "Narrow panel");
 
-    // Should render something
-    assert!(!output.is_empty(), "Panel should render");
+    // Should include content even at narrow widths
+    assert!(output.contains("Content"), "Missing content");
 
     tracing::info!("E2E narrow panel test PASSED");
 }

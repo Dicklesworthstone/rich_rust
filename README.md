@@ -163,7 +163,7 @@ Colors automatically downgrade to what the terminal supports.
 
 ### 5. Minimal Dependencies
 
-Core functionality has few dependencies. Optional features (syntax highlighting, markdown) are behind feature flags to keep compile times fast.
+Core functionality has few dependencies. Optional features (syntax highlighting, markdown, JSON, tracing) are behind feature flags to keep compile times fast.
 
 ---
 
@@ -218,6 +218,9 @@ cargo add rich_rust --features markdown
 
 # JSON pretty-printing
 cargo add rich_rust --features json
+
+# Tracing integration
+cargo add rich_rust --features tracing
 
 # All features
 cargo add rich_rust --features full
@@ -379,6 +382,86 @@ let tree = Tree::new(root);
 console.print_renderable(&tree);
 ```
 
+### Live Updates
+
+```rust
+use rich_rust::prelude::*;
+
+fn main() -> std::io::Result<()> {
+    let console = Console::new().shared();
+    let live = Live::new(console.clone()).renderable(Text::new("Loading..."));
+
+    live.start(true)?;
+    live.update(Text::new("Done!"), true);
+    live.stop()?;
+
+    Ok(())
+}
+```
+
+For external writers, use `live.stdout_proxy()` / `live.stderr_proxy()` to route output
+through the Live display.
+
+### Layouts
+
+```rust
+use rich_rust::prelude::*;
+
+let mut layout = Layout::new().name("root");
+layout.split_column(vec![
+    Layout::new()
+        .name("header")
+        .size(3)
+        .renderable(Panel::from_text("Header")),
+    Layout::new().name("body").ratio(1),
+]);
+
+if let Some(body) = layout.get_mut("body") {
+    body.split_row(vec![
+        Layout::new().name("left").ratio(1).renderable(Panel::from_text("Left")),
+        Layout::new().name("right").ratio(2).renderable(Panel::from_text("Right")),
+    ]);
+}
+
+console.print_renderable(&layout);
+```
+
+### Logging
+
+```rust
+use rich_rust::prelude::*;
+use log::LevelFilter;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let console = Console::new().shared();
+    RichLogger::new(console)
+        .level(LevelFilter::Info)
+        .show_path(true)
+        .init()?;
+
+    log::info!("Server started");
+    Ok(())
+}
+```
+
+Note: `log` macros come from the `log` crate; add `log = "0.4"` to your `Cargo.toml`.
+
+Tracing: enable `rich_rust` feature `tracing` and install `RichTracingLayer` if you use
+the `tracing` ecosystem.
+
+### HTML/SVG Export
+
+```rust
+use rich_rust::prelude::*;
+
+let mut console = Console::new();
+console.begin_capture();
+console.print("[bold green]Hello[/]");
+
+let html = console.export_html(false);
+let svg = console.export_svg(true);
+```
+
 ### Syntax Highlighting (requires `syntax` feature)
 
 ```rust
@@ -471,21 +554,23 @@ src/
 
 ## Feature Parity (Python Rich)
 
+See `FEATURE_PARITY.md` for the authoritative matrix and `RICH_SPEC.md` for detailed behavior notes.
+
 **Implemented**
 - Markup (`[bold red]text[/]`), styles, colors, hyperlinks
 - Tables, panels, rules, trees, columns, padding, alignment
 - Progress bars & spinners
+- Live updating / dynamic refresh (`Live`)
+- Layout engine (`Layout`)
+- Logging handler integration (`RichLogger`)
+- HTML/SVG export (`Console::export_html` / `Console::export_svg`)
 - Syntax highlighting (feature `syntax`)
 - Markdown rendering (feature `markdown`)
 - JSON pretty-print (feature `json`)
 - Unicode width handling + auto color downgrade
 
-**Not yet**
-- Live updating / dynamic refresh (`Live`)
-- Layout engine (`Layout`)
-- Logging handler integration
-- HTML/SVG export
-- Input widgets (out of scope for this library)
+**Out of scope**
+- Input widgets (this is an output library)
 
 ---
 
@@ -540,11 +625,10 @@ src/
 
 ## Limitations
 
-- **No animations:** Static output only; no live updating (use a TUI framework for that)
 - **No input:** This is an output library; use `crossterm` or `dialoguer` for input
 - **No async:** Rendering is synchronous; wrap in `spawn_blocking` if needed
-- **No HTML export:** Terminal-only output (no HTML/SVG export like Python Rich)
-- **Feature parity:** Some Python Rich features not yet implemented (Live, Layout, Logging handler)
+- **Live redirection:** `Live` does not globally redirect stdout/stderr; only console output is intercepted
+- **HTML/SVG export:** Export is minimal (pre + inline CSS, SVG via `<foreignObject>`), not a full Rich theme engine
 
 ---
 

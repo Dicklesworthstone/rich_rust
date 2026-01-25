@@ -125,7 +125,10 @@ mod tests {
         };
         let output = run_test(&test);
         // Rule should fill the width with rule characters
-        assert!(!output.is_empty());
+        assert!(
+            output.contains('─') || output.contains('-'),
+            "Rule should render horizontal line characters"
+        );
     }
 
     #[test]

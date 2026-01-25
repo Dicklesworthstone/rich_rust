@@ -265,6 +265,11 @@ impl Json {
 
     /// Render an array.
     fn render_array(&self, arr: &[Value], depth: usize) -> Vec<Segment<'_>> {
+        const MAX_DEPTH: usize = 20;
+        if depth > MAX_DEPTH {
+            return vec![Segment::new("[...]", self.style(&self.theme.bracket))];
+        }
+
         if arr.is_empty() {
             return vec![Segment::new("[]", self.style(&self.theme.bracket))];
         }
@@ -304,6 +309,11 @@ impl Json {
         obj: &serde_json::Map<String, Value>,
         depth: usize,
     ) -> Vec<Segment<'_>> {
+        const MAX_DEPTH: usize = 20;
+        if depth > MAX_DEPTH {
+            return vec![Segment::new("{...}", self.style(&self.theme.bracket))];
+        }
+
         if obj.is_empty() {
             return vec![Segment::new("{}", self.style(&self.theme.bracket))];
         }

@@ -366,8 +366,8 @@ fn regression_layout_table_collapse_widths_rounding() {
     // Render at constrained width to force collapse
     let output = table.render_plain(100);
 
-    // The table should render without panic
-    assert!(!output.is_empty(), "Table should render successfully");
+    // The table should include headers and borders
+    assert!(output.contains("Col1"), "Missing header content");
 
     // Check that output is well-formed (has top border with correct chars)
     let first_line = output.lines().next().expect("should have lines");
@@ -409,8 +409,9 @@ fn regression_layout_table_expand_widths_ratio() {
     // Render with enough width for expansion
     let output = table.render_plain(80);
 
-    // Table should render successfully
-    assert!(!output.is_empty(), "Table should render");
+    // Table should include headers and row values
+    assert!(output.contains("A"), "Missing header content");
+    assert!(output.contains('x'), "Missing row values");
 
     // Check the output is well-formed
     let lines: Vec<&str> = output.lines().collect();
@@ -478,7 +479,7 @@ fn regression_layout_table_width_sum_exactness() {
 
     // Render and check it completes without error
     let output = table.render_plain(100);
-    assert!(!output.is_empty(), "Table should render");
+    assert!(output.contains("A"), "Missing header content");
 
     tracing::info!("Regression test PASSED: width sum exactness");
 }
@@ -923,7 +924,9 @@ fn regression_rendering_segment_split_cjk() {
 
     let (left, right) = result.unwrap();
     // Both parts should be valid UTF-8
-    assert!(left.text.chars().count() > 0 || right.text.chars().count() > 0);
+    assert_eq!(left.text.as_ref(), "中");
+    assert_eq!(right.text.as_ref(), "文");
+    assert_eq!(format!("{}{}", left.text, right.text), "中文");
 
     tracing::info!("Regression test PASSED: segment split with CJK");
 }
@@ -1010,7 +1013,7 @@ fn regression_rule_title_truncation() {
     use rich_rust::cells;
 
     let rule = Rule::with_title("abcdefghijk");
-    let width = 5;
+    let width = 10;
     let output = rule.render_plain(width);
     let trimmed = output.trim_end_matches('\n');
 

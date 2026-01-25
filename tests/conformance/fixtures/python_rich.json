@@ -1,0 +1,498 @@
+{
+  "rich_version": "legacy",
+  "generated_at": "2026-01-25T04:56:41.995210+00:00",
+  "defaults": {
+    "width": 40,
+    "color_system": "truecolor",
+    "force_terminal": true
+  },
+  "cases": [
+    {
+      "id": "text/plain",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "Hello, World!"
+      },
+      "expected": {
+        "plain": "Hello, World!\n",
+        "ansi": "Hello, World!\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/markup_bold",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "[bold]Bold[/]"
+      },
+      "expected": {
+        "plain": "Bold\n",
+        "ansi": "\u001b[1mBold\u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/colors",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "[red]Red[/] and [green]Green[/]"
+      },
+      "expected": {
+        "plain": "Red and Green\n",
+        "ansi": "\u001b[31mRed\u001b[0m and \u001b[32mGreen\u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/hyperlink",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "[link=https://example.com]Example[/]"
+      },
+      "expected": {
+        "plain": "Example\n",
+        "ansi": "\u001b]8;;https://example.com\u001b\\Example\u001b]8;;\u001b\\\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/unicode",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 20
+      },
+      "env": null,
+      "input": {
+        "markup": "Hello 世界 🌍"
+      },
+      "expected": {
+        "plain": "Hello 世界 🌍\n",
+        "ansi": "Hello 世界 🌍\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "rule/basic",
+      "kind": "rule",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "title": "",
+        "align": "center",
+        "character": "─"
+      },
+      "expected": {
+        "plain": "────────────────────────────────────────\n",
+        "ansi": "\u001b[92m────────────────────────────────────────\u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "rule/title_left",
+      "kind": "rule",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 30
+      },
+      "env": null,
+      "input": {
+        "title": "Section",
+        "align": "left",
+        "character": "─"
+      },
+      "expected": {
+        "plain": "Section ──────────────────────\n",
+        "ansi": "Section \u001b[92m──────────────────────\u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "panel/basic",
+      "kind": "panel",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "text": "Hello, World!",
+        "title": "Greeting",
+        "subtitle": null,
+        "width": 30,
+        "box": "ROUNDED"
+      },
+      "expected": {
+        "plain": "╭───────── Greeting ─────────╮\n│ Hello, World!              │\n╰────────────────────────────╯\n",
+        "ansi": "╭───────── Greeting ─────────╮\n│ Hello, World!              │\n╰────────────────────────────╯\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "panel/subtitle",
+      "kind": "panel",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "text": "Content",
+        "title": "Title",
+        "subtitle": "v1",
+        "width": 30,
+        "box": "SQUARE"
+      },
+      "expected": {
+        "plain": "┌────────── Title ───────────┐\n│ Content                    │\n└──────────── v1 ────────────┘\n",
+        "ansi": "┌────────── Title ───────────┐\n│ Content                    │\n└──────────── v1 ────────────┘\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "table/basic",
+      "kind": "table",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 40
+      },
+      "env": null,
+      "input": {
+        "columns": [
+          "Name",
+          "Age"
+        ],
+        "rows": [
+          [
+            "Alice",
+            "30"
+          ],
+          [
+            "Bob",
+            "25"
+          ]
+        ],
+        "show_header": true,
+        "show_lines": false,
+        "title": "Users",
+        "caption": null,
+        "column_justifies": [
+          "left",
+          "right"
+        ]
+      },
+      "expected": {
+        "plain": "     Users     \n┏━━━━━━━┳━━━━━┓\n┃ Name  ┃ Age ┃\n┡━━━━━━━╇━━━━━┩\n│ Alice │  30 │\n│ Bob   │  25 │\n└───────┴─────┘\n",
+        "ansi": "\u001b[3m     Users     \u001b[0m\n┏━━━━━━━┳━━━━━┓\n┃\u001b[1m \u001b[0m\u001b[1mName \u001b[0m\u001b[1m \u001b[0m┃\u001b[1m \u001b[0m\u001b[1mAge\u001b[0m\u001b[1m \u001b[0m┃\n┡━━━━━━━╇━━━━━┩\n│ Alice │  30 │\n│ Bob   │  25 │\n└───────┴─────┘\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "table/lines",
+      "kind": "table",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 40
+      },
+      "env": null,
+      "input": {
+        "columns": [
+          "A",
+          "B"
+        ],
+        "rows": [
+          [
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "4"
+          ]
+        ],
+        "show_header": true,
+        "show_lines": true,
+        "title": null,
+        "caption": null,
+        "column_justifies": [
+          "left",
+          "left"
+        ]
+      },
+      "expected": {
+        "plain": "┏━━━┳━━━┓\n┃ A ┃ B ┃\n┡━━━╇━━━┩\n│ 1 │ 2 │\n├───┼───┤\n│ 3 │ 4 │\n└───┴───┘\n",
+        "ansi": "┏━━━┳━━━┓\n┃\u001b[1m \u001b[0m\u001b[1mA\u001b[0m\u001b[1m \u001b[0m┃\u001b[1m \u001b[0m\u001b[1mB\u001b[0m\u001b[1m \u001b[0m┃\n┡━━━╇━━━┩\n│ 1 │ 2 │\n├───┼───┤\n│ 3 │ 4 │\n└───┴───┘\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "tree/basic",
+      "kind": "tree",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "label": "Root",
+        "children": [
+          {
+            "label": "Child 1",
+            "children": []
+          },
+          {
+            "label": "Child 2",
+            "children": [
+              {
+                "label": "Leaf",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "plain": "Root\n├── Child 1\n└── Child 2\n    └── Leaf\n",
+        "ansi": "Root\n├── Child 1\n└── Child 2\n    └── Leaf\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "progress/basic",
+      "kind": "progress",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "total": 100,
+        "completed": 50,
+        "width": 20
+      },
+      "expected": {
+        "plain": "━━━━━━━━━━╺━━━━━━━━━",
+        "ansi": "\u001b[38;2;249;38;114m━━━━━━━━━━\u001b[0m\u001b[38;5;237m╺\u001b[0m\u001b[38;5;237m━━━━━━━━━\u001b[0m"
+      },
+      "notes": null
+    },
+    {
+      "id": "columns/basic",
+      "kind": "columns",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "items": [
+          "One",
+          "Two",
+          "Three",
+          "Four"
+        ]
+      },
+      "expected": {
+        "plain": "One Two Three Four\n",
+        "ansi": "One Two Three Four\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "padding/basic",
+      "kind": "padding",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 12
+      },
+      "env": null,
+      "input": {
+        "text": "Padded",
+        "pad": [
+          1,
+          2,
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "plain": "            \n  Padded    \n            \n",
+        "ansi": "            \n  Padded    \n            \n"
+      },
+      "notes": null
+    },
+    {
+      "id": "align/center",
+      "kind": "align",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "text": "Centered",
+        "width": 20,
+        "align": "center"
+      },
+      "expected": {
+        "plain": "                Centered                \n",
+        "ansi": "                Centered                \n"
+      },
+      "notes": null
+    },
+    {
+      "id": "markdown/plain",
+      "kind": "markdown",
+      "compare_ansi": false,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "text": "Just text"
+      },
+      "expected": {
+        "plain": "Just text                               \n",
+        "ansi": "Just text                               \n"
+      },
+      "notes": null
+    },
+    {
+      "id": "json/basic",
+      "kind": "json",
+      "compare_ansi": false,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "json": "{\"age\": 30, \"name\": \"Alice\"}"
+      },
+      "expected": {
+        "plain": "{\n  \"age\": 30,\n  \"name\": \"Alice\"\n}\n",
+        "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"age\"\u001b[0m: \u001b[1;36m30\u001b[0m,\n  \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"Alice\"\u001b[0m\n\u001b[1m}\u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "syntax/basic",
+      "kind": "syntax",
+      "compare_ansi": false,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "code": "fn main() { println!(\"hi\"); }",
+        "language": "rust"
+      },
+      "expected": {
+        "plain": "fn main() { println!(\"hi\"); }           \n",
+        "ansi": "\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m           \u001b[0m\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "terminal/no_color",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": null
+      },
+      "env": {
+        "NO_COLOR": "1",
+        "FORCE_COLOR": "1",
+        "TERM": "xterm-256color"
+      },
+      "input": {
+        "markup": "[#ff8800]No Color[/]"
+      },
+      "expected": {
+        "plain": "No Color\n",
+        "ansi": "No Color\n"
+      },
+      "notes": "NO_COLOR disables colors even when terminal supports them."
+    },
+    {
+      "id": "terminal/colorterm_truecolor",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": null
+      },
+      "env": {
+        "FORCE_COLOR": "1",
+        "COLORTERM": "truecolor",
+        "TERM": "xterm-256color"
+      },
+      "input": {
+        "markup": "[#ff0000]TrueColor[/]"
+      },
+      "expected": {
+        "plain": "TrueColor\n",
+        "ansi": "\u001b[38;2;255;0;0mTrueColor\u001b[0m\n"
+      },
+      "notes": "COLORTERM truecolor should yield 24-bit ANSI."
+    },
+    {
+      "id": "terminal/term_256color",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": null
+      },
+      "env": {
+        "FORCE_COLOR": "1",
+        "TERM": "xterm-256color"
+      },
+      "input": {
+        "markup": "[#00ff00]EightBit[/]"
+      },
+      "expected": {
+        "plain": "EightBit\n",
+        "ansi": "\u001b[38;5;46mEightBit\u001b[0m\n"
+      },
+      "notes": "TERM -256color should yield 256-color ANSI."
+    },
+    {
+      "id": "terminal/term_16color",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": null
+      },
+      "env": {
+        "FORCE_COLOR": "1",
+        "TERM": "xterm-16color"
+      },
+      "input": {
+        "markup": "[#0000ff]Standard[/]"
+      },
+      "expected": {
+        "plain": "Standard\n",
+        "ansi": "\u001b[34mStandard\u001b[0m\n"
+      },
+      "notes": "TERM -16color should yield standard ANSI colors."
+    },
+    {
+      "id": "terminal/term_dumb",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": null
+      },
+      "env": {
+        "FORCE_COLOR": "1",
+        "TERM": "dumb"
+      },
+      "input": {
+        "markup": "[#ff00ff]Dumb[/]"
+      },
+      "expected": {
+        "plain": "Dumb\n",
+        "ansi": "Dumb\n"
+      },
+      "notes": "TERM dumb should disable color output."
+    }
+  ]
+}

@@ -63,6 +63,7 @@
 //! - **`syntax`**: Syntax highlighting for source code via syntect
 //! - **`markdown`**: Markdown rendering via pulldown-cmark
 //! - **`json`**: JSON formatting with syntax highlighting
+//! - **`tracing`**: Tracing integration via `RichTracingLayer`
 //!
 //! ```toml
 //! [dependencies]
@@ -127,6 +128,8 @@
 //! console.print_renderable(&tree);
 //! ```
 
+#![allow(stable_features)]
+#![feature(let_chains)]
 #![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -141,6 +144,8 @@ pub mod r#box;
 pub mod cells;
 pub mod color;
 pub mod console;
+pub mod live;
+pub mod logging;
 pub mod markup;
 pub mod measure;
 pub mod renderables;
@@ -154,11 +159,15 @@ pub mod prelude {
     pub use crate::r#box::BoxChars;
     pub use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
     pub use crate::console::{Console, ConsoleOptions};
+    pub use crate::live::{Live, LiveOptions, VerticalOverflowMethod};
+    pub use crate::logging::RichLogger;
+    #[cfg(feature = "tracing")]
+    pub use crate::logging::RichTracingLayer;
     pub use crate::measure::Measurement;
     pub use crate::renderables::{
-        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, PaddingDimensions, Panel,
-        ProgressBar, Row, Rule, Spinner, Table, Tree, TreeGuides, TreeNode, VerticalAlign,
-        VerticalAlignMethod, align_text,
+        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, Layout, LayoutSplitter,
+        PaddingDimensions, Panel, ProgressBar, Region, Row, Rule, Spinner, Table, Tree, TreeGuides,
+        TreeNode, VerticalAlign, VerticalAlignMethod, align_text,
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};
@@ -177,6 +186,11 @@ pub mod prelude {
 // Re-export key types at crate root
 pub use color::{Color, ColorSystem, ColorTriplet, ColorType};
 pub use console::Console;
+pub use live::{Live, LiveOptions, VerticalOverflowMethod};
+pub use logging::RichLogger;
+#[cfg(feature = "tracing")]
+pub use logging::RichTracingLayer;
+pub use renderables::{Layout, LayoutSplitter, Region};
 pub use segment::Segment;
 pub use style::{Attributes, Style};
 pub use text::{Span, Text};

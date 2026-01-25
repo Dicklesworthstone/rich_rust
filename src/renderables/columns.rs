@@ -310,6 +310,14 @@ impl<'a> Columns<'a> {
 
                     let content_width = column_width.saturating_sub(self.padding * 2);
                     let mut content = self.items[item_idx].clone();
+
+                    // Sanitize content to prevent layout breakage
+                    for seg in &mut content {
+                        if seg.text.contains('\n') {
+                            seg.text = std::borrow::Cow::Owned(seg.text.replace('\n', " "));
+                        }
+                    }
+
                     content =
                         crate::segment::adjust_line_length(content, content_width, None, false);
                     let aligned = Align::new(content, content_width)
@@ -533,8 +541,13 @@ mod tests {
     fn test_columns_zero_width() {
         let cols = Columns::from_strings(&["A", "B"]);
         let lines = cols.render(0);
-        // Should handle zero width gracefully (may be empty)
-        assert!(lines.is_empty() || !lines.is_empty()); // Just verify no panic
+        // Zero width should still produce the correct number of rows,
+        // but each line must be zero-width to avoid overflow.
+        assert_eq!(lines.len(), 2);
+        for line in &lines {
+            let width: usize = line.iter().map(Segment::cell_length).sum();
+            assert_eq!(width, 0);
+        }
     }
 
     #[test]

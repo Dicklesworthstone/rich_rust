@@ -19,7 +19,7 @@ pub enum BarStyle {
     /// Unicode block characters (█▓░)
     #[default]
     Block,
-    /// Thin line style (─╸)
+    /// Line style (━╺)
     Line,
     /// Dots style (●○)
     Dots,
@@ -46,7 +46,7 @@ impl BarStyle {
         match self {
             Self::Ascii => "-",
             Self::Block => "\u{2591}",    // ░
-            Self::Line => "\u{2500}",     // ─
+            Self::Line => "\u{2501}",     // ━
             Self::Dots => "\u{25CB}",     // ○
             Self::Gradient => "\u{2591}", // ░
         }

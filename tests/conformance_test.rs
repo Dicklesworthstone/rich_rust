@@ -98,7 +98,10 @@ fn conformance_rule_no_title() {
         width: 40,
     };
     let output = run_test(&test);
-    assert!(!output.is_empty());
+    assert!(
+        output.contains('─') || output.contains('-'),
+        "Rule without title should render a horizontal line"
+    );
 }
 
 #[test]

@@ -61,6 +61,7 @@
 
 use crate::r#box::{ASCII, BoxChars, HEAVY_HEAD, RowLevel};
 use crate::cells;
+use crate::markup;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
@@ -256,11 +257,53 @@ pub struct Cell {
 }
 
 impl Cell {
-    /// Create a new cell.
+    /// Create a new cell with plain text content.
+    ///
+    /// This method does NOT parse Rich markup syntax. If you pass `"[bold]text[/]"`,
+    /// the literal string `"[bold]text[/]"` will be displayed in the cell.
+    ///
+    /// Use [`Cell::from_markup`] if you want to parse Rich markup tags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rich_rust::renderables::table::Cell;
+    ///
+    /// // Plain text - markup is NOT parsed
+    /// let cell = Cell::new("[bold]text[/]");
+    /// assert_eq!(cell.content.plain(), "[bold]text[/]"); // Literal text
+    ///
+    /// // Compare with from_markup which DOES parse:
+    /// let styled_cell = Cell::from_markup("[bold]text[/]");
+    /// assert_eq!(styled_cell.content.plain(), "text"); // Markup removed
+    /// ```
     #[must_use]
     pub fn new(content: impl Into<Text>) -> Self {
         Self {
             content: content.into(),
+            style: None,
+        }
+    }
+
+    /// Create a new cell from markup string.
+    ///
+    /// This parses Rich markup syntax like `[bold]text[/]` or `[red]colored[/]`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rich_rust::renderables::table::Cell;
+    ///
+    /// // Styled cell using markup
+    /// let cell = Cell::from_markup("[bold green]Success[/]");
+    ///
+    /// // Mixed markup
+    /// let cell = Cell::from_markup("Status: [red]FAIL[/]");
+    /// ```
+    #[must_use]
+    pub fn from_markup(content: &str) -> Self {
+        Self {
+            content: markup::render_or_plain(content),
             style: None,
         }
     }
@@ -486,6 +529,33 @@ impl Table {
     #[must_use]
     pub fn with_row_cells<T: Into<Cell>>(mut self, cells: impl IntoIterator<Item = T>) -> Self {
         self.add_row_cells(cells);
+        self
+    }
+
+    /// Add a row from markup strings.
+    ///
+    /// Each string is parsed as Rich markup syntax.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rich_rust::renderables::table::Table;
+    ///
+    /// let mut table = Table::new();
+    /// table.add_row_markup(["[bold]Name[/]", "[green]Status[/]"]);
+    /// ```
+    pub fn add_row_markup<S: AsRef<str>>(&mut self, cells: impl IntoIterator<Item = S>) {
+        let cells: Vec<Cell> = cells
+            .into_iter()
+            .map(|s| Cell::from_markup(s.as_ref()))
+            .collect();
+        self.rows.push(Row::new(cells));
+    }
+
+    /// Add a row from markup strings (builder pattern).
+    #[must_use]
+    pub fn with_row_markup<S: AsRef<str>>(mut self, cells: impl IntoIterator<Item = S>) -> Self {
+        self.add_row_markup(cells);
         self
     }
 
@@ -756,11 +826,18 @@ impl Table {
         let mut result = widths.to_vec();
         let excess = total - available;
 
-        // Get minimum widths
+        // Get minimum widths, treating fixed width columns as having that minimum
         let minimums: Vec<usize> = self
             .columns
             .iter()
-            .map(|col| col.min_width.unwrap_or(1))
+            .map(|col| {
+                let explicit_min = col.min_width.unwrap_or(1);
+                if let Some(fixed) = col.width {
+                    fixed.max(explicit_min)
+                } else {
+                    explicit_min
+                }
+            })
             .collect();
 
         // Calculate shrinkable amount per column
@@ -1214,13 +1291,9 @@ impl Table {
             _ => &box_chars.foot,
         };
 
-        // Left edge
-        if self.show_edge {
-            segments.push(Segment::new(
-                cell_chars[0].to_string(),
-                Some(self.border_style.clone()),
-            ));
-        }
+        // Prepare cell content (split into lines)
+        let mut row_cells_lines: Vec<Vec<Vec<Segment<'static>>>> = Vec::with_capacity(widths.len());
+        let mut max_height = 0;
 
         for (i, (&width, &cell)) in widths.iter().zip(cells.iter()).enumerate() {
             let cell_style = cell_styles.get(i).copied().unwrap_or(&self.style);
@@ -1232,76 +1305,128 @@ impl Table {
             }
             combined_style = combined_style.combine(cell.style());
 
-            // Left padding
-            let pad_left = if self.collapse_padding {
-                self.pad_edge && i == 0
-            } else {
-                self.pad_edge || i > 0
-            };
-            if pad_left {
-                segments.push(Segment::new(pad_str.clone(), Some(combined_style.clone())));
-            }
+            let mut cell_text = cell.clone();
+            cell_text.set_style(combined_style.clone());
 
-            // Cell content
+            let overflow = self
+                .columns
+                .get(i)
+                .map_or(OverflowMethod::Fold, |c| c.overflow);
+
+            // Handle wrapping/truncation
+            cell_text.overflow = overflow;
+
+            // If overflow is Crop/Ellipsis/Ignore, wrap() handles them (returning single line or truncated line)
+            // If overflow is Fold, wrap() handles wrapping.
+            // Note: wrap() handles explicit newlines via split_lines() internally first.
+            let lines: Vec<Text> = cell_text.wrap(width);
+
             let justify = self
                 .columns
                 .get(i)
                 .map_or(JustifyMethod::Left, |c| c.justify);
-            let overflow = self
-                .columns
-                .get(i)
-                .map_or(OverflowMethod::Crop, |c| c.overflow);
+            let mut cell_lines_segments = Vec::with_capacity(lines.len());
 
-            let mut cell_text = cell.clone();
-            cell_text.set_style(combined_style.clone());
+            for mut line in lines {
+                if line.cell_len() < width {
+                    line.pad(width, justify);
+                    // Re-apply style to ensure padding gets background color
+                    line.set_style(combined_style.clone());
+                }
 
-            let content_width = cell_text.cell_len();
-            if content_width > width {
-                cell_text.truncate(width, overflow, false);
-            }
-            if cell_text.cell_len() < width {
-                cell_text.pad(width, justify);
-                cell_text.set_style(combined_style.clone());
-            }
-
-            segments.extend(
-                cell_text
+                let segs: Vec<Segment<'static>> = line
                     .render("")
                     .into_iter()
-                    .map(super::super::segment::Segment::into_owned),
-            );
-
-            // Right padding
-            let pad_right = if self.collapse_padding {
-                self.pad_edge && i == last_idx
-            } else {
-                self.pad_edge || i < widths.len() - 1
-            };
-            if pad_right {
-                segments.push(Segment::new(pad_str.clone(), Some(combined_style)));
+                    .map(Segment::into_owned)
+                    .collect();
+                cell_lines_segments.push(segs);
             }
 
-            // Cell divider
-            if i < widths.len() - 1 {
+            max_height = max_height.max(cell_lines_segments.len());
+            row_cells_lines.push(cell_lines_segments);
+        }
+
+        // Render each line of the row
+        // If max_height is 0 (empty row), we still render one line if it's supposed to be there?
+        // But cell_lines_segments usually has at least 1 line (even if empty).
+        // Text::wrap always returns at least one line.
+
+        for h in 0..max_height {
+            // Left edge
+            if self.show_edge {
                 segments.push(Segment::new(
-                    cell_chars[2].to_string(),
+                    cell_chars[0].to_string(),
                     Some(self.border_style.clone()),
                 ));
             }
+
+            for (i, (&width, cell_lines)) in widths.iter().zip(row_cells_lines.iter()).enumerate() {
+                // Reconstruct style for padding (needed if cell line is empty/missing)
+                let cell_style = cell_styles.get(i).copied().unwrap_or(&self.style);
+                let override_style = cell_overrides.get(i).and_then(|style| style.as_ref());
+                let mut combined_style = self.style.combine(row_style).combine(cell_style);
+                if let Some(override_style) = override_style {
+                    combined_style = combined_style.combine(override_style);
+                }
+                // Also combine with base cell style for consistency (background color)
+                combined_style = combined_style.combine(cells[i].style());
+
+                // Left padding
+                let pad_left = if self.collapse_padding {
+                    self.pad_edge && i == 0
+                } else {
+                    self.pad_edge || i > 0
+                };
+                if pad_left {
+                    segments.push(Segment::new(pad_str.clone(), Some(combined_style.clone())));
+                }
+
+                // Content
+                if h < cell_lines.len() {
+                    // Existing line
+                    segments.extend(cell_lines[h].iter().cloned());
+                } else {
+                    // Empty line (padding for shorter cells)
+                    segments.push(Segment::new(
+                        " ".repeat(width),
+                        Some(combined_style.clone()),
+                    ));
+                }
+
+                // Right padding
+                let pad_right = if self.collapse_padding {
+                    self.pad_edge && i == last_idx
+                } else {
+                    self.pad_edge || i < widths.len() - 1
+                };
+                if pad_right {
+                    segments.push(Segment::new(pad_str.clone(), Some(combined_style)));
+                }
+
+                // Cell divider
+                if i < widths.len() - 1 {
+                    segments.push(Segment::new(
+                        cell_chars[2].to_string(),
+                        Some(self.border_style.clone()),
+                    ));
+                }
+            }
+
+            // Right edge
+            if self.show_edge {
+                segments.push(Segment::new(
+                    cell_chars[3].to_string(),
+                    Some(self.border_style.clone()),
+                ));
+            }
+
+            if h < max_height - 1 {
+                segments.push(Segment::line());
+            }
         }
 
-        // Right edge
-        if self.show_edge {
-            segments.push(Segment::new(
-                cell_chars[3].to_string(),
-                Some(self.border_style.clone()),
-            ));
-        }
-
-        segments.push(Segment::line());
         segments
     }
-
     /// Render multiple leading blank lines between rows.
     #[allow(clippy::too_many_arguments)]
     fn render_leading_lines(
@@ -1880,5 +2005,279 @@ mod tests {
             blank_line.starts_with('|') && blank_line.ends_with('|'),
             "blank leading line should have borders: {blank_line}"
         );
+    }
+
+    #[test]
+    fn test_cell_from_markup() {
+        // Basic markup should be parsed
+        let cell = Cell::from_markup("[bold]Bold text[/]");
+        assert_eq!(cell.content.plain(), "Bold text");
+
+        // Check that styling is applied in spans
+        let spans = cell.content.spans();
+        assert!(!spans.is_empty(), "Expected at least one span");
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.style.attributes.contains(Attributes::BOLD)),
+            "Expected bold span"
+        );
+    }
+
+    #[test]
+    fn test_cell_from_markup_with_color() {
+        let cell = Cell::from_markup("[red]Red[/] and [green]Green[/]");
+        assert_eq!(cell.content.plain(), "Red and Green");
+        // Should have at least 2 spans (one for red, one for green)
+        let spans = cell.content.spans();
+        assert!(spans.len() >= 2, "Expected at least 2 color spans");
+    }
+
+    #[test]
+    fn test_cell_from_markup_nested() {
+        let cell = Cell::from_markup("[bold italic]Styled[/]");
+        let spans = cell.content.spans();
+        assert!(!spans.is_empty(), "Expected at least one span");
+        // The span should have both bold and italic
+        let styled_span = &spans[0];
+        assert!(styled_span.style.attributes.contains(Attributes::BOLD));
+        assert!(styled_span.style.attributes.contains(Attributes::ITALIC));
+    }
+
+    #[test]
+    fn test_cell_from_markup_renders_styled() {
+        let mut table = Table::new().with_column(Column::new("Status"));
+        table.add_row(Row::new(vec![Cell::from_markup("[bold green]PASS[/]")]));
+
+        let segments = table.render(30);
+        let pass_seg = segments
+            .iter()
+            .find(|seg| seg.text.contains("PASS"))
+            .expect("expected PASS segment");
+
+        let style = pass_seg.style.as_ref().expect("expected styled segment");
+        assert!(style.attributes.contains(Attributes::BOLD));
+        assert!(style.color.is_some());
+    }
+
+    #[test]
+    fn test_cell_from_markup_plain_text() {
+        // Plain text without markup should work too
+        let cell = Cell::from_markup("Just plain text");
+        assert_eq!(cell.content.plain(), "Just plain text");
+    }
+
+    #[test]
+    fn test_cell_from_markup_empty() {
+        let cell = Cell::from_markup("");
+        assert_eq!(cell.content.plain(), "");
+    }
+
+    #[test]
+    fn test_table_add_row_markup() {
+        let mut table = Table::new()
+            .with_column(Column::new("Name"))
+            .with_column(Column::new("Status"));
+
+        table.add_row_markup(["[bold]Alice[/]", "[green]PASS[/]"]);
+
+        let segments = table.render(40);
+
+        // Find Alice segment and verify it's bold
+        let alice_seg = segments
+            .iter()
+            .find(|seg| seg.text.contains("Alice"))
+            .expect("expected Alice segment");
+        let style = alice_seg.style.as_ref().expect("expected styled segment");
+        assert!(style.attributes.contains(Attributes::BOLD));
+
+        // Find PASS segment and verify it has color
+        let pass_seg = segments
+            .iter()
+            .find(|seg| seg.text.contains("PASS"))
+            .expect("expected PASS segment");
+        let style = pass_seg.style.as_ref().expect("expected styled segment");
+        assert!(style.color.is_some());
+    }
+
+    #[test]
+    fn test_table_with_row_markup() {
+        let table = Table::new()
+            .with_column(Column::new("Col"))
+            .with_row_markup(["[italic]Styled[/]"]);
+
+        let segments = table.render(20);
+        let styled_seg = segments
+            .iter()
+            .find(|seg| seg.text.contains("Styled"))
+            .expect("expected Styled segment");
+        let style = styled_seg.style.as_ref().expect("expected styled segment");
+        assert!(style.attributes.contains(Attributes::ITALIC));
+    }
+
+    // ========================================================================
+    // REGRESSION TESTS: Cell::new() vs Cell::from_markup()
+    // These tests document the EXPECTED difference between the two constructors.
+    // Cell::new() does NOT parse markup; Cell::from_markup() DOES.
+    // See: bd-2llx
+    // ========================================================================
+
+    #[test]
+    fn test_cell_new_does_not_parse_markup() {
+        // Cell::new() should NOT parse markup - this is by design.
+        // The literal string including markup tags should appear in the content.
+        let cell = Cell::new("[bold]text[/]");
+        assert_eq!(
+            cell.content.plain(),
+            "[bold]text[/]",
+            "Cell::new() should NOT strip markup tags"
+        );
+
+        // There should be no styled spans
+        let spans = cell.content.spans();
+        assert!(
+            spans.is_empty(),
+            "Cell::new() should NOT create styled spans from markup"
+        );
+    }
+
+    #[test]
+    fn test_cell_from_markup_does_parse_markup() {
+        // Cell::from_markup() SHOULD parse markup - this is its purpose.
+        // The markup tags should be removed and styles applied.
+        let cell = Cell::from_markup("[bold]text[/]");
+        assert_eq!(
+            cell.content.plain(),
+            "text",
+            "Cell::from_markup() should strip markup tags"
+        );
+
+        // There should be a styled span with bold attribute
+        let spans = cell.content.spans();
+        assert!(
+            !spans.is_empty(),
+            "Cell::from_markup() SHOULD create styled spans"
+        );
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.style.attributes.contains(Attributes::BOLD)),
+            "Cell::from_markup() should apply bold style"
+        );
+    }
+
+    #[test]
+    fn test_cell_new_vs_from_markup_same_input_different_output() {
+        // Same input string, different constructors, different results.
+        // This test documents the API difference clearly.
+        let markup_str = "[red]Error:[/] [bold]something went wrong[/]";
+
+        // Cell::new() keeps markup literal
+        let plain_cell = Cell::new(markup_str);
+        assert_eq!(
+            plain_cell.content.plain(),
+            markup_str,
+            "Cell::new() preserves literal markup"
+        );
+
+        // Cell::from_markup() parses it
+        let styled_cell = Cell::from_markup(markup_str);
+        assert_eq!(
+            styled_cell.content.plain(),
+            "Error: something went wrong",
+            "Cell::from_markup() removes markup tags"
+        );
+
+        // Verify styled spans exist for from_markup version
+        assert!(
+            styled_cell.content.spans().len() >= 2,
+            "Cell::from_markup() should create multiple style spans"
+        );
+    }
+
+    #[test]
+    fn test_cell_new_vs_from_markup_table_render() {
+        // Verify the difference persists through table rendering
+        let mut table_plain = Table::new().with_column(Column::new("Status"));
+        table_plain.add_row(Row::new(vec![Cell::new("[green]OK[/]")]));
+
+        let mut table_styled = Table::new().with_column(Column::new("Status"));
+        table_styled.add_row(Row::new(vec![Cell::from_markup("[green]OK[/]")]));
+
+        let segments_plain = table_plain.render(40);
+        let segments_styled = table_styled.render(40);
+
+        // In plain table, the literal "[green]OK[/]" should appear in output
+        let has_literal_markup = segments_plain
+            .iter()
+            .any(|seg| seg.text.contains("[green]"));
+        assert!(
+            has_literal_markup,
+            "Cell::new() output should contain literal markup tags in rendered table"
+        );
+
+        // In styled table, "OK" should appear but NOT with literal markup tags
+        let styled_ok = segments_styled
+            .iter()
+            .find(|seg| seg.text.contains("OK") && !seg.text.contains("[green]"));
+        assert!(
+            styled_ok.is_some(),
+            "Cell::from_markup() output should have 'OK' without literal tags"
+        );
+
+        // The styled version should have color applied
+        if let Some(seg) = styled_ok {
+            assert!(
+                seg.style.as_ref().is_some_and(|s| s.color.is_some()),
+                "Cell::from_markup() should apply green color to 'OK'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_row_cells_uses_cell_new_not_from_markup() {
+        // add_row_cells uses Into<Text> which does NOT parse markup.
+        // Users who want markup should use add_row_markup instead.
+        let mut table = Table::new().with_column(Column::new("Col"));
+        table.add_row_cells(["[bold]test[/]"]);
+
+        let segments = table.render(40);
+        let has_literal = segments
+            .iter()
+            .any(|seg| seg.text.contains("[bold]test[/]"));
+        assert!(
+            has_literal,
+            "add_row_cells() should NOT parse markup (uses Cell::new)"
+        );
+    }
+
+    #[test]
+    fn test_add_row_markup_uses_from_markup() {
+        // add_row_markup explicitly parses markup via Cell::from_markup
+        let mut table = Table::new().with_column(Column::new("Col"));
+        table.add_row_markup(["[bold]test[/]"]);
+
+        let segments = table.render(40);
+
+        // Should NOT have literal markup tags
+        let has_literal = segments
+            .iter()
+            .any(|seg| seg.text.contains("[bold]") || seg.text.contains("[/]"));
+        assert!(
+            !has_literal,
+            "add_row_markup() SHOULD parse markup (uses Cell::from_markup)"
+        );
+
+        // Should have styled "test" segment
+        let test_seg = segments.iter().find(|seg| seg.text.contains("test"));
+        assert!(test_seg.is_some(), "Should contain 'test' segment");
+        if let Some(seg) = test_seg {
+            assert!(
+                seg.style
+                    .as_ref()
+                    .is_some_and(|s| s.attributes.contains(Attributes::BOLD)),
+                "add_row_markup() should apply bold style"
+            );
+        }
     }
 }

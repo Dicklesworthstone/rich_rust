@@ -10,6 +10,7 @@ mod common;
 use common::init_test_logging;
 use rich_rust::markup;
 use rich_rust::prelude::*;
+use rich_rust::renderables::Renderable;
 
 /// Helper to render markup through the console pipeline and capture output.
 fn render_markup(markup: &str, color_system: ColorSystem) -> String {
@@ -30,10 +31,39 @@ fn render_markup(markup: &str, color_system: ColorSystem) -> String {
     String::from_utf8(output).expect("invalid utf8")
 }
 
+/// Helper to render a renderable through the console pipeline and capture output.
+fn render_renderable(renderable: &impl Renderable, color_system: ColorSystem) -> String {
+    let console = Console::builder()
+        .color_system(color_system)
+        .width(80)
+        .force_terminal(true)
+        .build();
+
+    let options = console.options();
+    let segments = renderable.render(&console, &options);
+    let mut output = Vec::new();
+
+    console
+        .print_segments_to(&mut output, &segments)
+        .expect("failed to render");
+
+    String::from_utf8(output).expect("invalid utf8")
+}
+
 /// Helper to strip ANSI codes for content verification.
 fn strip_ansi(s: &str) -> String {
     let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\").unwrap();
     ansi_regex.replace_all(s, "").to_string()
+}
+
+/// Check if ANSI output contains the bold SGR code.
+fn has_bold_ansi(output: &str) -> bool {
+    let sgr_regex = regex::Regex::new(r"\x1b\[([0-9;]*)m").unwrap();
+    sgr_regex.captures_iter(output).any(|caps| {
+        caps.get(1)
+            .map(|m| m.as_str().split(';').any(|code| code == "1"))
+            .unwrap_or(false)
+    })
 }
 
 // =============================================================================
@@ -428,4 +458,317 @@ fn e2e_markup_parser_direct() {
     );
 
     tracing::info!("Markup parser direct test PASSED");
+}
+
+// =============================================================================
+// Scenario 6: Markup Inside Renderables
+// =============================================================================
+
+#[test]
+fn e2e_table_markup_cells_are_parsed() {
+    init_test_logging();
+    tracing::info!("Starting E2E table markup parsing test");
+
+    let mut table = Table::new().with_column(Column::new("Status"));
+    table.add_row_markup(["[bold red]FAIL[/]"]);
+
+    let output = render_renderable(&table, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    assert!(!plain.contains("[bold"), "Markup tags should not appear");
+    assert!(plain.contains("FAIL"), "Missing cell content");
+    assert!(has_bold_ansi(&output), "Missing bold ANSI code");
+}
+
+#[test]
+fn e2e_panel_markup_title_and_content_are_parsed() {
+    init_test_logging();
+    tracing::info!("Starting E2E panel markup parsing test");
+
+    let content = markup::render_or_plain("[bold]Alert[/]");
+    let title = markup::render_or_plain("[bold red]Status[/]");
+    let panel = Panel::from_rich_text(&content, 30).title(title);
+
+    let output = render_renderable(&panel, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    assert!(!plain.contains("[bold"), "Markup tags should not appear");
+    assert!(plain.contains("Alert"), "Missing panel content");
+    assert!(plain.contains("Status"), "Missing panel title");
+    assert!(has_bold_ansi(&output), "Missing bold ANSI code");
+}
+
+#[test]
+fn e2e_tree_markup_labels_are_parsed() {
+    init_test_logging();
+    tracing::info!("Starting E2E tree markup parsing test");
+
+    let root = TreeNode::new(markup::render_or_plain("[bold]Root[/]")).child(TreeNode::new(
+        markup::render_or_plain("[bold green]Leaf[/]"),
+    ));
+    let tree = Tree::new(root);
+
+    let output = render_renderable(&tree, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    assert!(!plain.contains("[bold"), "Markup tags should not appear");
+    assert!(plain.contains("Root"), "Missing root label");
+    assert!(plain.contains("Leaf"), "Missing leaf label");
+    assert!(has_bold_ansi(&output), "Missing bold ANSI code");
+}
+
+#[test]
+fn e2e_progress_description_markup_is_parsed() {
+    init_test_logging();
+    tracing::info!("Starting E2E progress markup parsing test");
+
+    let desc = markup::render_or_plain("[bold]Loading[/]");
+    let mut bar = ProgressBar::new().description(desc).width(10);
+    bar.set_progress(0.5);
+
+    let output = render_renderable(&bar, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    assert!(!plain.contains("[bold"), "Markup tags should not appear");
+    assert!(plain.contains("Loading"), "Missing description content");
+    assert!(has_bold_ansi(&output), "Missing bold ANSI code");
+}
+
+#[test]
+fn e2e_text_markup_is_parsed() {
+    init_test_logging();
+    tracing::info!("Starting E2E text markup parsing test");
+
+    let text = markup::render_or_plain("[bold]Hello[/]");
+    let output = render_renderable(&text, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    assert_eq!(plain, "Hello");
+    assert!(!plain.contains("[bold"), "Markup tags should not appear");
+    assert!(has_bold_ansi(&output), "Missing bold ANSI code");
+}
+
+// =============================================================================
+// Scenario 7: Full Pipeline Integration Tests (bd-3svf)
+// These tests verify the ENTIRE rendering pipeline from user API call
+// through Console to final output string with ANSI codes.
+// =============================================================================
+
+/// Verify output contains no raw markup tags (they should be parsed).
+fn assert_no_raw_markup(output: &str, context: &str) {
+    let markup_patterns = [
+        "[bold]",
+        "[/bold]",
+        "[red]",
+        "[/red]",
+        "[green]",
+        "[/green]",
+        "[italic]",
+        "[/italic]",
+        "[underline]",
+        "[/]",
+    ];
+    for pattern in markup_patterns {
+        assert!(
+            !output.contains(pattern),
+            "{}: Found raw markup tag '{}' in output:\n{}",
+            context,
+            pattern,
+            output
+        );
+    }
+}
+
+/// Verify output contains ANSI escape sequences (styles are applied).
+fn assert_has_ansi_codes(output: &str, context: &str) {
+    assert!(
+        output.contains("\x1b["),
+        "{}: Expected ANSI escape codes but found none in output:\n{}",
+        context,
+        output
+    );
+}
+
+#[test]
+fn e2e_integration_table_full_pipeline() {
+    init_test_logging();
+    tracing::info!("Starting table full pipeline integration test");
+
+    let mut table = Table::new()
+        .title("Status Report")
+        .with_column(Column::new("Test"))
+        .with_column(Column::new("Result"));
+
+    // Use add_row_markup which uses Cell::from_markup
+    table.add_row_markup(["Unit Tests", "[bold green]PASS[/]"]);
+    table.add_row_markup(["Integration", "[bold red]FAIL[/]"]);
+
+    let output = render_renderable(&table, ColorSystem::TrueColor);
+    tracing::debug!(output = %output, "Table output");
+
+    // Verify text content is present
+    assert!(output.contains("Unit Tests"), "Missing 'Unit Tests'");
+    assert!(output.contains("Integration"), "Missing 'Integration'");
+    assert!(output.contains("PASS"), "Missing 'PASS'");
+    assert!(output.contains("FAIL"), "Missing 'FAIL'");
+
+    // Verify no raw markup tags remain
+    assert_no_raw_markup(&output, "table full pipeline");
+
+    // Verify ANSI codes are present (styles applied)
+    assert_has_ansi_codes(&output, "table full pipeline");
+
+    tracing::info!("Table full pipeline integration test PASSED");
+}
+
+#[test]
+fn e2e_integration_cell_new_vs_from_markup() {
+    init_test_logging();
+    tracing::info!("Starting Cell::new vs from_markup integration test");
+
+    // Cell::new should NOT parse markup
+    let mut table_plain = Table::new().with_column(Column::new("Code"));
+    table_plain.add_row(Row::new(vec![Cell::new("[bold]text[/]")]));
+
+    let output_plain = render_renderable(&table_plain, ColorSystem::TrueColor);
+    let plain_text = strip_ansi(&output_plain);
+
+    // The literal markup should appear
+    assert!(
+        plain_text.contains("[bold]text[/]"),
+        "Cell::new should preserve literal markup. Got: {}",
+        plain_text
+    );
+
+    // Cell::from_markup SHOULD parse markup
+    let mut table_styled = Table::new().with_column(Column::new("Code"));
+    table_styled.add_row(Row::new(vec![Cell::from_markup("[bold]text[/]")]));
+
+    let output_styled = render_renderable(&table_styled, ColorSystem::TrueColor);
+    let styled_text = strip_ansi(&output_styled);
+
+    // No literal markup should remain
+    assert!(
+        !styled_text.contains("[bold]"),
+        "Cell::from_markup should parse markup. Got: {}",
+        styled_text
+    );
+    assert!(styled_text.contains("text"), "Missing 'text' content");
+
+    tracing::info!("Cell::new vs from_markup integration test PASSED");
+}
+
+#[test]
+fn e2e_integration_panel_full_pipeline() {
+    init_test_logging();
+    tracing::info!("Starting panel full pipeline integration test");
+
+    let content = markup::render_or_plain(
+        "[bold]Important Notice[/]\n\n[red]Warning:[/] Something happened.",
+    );
+    let panel = Panel::from_rich_text(&content, 50).title("Alert");
+
+    let output = render_renderable(&panel, ColorSystem::TrueColor);
+    tracing::debug!(output = %output, "Panel output");
+
+    // Verify content
+    let plain = strip_ansi(&output);
+    assert!(
+        plain.contains("Important Notice"),
+        "Missing 'Important Notice'"
+    );
+    assert!(plain.contains("Warning:"), "Missing 'Warning:'");
+    assert!(
+        plain.contains("Something happened"),
+        "Missing 'Something happened'"
+    );
+
+    // Verify no raw markup
+    assert_no_raw_markup(&output, "panel full pipeline");
+
+    // Verify ANSI codes present
+    assert_has_ansi_codes(&output, "panel full pipeline");
+
+    tracing::info!("Panel full pipeline integration test PASSED");
+}
+
+#[test]
+fn e2e_integration_console_print_with_markup() {
+    init_test_logging();
+    tracing::info!("Starting console.print() with markup test");
+
+    let output = render_markup(
+        "[bold red]Error:[/] [italic]Something went wrong[/]",
+        ColorSystem::TrueColor,
+    );
+    tracing::debug!(output = %output, "Console.print() output");
+
+    // Verify no raw markup tags
+    assert_no_raw_markup(&output, "console.print() with markup");
+
+    // Verify ANSI codes present
+    assert_has_ansi_codes(&output, "console.print() with markup");
+
+    // Verify content
+    let plain = strip_ansi(&output);
+    assert_eq!(
+        plain, "Error: Something went wrong",
+        "Unexpected plain text"
+    );
+
+    tracing::info!("Console.print() with markup test PASSED");
+}
+
+#[test]
+fn e2e_integration_nested_markup_styles() {
+    init_test_logging();
+    tracing::info!("Starting nested markup styles test");
+
+    let mut table = Table::new().with_column(Column::new("Result"));
+
+    // Multiple nested styles
+    table.add_row_markup(["[bold][green]✓[/green] All tests passed[/bold]"]);
+    table.add_row_markup(["[italic][red]✗[/red] 2 tests failed[/italic]"]);
+
+    let output = render_renderable(&table, ColorSystem::TrueColor);
+    tracing::debug!(output = %output, "Nested styles output");
+
+    // Verify content
+    let plain = strip_ansi(&output);
+    assert!(
+        plain.contains("All tests passed"),
+        "Missing 'All tests passed'"
+    );
+    assert!(plain.contains("2 tests failed"), "Missing '2 tests failed'");
+
+    // Verify no raw markup
+    assert_no_raw_markup(&output, "nested markup styles");
+
+    // Verify ANSI codes present
+    assert_has_ansi_codes(&output, "nested markup styles");
+
+    tracing::info!("Nested markup styles test PASSED");
+}
+
+// =============================================================================
+// Snapshot: Integration Full Pipeline
+// =============================================================================
+
+#[test]
+fn e2e_snapshot_integration_table_pipeline() {
+    init_test_logging();
+
+    let mut table = Table::new()
+        .title("Summary")
+        .with_column(Column::new("Check"))
+        .with_column(Column::new("Result"));
+
+    table.add_row_markup(["Compile", "[green]OK[/]"]);
+    table.add_row_markup(["Test", "[green]OK[/]"]);
+    table.add_row_markup(["Lint", "[yellow]WARN[/]"]);
+
+    let output = render_renderable(&table, ColorSystem::TrueColor);
+    let plain = strip_ansi(&output);
+
+    insta::assert_snapshot!("e2e_integration_table_pipeline", plain);
 }

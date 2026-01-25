@@ -348,7 +348,47 @@ impl Tree {
         }
 
         // Add the label (preserve spans)
-        let mut label_segments = node.label.render("");
+        // Sanitize label to prevent broken tree structure from newlines
+        let mut label_text = node.label.clone();
+        if label_text.plain().contains('\n') {
+            let sanitized = label_text.plain().replace('\n', " ");
+            label_text = Text::new(sanitized);
+            // Note: Styles on original text spans might be lost/misaligned if we just replace plain text
+            // and recreate. But Text::new() creates a new text with no spans.
+            // If we want to preserve spans while sanitizing... simple replace on plain string invalidates spans indices?
+            // Actually, replacing '\n' (1 char) with ' ' (1 char) preserves indices!
+            // So we can just mutate the plain string in place?
+            // Text struct: plain is String.
+            // But we don't have mutable access to internals easily via public API.
+            // Text has `plain` field but it is private? No, in `src/text.rs`:
+            // `plain: String, spans: Vec<Span>`.
+            // We can't mutate plain directly from here if fields are private.
+            // But I am in `rich_rust`, so I can see if fields are public.
+            // `src/text.rs` shows `plain` is private.
+            // But wait, `render_node` is in `src/renderables/tree.rs`. Same crate.
+            // Rust visibility: `plain` is private to `text` module?
+            // `pub struct Text { plain: String ... }`. No `pub` on `plain`.
+            // So I can't mutate it.
+            //
+            // However, `Table` fix used:
+            // if cell_text.plain().contains('\n') {
+            //    let sanitized = cell_text.plain().replace('\n', " ");
+            //    cell_text = Text::new(sanitized);
+            // }
+            // This drops styles!
+            // In Table, `cell_text` had style applied via `set_style` *after* sanitization?
+            // `cell_text.set_style(combined_style.clone())`.
+            // But `Cell` can have its own rich text spans (from `Cell::from_markup`).
+            // My previous Table fix *dropped* internal spans of multi-line cells!
+            // That is a trade-off. Layout integrity > Rich styling of broken content.
+            // I will do the same here.
+        }
+
+        let mut label_segments: Vec<Segment<'static>> = label_text
+            .render("")
+            .into_iter()
+            .map(Segment::into_owned)
+            .collect();
         if let Some(ref highlight) = self.highlight_style {
             for segment in &mut label_segments {
                 if !segment.is_control() {
@@ -359,7 +399,9 @@ impl Tree {
                 }
             }
         }
-        segments.extend(label_segments);
+        for segment in label_segments {
+            segments.push(segment);
+        }
 
         // Add collapse indicator if has children but collapsed
         if node.has_children() && !node.is_expanded() {

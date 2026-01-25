@@ -9,7 +9,6 @@ use crate::color::ColorSystem;
 
 struct EnvSettings {
     no_color: Option<String>,
-    force_color: Option<String>,
     colorterm: Option<String>,
     term: Option<String>,
     #[cfg(windows)]
@@ -19,7 +18,6 @@ struct EnvSettings {
 fn read_env_settings() -> EnvSettings {
     EnvSettings {
         no_color: std::env::var("NO_COLOR").ok(),
-        force_color: std::env::var("FORCE_COLOR").ok(),
         colorterm: std::env::var("COLORTERM").ok(),
         term: std::env::var("TERM").ok(),
         #[cfg(windows)]
@@ -56,13 +54,28 @@ pub fn get_terminal_height() -> usize {
 /// Check if stdout is connected to a terminal.
 #[must_use]
 pub fn is_terminal() -> bool {
+    if let Ok(force_color) = std::env::var("FORCE_COLOR") {
+        return !force_color.is_empty();
+    }
     std::io::stdout().is_terminal()
 }
 
 /// Check if stderr is connected to a terminal.
 #[must_use]
 pub fn is_stderr_terminal() -> bool {
+    if let Ok(force_color) = std::env::var("FORCE_COLOR") {
+        return !force_color.is_empty();
+    }
     std::io::stderr().is_terminal()
+}
+
+/// Check if TERM is set to "dumb".
+#[must_use]
+pub fn is_dumb_terminal() -> bool {
+    std::env::var("TERM").ok().is_some_and(|term| {
+        let term = term.to_lowercase();
+        term == "dumb" || term == "unknown"
+    })
 }
 
 /// Detect the color system supported by the terminal.
@@ -70,8 +83,9 @@ pub fn is_stderr_terminal() -> bool {
 /// Checks environment variables to determine color capabilities:
 /// - `NO_COLOR`: Disables colors
 /// - `COLORTERM=truecolor` or `24bit`: 24-bit color
-/// - `TERM` containing `256color`: 256 colors
-/// - `TERM=dumb`: No colors
+/// - `TERM` suffix `-256color` / `-kitty`: 256 colors
+/// - `TERM` suffix `-16color`: Standard colors
+/// - `TERM=dumb` or `TERM=unknown`: No colors
 /// - Otherwise: Standard 16 colors (if terminal)
 #[must_use]
 pub fn detect_color_system() -> Option<ColorSystem> {
@@ -83,46 +97,37 @@ fn detect_color_system_with(
     #[allow(unused_variables)] is_tty: bool,
 ) -> Option<ColorSystem> {
     // Check NO_COLOR env var (https://no-color.org/)
-    if env.no_color.is_some() {
+    if env
+        .no_color
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
         return None;
-    }
-
-    // Check FORCE_COLOR env var
-    if let Some(level) = env.force_color.as_deref() {
-        // A value of "0" disables colors entirely.
-        if level == "0" {
-            return None;
-        }
-
-        // Force colors, check for level
-        return match level {
-            "3" => Some(ColorSystem::TrueColor),
-            "2" => Some(ColorSystem::EightBit),
-            "1" | "" => Some(ColorSystem::Standard),
-            _ => Some(ColorSystem::TrueColor),
-        };
     }
 
     // Check COLORTERM for truecolor
     if let Some(colorterm) = env.colorterm.as_ref() {
-        let colorterm = colorterm.to_lowercase();
+        let colorterm = colorterm.trim().to_lowercase();
         if colorterm == "truecolor" || colorterm == "24bit" {
             return Some(ColorSystem::TrueColor);
         }
     }
 
     // Check TERM for color support
-    if let Some(term) = env.term.as_ref() {
-        let term = term.to_lowercase();
-        if term == "dumb" {
-            return None;
-        }
-        if term.contains("256color") || term.contains("256") {
-            return Some(ColorSystem::EightBit);
-        }
-        if term.contains("color") || term.contains("xterm") || term.contains("vt100") {
-            return Some(ColorSystem::Standard);
-        }
+    let term = env
+        .term
+        .as_ref()
+        .map(|value| value.trim().to_lowercase())
+        .unwrap_or_default();
+    if term == "dumb" || term == "unknown" {
+        return None;
+    }
+    // Extract suffix after last '-' (e.g., "xterm-256color" -> "256color")
+    let colors = term.rsplit('-').next().unwrap_or("");
+    match colors {
+        "kitty" | "256color" => return Some(ColorSystem::EightBit),
+        "16color" => return Some(ColorSystem::Standard),
+        _ => {}
     }
 
     // Check for Windows legacy console
@@ -270,13 +275,11 @@ mod tests {
     /// Helper to create `EnvSettings` for testing
     fn make_env(
         no_color: Option<&str>,
-        force_color: Option<&str>,
         colorterm: Option<&str>,
         term: Option<&str>,
     ) -> EnvSettings {
         EnvSettings {
             no_color: no_color.map(String::from),
-            force_color: force_color.map(String::from),
             colorterm: colorterm.map(String::from),
             term: term.map(String::from),
             #[cfg(windows)]
@@ -288,12 +291,6 @@ mod tests {
     fn test_detect_color_system() {
         // Just ensure it doesn't panic
         let _ = detect_color_system();
-    }
-
-    #[test]
-    fn test_force_color_zero_disables_colors() {
-        let settings = make_env(None, Some("0"), None, Some("xterm-256color"));
-        assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     #[test]
@@ -333,83 +330,25 @@ mod tests {
     #[test]
     fn test_no_color_disables_colors() {
         // NO_COLOR should disable colors regardless of other settings
-        let settings = make_env(Some("1"), None, Some("truecolor"), Some("xterm-256color"));
+        let settings = make_env(Some("1"), Some("truecolor"), Some("xterm-256color"));
         assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     #[test]
-    fn test_no_color_empty_string_disables() {
-        // Even empty NO_COLOR should disable colors (it's set)
-        let settings = make_env(Some(""), None, Some("truecolor"), None);
-        assert_eq!(detect_color_system_with(&settings, true), None);
-    }
-
-    #[test]
-    fn test_no_color_takes_precedence_over_force_color() {
-        // NO_COLOR should take precedence over FORCE_COLOR
-        let settings = make_env(Some("1"), Some("3"), Some("truecolor"), None);
-        assert_eq!(detect_color_system_with(&settings, true), None);
-    }
-
-    // =========================================================================
-    // FORCE_COLOR environment variable tests
-    // =========================================================================
-
-    #[test]
-    fn test_force_color_level_1() {
-        let settings = make_env(None, Some("1"), None, None);
-        assert_eq!(
-            detect_color_system_with(&settings, false),
-            Some(ColorSystem::Standard)
-        );
-    }
-
-    #[test]
-    fn test_force_color_level_2() {
-        let settings = make_env(None, Some("2"), None, None);
-        assert_eq!(
-            detect_color_system_with(&settings, false),
-            Some(ColorSystem::EightBit)
-        );
-    }
-
-    #[test]
-    fn test_force_color_level_3() {
-        let settings = make_env(None, Some("3"), None, None);
-        assert_eq!(
-            detect_color_system_with(&settings, false),
-            Some(ColorSystem::TrueColor)
-        );
-    }
-
-    #[test]
-    fn test_force_color_empty_string() {
-        // Empty FORCE_COLOR should enable standard colors
-        let settings = make_env(None, Some(""), None, None);
-        assert_eq!(
-            detect_color_system_with(&settings, false),
-            Some(ColorSystem::Standard)
-        );
-    }
-
-    #[test]
-    fn test_force_color_unknown_value() {
-        // Unknown FORCE_COLOR values default to TrueColor
-        let settings = make_env(None, Some("yes"), None, None);
-        assert_eq!(
-            detect_color_system_with(&settings, false),
-            Some(ColorSystem::TrueColor)
-        );
-    }
-
-    #[test]
-    fn test_force_color_overrides_term() {
-        // FORCE_COLOR should override TERM detection
-        let settings = make_env(None, Some("1"), None, Some("dumb"));
+    fn test_no_color_empty_string_ignored() {
+        // Empty NO_COLOR should be ignored (matches Python Rich behavior)
+        let settings = make_env(Some(""), Some("truecolor"), None);
         assert_eq!(
             detect_color_system_with(&settings, true),
-            Some(ColorSystem::Standard)
+            Some(ColorSystem::TrueColor)
         );
+    }
+
+    #[test]
+    fn test_no_color_takes_precedence_over_colorterm() {
+        // NO_COLOR should take precedence over COLORTERM
+        let settings = make_env(Some("1"), Some("truecolor"), None);
+        assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     // =========================================================================
@@ -418,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_colorterm_truecolor() {
-        let settings = make_env(None, None, Some("truecolor"), None);
+        let settings = make_env(None, Some("truecolor"), None);
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::TrueColor)
@@ -427,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_colorterm_24bit() {
-        let settings = make_env(None, None, Some("24bit"), None);
+        let settings = make_env(None, Some("24bit"), None);
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::TrueColor)
@@ -436,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_colorterm_case_insensitive() {
-        let settings = make_env(None, None, Some("TRUECOLOR"), None);
+        let settings = make_env(None, Some("TRUECOLOR"), None);
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::TrueColor)
@@ -446,7 +385,7 @@ mod tests {
     #[test]
     fn test_colorterm_unknown_value() {
         // Unknown COLORTERM should fall through to TERM
-        let settings = make_env(None, None, Some("unknown"), Some("xterm-256color"));
+        let settings = make_env(None, Some("unknown"), Some("xterm-256color"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::EightBit)
@@ -459,19 +398,25 @@ mod tests {
 
     #[test]
     fn test_term_dumb() {
-        let settings = make_env(None, None, None, Some("dumb"));
+        let settings = make_env(None, None, Some("dumb"));
         assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     #[test]
     fn test_term_dumb_case_insensitive() {
-        let settings = make_env(None, None, None, Some("DUMB"));
+        let settings = make_env(None, None, Some("DUMB"));
+        assert_eq!(detect_color_system_with(&settings, true), None);
+    }
+
+    #[test]
+    fn test_term_unknown() {
+        let settings = make_env(None, None, Some("unknown"));
         assert_eq!(detect_color_system_with(&settings, true), None);
     }
 
     #[test]
     fn test_term_256color() {
-        let settings = make_env(None, None, None, Some("xterm-256color"));
+        let settings = make_env(None, None, Some("xterm-256color"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::EightBit)
@@ -480,16 +425,25 @@ mod tests {
 
     #[test]
     fn test_term_256_variant() {
-        let settings = make_env(None, None, None, Some("screen-256"));
+        let settings = make_env(None, None, Some("screen-256"));
         assert_eq!(
             detect_color_system_with(&settings, true),
-            Some(ColorSystem::EightBit)
+            Some(ColorSystem::Standard)
+        );
+    }
+
+    #[test]
+    fn test_term_16color() {
+        let settings = make_env(None, None, Some("xterm-16color"));
+        assert_eq!(
+            detect_color_system_with(&settings, true),
+            Some(ColorSystem::Standard)
         );
     }
 
     #[test]
     fn test_term_xterm() {
-        let settings = make_env(None, None, None, Some("xterm"));
+        let settings = make_env(None, None, Some("xterm"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::Standard)
@@ -498,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_term_xterm_color() {
-        let settings = make_env(None, None, None, Some("xterm-color"));
+        let settings = make_env(None, None, Some("xterm-color"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::Standard)
@@ -507,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_term_vt100() {
-        let settings = make_env(None, None, None, Some("vt100"));
+        let settings = make_env(None, None, Some("vt100"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::Standard)
@@ -518,7 +472,7 @@ mod tests {
     #[allow(unused_variables)]
     fn test_term_linux() {
         // "linux" doesn't contain known keywords, falls through to TTY check
-        let settings = make_env(None, None, None, Some("linux"));
+        let settings = make_env(None, None, Some("linux"));
         #[cfg(not(windows))]
         assert_eq!(
             detect_color_system_with(&settings, true),
@@ -533,7 +487,7 @@ mod tests {
     #[test]
     #[allow(unused_variables)]
     fn test_no_env_vars_tty_true() {
-        let settings = make_env(None, None, None, None);
+        let settings = make_env(None, None, None);
         #[cfg(not(windows))]
         assert_eq!(
             detect_color_system_with(&settings, true),
@@ -544,7 +498,7 @@ mod tests {
     #[test]
     #[allow(unused_variables)]
     fn test_no_env_vars_tty_false() {
-        let settings = make_env(None, None, None, None);
+        let settings = make_env(None, None, None);
         #[cfg(not(windows))]
         assert_eq!(detect_color_system_with(&settings, false), None);
     }
@@ -593,7 +547,7 @@ mod tests {
     #[test]
     fn test_colorterm_takes_precedence_over_term() {
         // COLORTERM=truecolor should override TERM detection
-        let settings = make_env(None, None, Some("truecolor"), Some("xterm"));
+        let settings = make_env(None, Some("truecolor"), Some("xterm"));
         assert_eq!(
             detect_color_system_with(&settings, true),
             Some(ColorSystem::TrueColor)
@@ -602,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_all_env_vars_empty() {
-        let settings = make_env(None, None, None, None);
+        let settings = make_env(None, None, None);
         // Result depends on TTY state and platform
         let _ = detect_color_system_with(&settings, true);
         let _ = detect_color_system_with(&settings, false);

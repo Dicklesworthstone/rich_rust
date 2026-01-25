@@ -312,7 +312,7 @@ impl Markdown {
     /// Render the markdown to segments.
     #[must_use]
     #[allow(clippy::too_many_lines)]
-    pub fn render(&self, _max_width: usize) -> Vec<Segment<'_>> {
+    pub fn render(&self, max_width: usize) -> Vec<Segment<'_>> {
         let mut segments = Vec::new();
         let mut style_stack: Vec<Style> = Vec::new();
         let mut list_stack: Vec<(bool, usize)> = Vec::new(); // (is_ordered, item_number)
@@ -571,7 +571,7 @@ impl Markdown {
                 }
                 Event::Text(text) => {
                     if in_table {
-                        current_cell_content.push_str(&text);
+                        current_cell_content.push_str(&text.replace('\n', " "));
                     } else {
                         let current_style = combined_style(&style_stack);
                         if in_code_block {
@@ -598,7 +598,7 @@ impl Markdown {
                 }
                 Event::Code(code) => {
                     if in_table {
-                        let _ = write!(current_cell_content, "`{code}`");
+                        let _ = write!(current_cell_content, "`{}`", code.replace('\n', " "));
                     } else {
                         ensure_blockquote_prefix!(segments);
                         ensure_list_prefix!(segments);
@@ -629,9 +629,11 @@ impl Markdown {
                     }
                 }
                 Event::Rule => {
+                    let rule_width = if max_width > 0 { max_width } else { 40 };
+                    let rule_width = rule_width.max(1);
                     segments.push(Segment::new("\n", None));
                     segments.push(Segment::new(
-                        "─".repeat(40),
+                        "─".repeat(rule_width),
                         Some(Style::new().color_str("bright_black").unwrap_or_default()),
                     ));
                     segments.push(Segment::new("\n", None));
@@ -640,7 +642,11 @@ impl Markdown {
             }
         }
 
-        segments
+        if max_width > 0 {
+            pad_segments_to_width(segments, max_width)
+        } else {
+            segments
+        }
     }
 
     /// Render a table to segments.
@@ -766,6 +772,54 @@ impl Markdown {
     pub fn source(&self) -> &str {
         &self.source
     }
+}
+
+fn pad_segments_to_width<'a>(segments: Vec<Segment<'a>>, width: usize) -> Vec<Segment<'a>> {
+    let mut padded = Vec::new();
+    let mut line_width = 0usize;
+
+    for segment in segments {
+        if segment.is_control() {
+            padded.push(segment);
+            continue;
+        }
+
+        let style = segment.style.clone();
+        let text = segment.text;
+        let text_ref = text.as_ref();
+        let mut start = 0usize;
+
+        for (idx, ch) in text_ref.char_indices() {
+            if ch == '\n' {
+                let part = &text_ref[start..idx];
+                if !part.is_empty() {
+                    padded.push(Segment::new(part.to_string(), style.clone()));
+                    line_width += cells::cell_len(part);
+                }
+                if line_width < width {
+                    padded.push(Segment::new(" ".repeat(width - line_width), None));
+                }
+                padded.push(Segment::line());
+                line_width = 0;
+                start = idx + 1;
+            }
+        }
+
+        let tail = &text_ref[start..];
+        if !tail.is_empty() {
+            padded.push(Segment::new(tail.to_string(), style));
+            line_width += cells::cell_len(tail);
+        }
+    }
+
+    if line_width > 0 {
+        if line_width < width {
+            padded.push(Segment::new(" ".repeat(width - line_width), None));
+        }
+        padded.push(Segment::line());
+    }
+
+    padded
 }
 
 #[cfg(test)]
