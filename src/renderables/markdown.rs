@@ -463,13 +463,13 @@ impl Markdown {
                             if let Some((is_ordered, num)) = list_stack.last_mut() {
                                 if *is_ordered {
                                     let marker = format!("{num}. ");
-                                    let marker_len = marker.len();
+                                    let marker_len = cells::cell_len(&marker);
                                     segments.push(Segment::new(marker, None));
                                     list_item_prefix_len.push(indent_len + marker_len);
                                     *num += 1;
                                 } else {
                                     let marker = format!("{} ", self.bullet_char);
-                                    let marker_len = marker.len();
+                                    let marker_len = cells::cell_len(&marker);
                                     segments.push(Segment::new(marker, None));
                                     list_item_prefix_len.push(indent_len + marker_len);
                                 }
@@ -941,6 +941,27 @@ mod tests {
         );
         let leading_spaces = lines[1].chars().take_while(|c| *c == ' ').count();
         assert!(leading_spaces >= 2, "continuation line should be indented");
+    }
+
+    #[test]
+    fn test_render_list_item_continuation_respects_marker_width() {
+        let bullet = '🦀';
+        let indent = 2;
+        let md = Markdown::new("- First\n\n  Second")
+            .bullet_char(bullet)
+            .list_indent(indent);
+        let segments = md.render(80);
+        let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
+        let lines: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
+
+        assert!(lines.len() >= 2, "expected list item to render two lines");
+        let marker = format!("{bullet} ");
+        let expected = indent + cells::cell_len(&marker);
+        let leading_spaces = lines[1].chars().take_while(|c| *c == ' ').count();
+        assert_eq!(
+            leading_spaces, expected,
+            "continuation line should align to marker width"
+        );
     }
 
     #[test]
