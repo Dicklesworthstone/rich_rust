@@ -300,7 +300,7 @@ jobs:
       - name: Generate coverage report
         run: |
           cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-          cargo llvm-cov report --all-features --workspace --html --output-dir coverage-html
+          cargo llvm-cov report --html --output-dir coverage-html
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
