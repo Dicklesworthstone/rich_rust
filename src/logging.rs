@@ -37,11 +37,9 @@ impl RichLogger {
     /// Create a new `RichLogger` with default settings.
     #[must_use]
     pub fn new(console: Arc<Console>) -> Self {
-        let time_format =
-            time::format_description::parse_owned::<2>("[%F %T]").unwrap_or_else(|_| {
-                time::format_description::parse_owned::<2>("[hour]:[minute]:[second]")
-                    .expect("fallback time format should parse")
-            });
+        let time_format = time::format_description::parse_owned::<2>("[%F %T]")
+            .or_else(|_| time::format_description::parse_owned::<2>("[hour]:[minute]:[second]"))
+            .unwrap_or_else(|_| OwnedFormatItem::Literal(Vec::<u8>::new().into_boxed_slice()));
         Self {
             console,
             level: LevelFilter::Info,
