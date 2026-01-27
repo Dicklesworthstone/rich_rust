@@ -91,7 +91,7 @@ fn parse_render_options(defaults: &Value, overrides: Option<&Value>) -> RenderOp
     }
 }
 
-fn build_console(options: &RenderOptions, theme: Option<Theme>) -> Console {
+fn build_console(case: &Value, options: &RenderOptions, theme: Option<Theme>) -> Console {
     let mut builder = Console::builder();
     if let Some(width) = options.width {
         builder = builder.width(width);
@@ -100,14 +100,19 @@ fn build_console(options: &RenderOptions, theme: Option<Theme>) -> Console {
         builder = builder.force_terminal(force_terminal);
     }
     match options.color_system {
-        ColorSystemMode::Auto => {}
-        ColorSystemMode::Fixed(color_system) => {
-            builder = builder.color_system(color_system);
+        ColorSystemMode::Auto => {
+            let is_tty = match options.force_terminal {
+                Some(value) => value,
+                None => force_color_forces_terminal(env_override(case, "FORCE_COLOR").as_deref()),
+            };
+            match detect_color_system_for_case(case, is_tty) {
+                Some(color_system) => builder = builder.color_system(color_system),
+                None => builder = builder.no_color(),
+            }
         }
-        ColorSystemMode::None => {
-            builder = builder.no_color();
-        }
-    }
+        ColorSystemMode::Fixed(color_system) => builder = builder.color_system(color_system),
+        ColorSystemMode::None => builder = builder.no_color(),
+    };
     if let Some(theme) = theme {
         builder = builder.theme(theme);
     }
@@ -130,26 +135,6 @@ fn parse_theme(case: &Value) -> Option<Theme> {
     Theme::from_style_definitions(entries, inherit).ok()
 }
 
-struct EnvGuard {
-    saved: Vec<(String, Option<std::ffi::OsString>)>,
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        for (key, value) in self.saved.drain(..) {
-            if let Some(value) = value {
-                unsafe {
-                    std::env::set_var(key, value);
-                }
-            } else {
-                unsafe {
-                    std::env::remove_var(key);
-                }
-            }
-        }
-    }
-}
-
 fn env_value_to_string(value: &Value) -> Option<String> {
     match value {
         Value::Null => None,
@@ -160,48 +145,56 @@ fn env_value_to_string(value: &Value) -> Option<String> {
     }
 }
 
-fn apply_env(case: &Value) -> EnvGuard {
-    let mut keys = vec![
-        "NO_COLOR".to_string(),
-        "FORCE_COLOR".to_string(),
-        "COLORTERM".to_string(),
-        "TERM".to_string(),
-    ];
+fn env_override(case: &Value, key: &str) -> Option<String> {
+    case.get("env")
+        .and_then(|value| value.as_object())
+        .and_then(|env| env.get(key))
+        .and_then(env_value_to_string)
+}
 
-    let env_overrides = case.get("env").and_then(|v| v.as_object());
-    if let Some(env_overrides) = env_overrides {
-        for key in env_overrides.keys() {
-            if !keys.contains(key) {
-                keys.push(key.clone());
-            }
+fn force_color_forces_terminal(force_color: Option<&str>) -> bool {
+    let Some(force_color) = force_color else {
+        return false;
+    };
+    let force_color = force_color.trim();
+    !force_color.is_empty() && force_color != "0"
+}
+
+fn detect_color_system_for_case(case: &Value, is_tty: bool) -> Option<ColorSystem> {
+    // Match `src/terminal.rs` behavior for determinism in conformance tests.
+    if env_override(case, "NO_COLOR")
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return None;
+    }
+
+    if let Some(colorterm) = env_override(case, "COLORTERM") {
+        let colorterm = colorterm.trim().to_lowercase();
+        if colorterm == "truecolor" || colorterm == "24bit" {
+            return Some(ColorSystem::TrueColor);
         }
     }
 
-    let mut saved = Vec::new();
-    for key in &keys {
-        saved.push((key.clone(), std::env::var_os(key)));
+    let term = env_override(case, "TERM")
+        .map(|value| value.trim().to_lowercase())
+        .unwrap_or_default();
+    if term == "dumb" || term == "unknown" {
+        return None;
     }
 
-    for key in keys {
-        match env_overrides.and_then(|env| env.get(&key)) {
-            Some(value) => {
-                if let Some(value) = env_value_to_string(value) {
-                    unsafe {
-                        std::env::set_var(&key, value);
-                    }
-                } else {
-                    unsafe {
-                        std::env::remove_var(&key);
-                    }
-                }
-            }
-            None => unsafe {
-                std::env::remove_var(&key);
-            },
-        }
+    let colors = term.rsplit('-').next().unwrap_or("");
+    match colors {
+        "kitty" | "256color" => return Some(ColorSystem::EightBit),
+        "16color" => return Some(ColorSystem::Standard),
+        _ => {}
     }
 
-    EnvGuard { saved }
+    if is_tty {
+        Some(ColorSystem::Standard)
+    } else {
+        None
+    }
 }
 
 fn render_text(console: &Console, markup: &str, width: Option<usize>) -> (String, String) {
@@ -528,7 +521,6 @@ fn python_rich_fixtures() {
         .expect("cases missing");
 
     for case in cases {
-        let _env_guard = apply_env(case);
         let id = case
             .get("id")
             .and_then(|v| v.as_str())
@@ -548,7 +540,7 @@ fn python_rich_fixtures() {
 
         let options = parse_render_options(defaults, case.get("render_options"));
         let theme = parse_theme(case);
-        let console = build_console(&options, theme);
+        let console = build_console(case, &options, theme);
 
         let (mut actual_plain, mut actual_ansi) = if kind == "text" {
             let markup = input.get("markup").and_then(|v| v.as_str()).unwrap_or("");
