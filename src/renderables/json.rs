@@ -148,14 +148,8 @@ impl Default for JsonTheme {
         Self {
             key: Style::new().color_str("blue").unwrap_or_default().bold(),
             string: Style::new().color_str("green").unwrap_or_default(),
-            number: Style::new()
-                .color_str("cyan")
-                .unwrap_or_default()
-                .bold(),
-            boolean: Style::new()
-                .color_str("yellow")
-                .unwrap_or_default()
-                .bold(),
+            number: Style::new().color_str("cyan").unwrap_or_default().bold(),
+            boolean: Style::new().color_str("yellow").unwrap_or_default().bold(),
             null: Style::new()
                 .color_str("magenta")
                 .unwrap_or_default()

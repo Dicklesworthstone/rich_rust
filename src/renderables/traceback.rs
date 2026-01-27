@@ -91,30 +91,30 @@ impl Renderable for Traceback {
 
         let mut content_lines: Vec<Vec<Segment<'static>>> = Vec::new();
         for frame in &self.frames {
-            if let Some(filename) = frame.filename.as_deref() {
-                if let Ok(source) = std::fs::read_to_string(filename) {
-                    content_lines.push(vec![Segment::new(
-                        format!("{filename}:{} in {}", frame.line, frame.name),
-                        None,
-                    )]);
-                    content_lines.push(vec![Segment::new(String::new(), None)]);
+            if let Some(filename) = frame.filename.as_deref()
+                && let Ok(source) = std::fs::read_to_string(filename)
+            {
+                content_lines.push(vec![Segment::new(
+                    format!("{filename}:{} in {}", frame.line, frame.name),
+                    None,
+                )]);
+                content_lines.push(vec![Segment::new(String::new(), None)]);
 
-                    let source_lines: Vec<&str> = source.lines().collect();
-                    if frame.line > 0 && frame.line <= source_lines.len() {
-                        let start = frame.line.saturating_sub(self.extra_lines).max(1);
-                        let end = (frame.line + self.extra_lines).min(source_lines.len());
-                        let line_number_width = end.to_string().len() + 5;
+                let source_lines: Vec<&str> = source.lines().collect();
+                if frame.line > 0 && frame.line <= source_lines.len() {
+                    let start = frame.line.saturating_sub(self.extra_lines).max(1);
+                    let end = (frame.line + self.extra_lines).min(source_lines.len());
+                    let line_number_width = end.to_string().len() + 5;
 
-                        for line_no in start..=end {
-                            let code = source_lines[line_no - 1].trim_start();
-                            let indicator = if line_no == frame.line { "❱" } else { " " };
-                            let line = format!("{indicator} {line_no:<line_number_width$}{code}");
-                            content_lines.push(vec![Segment::new(line, None)]);
-                        }
+                    for line_no in start..=end {
+                        let code = source_lines[line_no - 1].trim_start();
+                        let indicator = if line_no == frame.line { "❱" } else { " " };
+                        let line = format!("{indicator} {line_no:<line_number_width$}{code}");
+                        content_lines.push(vec![Segment::new(line, None)]);
                     }
-
-                    continue;
                 }
+
+                continue;
             }
 
             content_lines.push(vec![Segment::new(

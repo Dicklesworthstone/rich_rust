@@ -3,11 +3,11 @@
 //! This module contains Rust-idiomatic equivalents of a few Rich conveniences
 //! that combine rendering with terminal interactivity.
 //!
-//! Note: rich_rust's core remains output-focused; these helpers are best-effort
+//! Note: `rich_rust`'s core remains output-focused; these helpers are best-effort
 //! and fall back gracefully when the console is not interactive.
 
 use std::io;
-use std::io::{BufRead as _, Write as _};
+use std::io::Write as _;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -27,13 +27,13 @@ use crate::text::Text;
 ///
 /// Dropping this value stops the live display (best-effort).
 pub struct Status {
-    _message: Arc<Mutex<String>>,
+    message: Arc<Mutex<String>>,
     live: Option<Live>,
 }
 
 impl Status {
     /// Start a status spinner with a message.
-    pub fn new(console: Arc<Console>, message: impl Into<String>) -> io::Result<Self> {
+    pub fn new(console: &Arc<Console>, message: impl Into<String>) -> io::Result<Self> {
         let message = Arc::new(Mutex::new(message.into()));
 
         if !console.is_interactive() {
@@ -41,7 +41,7 @@ impl Status {
                 console.print_plain(&message);
             }
             return Ok(Self {
-                _message: message,
+                message,
                 live: None,
             });
         }
@@ -57,29 +57,30 @@ impl Status {
             ..LiveOptions::default()
         };
 
-        let live = Live::with_options(Arc::clone(&console), live_options).get_renderable(move || {
-            let elapsed = start.elapsed();
-            let tick = elapsed.as_millis() / frame_interval.as_millis().max(1);
-            let idx = (tick as usize) % frames.len();
-            let frame = frames[idx];
-            let msg = message_for_render
-                .lock()
-                .map(|m| m.clone())
-                .unwrap_or_default();
-            Box::new(Text::new(format!("{frame} {msg}")))
-        });
+        let live =
+            Live::with_options(Arc::clone(console), live_options).get_renderable(move || {
+                let elapsed = start.elapsed();
+                let tick = elapsed.as_millis() / frame_interval.as_millis().max(1);
+                let idx = (tick as usize) % frames.len();
+                let frame = frames[idx];
+                let msg = message_for_render
+                    .lock()
+                    .map(|m| m.clone())
+                    .unwrap_or_default();
+                Box::new(Text::new(format!("{frame} {msg}")))
+            });
 
         live.start(true)?;
 
         Ok(Self {
-            _message: message,
+            message,
             live: Some(live),
         })
     }
 
     /// Update the displayed message (best-effort).
     pub fn update(&self, message: impl Into<String>) {
-        if let Ok(mut slot) = self._message.lock() {
+        if let Ok(mut slot) = self.message.lock() {
             *slot = message.into();
         }
 
@@ -102,8 +103,6 @@ impl Drop for Status {
 pub enum PromptError {
     /// Prompt requires an interactive console but `Console::is_interactive()` is false.
     NotInteractive,
-    /// Prompt is non-interactive and no default value was provided.
-    MissingDefault,
     /// Input stream reached EOF without yielding a value.
     Eof,
     /// Input did not pass validation.
@@ -116,7 +115,6 @@ impl std::fmt::Display for PromptError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotInteractive => write!(f, "prompt requires an interactive console"),
-            Self::MissingDefault => write!(f, "prompt is non-interactive and has no default"),
             Self::Eof => write!(f, "prompt input reached EOF"),
             Self::Validation(message) => write!(f, "{message}"),
             Self::Io(err) => write!(f, "{err}"),
@@ -139,23 +137,38 @@ impl From<io::Error> for PromptError {
     }
 }
 
+type PromptValidator = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+
 /// Prompt configuration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Prompt {
-    prompt: String,
+    label: String,
     default: Option<String>,
     allow_empty: bool,
     show_default: bool,
     markup: bool,
-    validator: Option<Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>>,
+    validator: Option<PromptValidator>,
+}
+
+impl std::fmt::Debug for Prompt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prompt")
+            .field("label", &self.label)
+            .field("default", &self.default)
+            .field("allow_empty", &self.allow_empty)
+            .field("show_default", &self.show_default)
+            .field("markup", &self.markup)
+            .field("validator", &self.validator.as_ref().map(|_| "<validator>"))
+            .finish()
+    }
 }
 
 impl Prompt {
     /// Create a new prompt.
     #[must_use]
-    pub fn new(prompt: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
-            prompt: prompt.into(),
+            label: label.into(),
             default: None,
             allow_empty: false,
             show_default: true,
@@ -203,7 +216,7 @@ impl Prompt {
     }
 
     /// Ask for input using stdin.
-    pub fn ask(&self, console: Arc<Console>) -> Result<String, PromptError> {
+    pub fn ask(&self, console: &Console) -> Result<String, PromptError> {
         let stdin = io::stdin();
         let mut reader = stdin.lock();
         self.ask_from(console, &mut reader)
@@ -212,20 +225,16 @@ impl Prompt {
     /// Ask for input from a provided reader (useful for tests).
     pub fn ask_from<R: io::BufRead>(
         &self,
-        console: Arc<Console>,
+        console: &Console,
         reader: &mut R,
     ) -> Result<String, PromptError> {
-        if !console.is_interactive() {
-            return self
-                .default
-                .clone()
-                .ok_or(PromptError::NotInteractive)
-                .or_else(|_| Err(PromptError::MissingDefault));
+        if !console.is_terminal() {
+            return self.default.clone().ok_or(PromptError::NotInteractive);
         }
 
         let mut line = String::new();
         loop {
-            self.print_prompt(&console);
+            self.print_prompt(console);
 
             line.clear();
             let bytes = reader.read_line(&mut line)?;
@@ -240,15 +249,15 @@ impl Prompt {
             };
 
             if value.is_empty() && !self.allow_empty && self.default.is_none() {
-                self.print_error(&console, "Input required.");
+                self.print_error(console, "Input required.");
                 continue;
             }
 
-            if let Some(validator) = &self.validator {
-                if let Err(message) = validator(&value) {
-                    self.print_error(&console, &message);
-                    continue;
-                }
+            if let Some(validator) = &self.validator
+                && let Err(message) = validator(&value)
+            {
+                self.print_error(console, &message);
+                continue;
             }
 
             value = value.trim_end().to_string();
@@ -257,8 +266,10 @@ impl Prompt {
     }
 
     fn print_prompt(&self, console: &Console) {
-        let mut prompt = self.prompt.clone();
-        if self.show_default && let Some(default) = &self.default {
+        let mut prompt = self.label.clone();
+        if self.show_default
+            && let Some(default) = &self.default
+        {
             let default = if self.markup {
                 markup::escape(default)
             } else {
@@ -282,10 +293,7 @@ impl Prompt {
         let style = Style::parse("bold red").unwrap_or_default();
         console.print_with_options(
             message,
-            &PrintOptions::new()
-                .with_markup(false)
-                .with_style(style)
-                .with_end("\n"),
+            &PrintOptions::new().with_markup(false).with_style(style),
         );
     }
 }
@@ -299,6 +307,12 @@ impl Prompt {
 pub struct Pager {
     command: Option<String>,
     allow_color: bool,
+}
+
+impl Default for Pager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Pager {
@@ -327,14 +341,18 @@ impl Pager {
 
     /// Display content through the pager (best-effort).
     pub fn show(&self, console: &Console, content: &str) -> io::Result<()> {
-        if !console.is_interactive() {
-            return print_exact(console, content);
+        if !console.is_terminal() {
+            print_exact(console, content);
+            return Ok(());
         }
 
         let (command, args) = self.resolve_command();
         match spawn_pager(&command, &args, content) {
             Ok(()) => Ok(()),
-            Err(_err) => print_exact(console, content),
+            Err(_err) => {
+                print_exact(console, content);
+                Ok(())
+            }
         }
     }
 
@@ -384,18 +402,15 @@ fn spawn_pager(command: &str, args: &[String], content: &str) -> io::Result<()> 
     Ok(())
 }
 
-fn print_exact(console: &Console, content: &str) -> io::Result<()> {
-    console.print_to(
-        &mut io::stdout(),
+fn print_exact(console: &Console, content: &str) {
+    console.print_with_options(
         content,
-        &PrintOptions::new()
-            .with_markup(false)
-            .with_no_newline(true),
-    )
+        &PrintOptions::new().with_markup(false).with_no_newline(true),
+    );
 }
 
 fn trim_newline(line: &str) -> &str {
-    line.trim_end_matches(['\n', '\r'])
+    line.trim_end_matches(&['\n', '\r'][..])
 }
 
 #[cfg(test)]
@@ -426,7 +441,7 @@ mod tests {
             .build()
             .shared();
 
-        let _status = Status::new(console, "Working...").expect("status");
+        let _status = Status::new(&console, "Working...").expect("status");
 
         let out = buffer.0.lock().unwrap();
         let text = String::from_utf8_lossy(&out);
@@ -444,7 +459,7 @@ mod tests {
             .shared();
 
         let prompt = Prompt::new("Name").default("Alice");
-        let answer = prompt.ask(console).expect("prompt");
+        let answer = prompt.ask(&console).expect("prompt");
         assert_eq!(answer, "Alice");
 
         // Non-interactive prompt should not print.
@@ -471,7 +486,7 @@ mod tests {
 
         let input = b"nope\n42\n";
         let mut reader = io::Cursor::new(&input[..]);
-        let answer = prompt.ask_from(console, &mut reader).expect("prompt");
+        let answer = prompt.ask_from(&console, &mut reader).expect("prompt");
         assert_eq!(answer, "42");
 
         let out = buffer.0.lock().unwrap();

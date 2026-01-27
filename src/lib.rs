@@ -145,6 +145,7 @@ pub mod cells;
 pub mod color;
 pub mod console;
 pub mod emoji;
+pub mod interactive;
 pub mod live;
 pub mod logging;
 pub mod markup;
@@ -162,6 +163,7 @@ pub mod prelude {
     pub use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
     pub use crate::console::{Console, ConsoleOptions};
     pub use crate::emoji::EmojiVariant;
+    pub use crate::interactive::{Pager, Prompt, PromptError, Status};
     pub use crate::live::{Live, LiveOptions, VerticalOverflowMethod};
     pub use crate::logging::RichLogger;
     #[cfg(feature = "tracing")]
