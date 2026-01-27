@@ -328,6 +328,19 @@ console.print_renderable(&rule);
 | `[rgb(255,0,0)]text[/]` | RGB color |
 | `[color(196)]text[/]` | 256-color palette |
 
+### Themes (Named Styles)
+
+Python Rich defines many named styles (e.g. `rule.line`, `table.header`). `rich_rust`
+ports this theme system and lets you add custom names:
+
+```rust
+use rich_rust::prelude::*;
+
+let theme = Theme::from_style_definitions([("warning", "bold red")], true).unwrap();
+let console = Console::builder().theme(theme).build();
+console.print("[warning]Danger[/]");
+```
+
 ### Style Attributes
 
 ```rust

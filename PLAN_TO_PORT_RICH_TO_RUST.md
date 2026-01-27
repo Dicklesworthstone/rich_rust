@@ -2,7 +2,7 @@
 
 > **Project:** rich_rust
 > **Author:** Port initiated by Jeffrey Emanuel
-> **Status:** Implementation Complete
+> **Status:** Parity expansion in progress (target: full Python Rich parity)
 
 ## Executive Summary
 
@@ -32,19 +32,14 @@ We are targeting the "classic" Rich feature set that defines its character:
     - **Markdown:** Rendering markdown to terminal.
 - **Terminal Detection:** Auto-detecting color support (16/256/TrueColor) and dimensions.
 
-## What We're NOT Porting (Exclusions)
+## Parity Scope
 
-We will ruthlessly exclude Python-specific dynamism and legacy baggage:
+The current goal is **full parity with upstream Python Rich** wherever it makes
+sense in Rust.
 
-| Feature | Reason |
-|---------|--------|
-| **Jupyter/IPython Support** | Python-specific environment integration. |
-| **`inspect` Module** | Relies on Python's runtime reflection capabilities. |
-| **`traceback` Module** | Python-specific exception handling. |
-| **`logging` Handler** | Integration with Python's stdlib logging. |
-| **Pickling Support** | Rust uses Serde; we don't need Python pickle compatibility. |
-| **Legacy Windows (cmd.exe)** | We will target modern Windows Terminal / VT-enabled consoles via `crossterm` or `anstyle`. |
-| **Theme Files (.ini)** | We will support code-defined themes first; config parsing is secondary. |
+- Remaining gaps are tracked in `FEATURE_PARITY.md` and Beads issues (`.beads/`).
+- For Python-only integrations (e.g. Jupyter), we aim for Rust-idiomatic
+  equivalents and document any irreducible differences explicitly.
 
 ## Reference Projects
 
