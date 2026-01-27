@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+#[path = "demo_showcase/theme.rs"]
+mod theme;
+
 /// Standalone rich_rust showcase binary (roadmap).
 ///
 /// This file intentionally avoids heavy CLI dependencies (e.g. clap) and uses a
@@ -274,6 +277,9 @@ fn available_scenes_help() -> String {
 }
 
 fn print_scenes() {
+    // Ensure theme definitions stay parseable even before the full scene runner is wired.
+    let _theme = theme::demo_theme();
+
     print!("{}", available_scenes_help());
     println!();
 }
