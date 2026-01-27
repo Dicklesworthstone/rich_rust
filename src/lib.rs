@@ -154,6 +154,7 @@ pub mod segment;
 pub mod style;
 pub mod terminal;
 pub mod text;
+pub mod theme;
 
 /// Re-exports for convenient usage
 pub mod prelude {
@@ -169,12 +170,14 @@ pub mod prelude {
     pub use crate::renderables::{
         Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, Emoji, Inspect,
         InspectOptions, Layout, LayoutSplitter, PaddingDimensions, Panel, Pretty, PrettyOptions,
-        ProgressBar, Region, Row, Rule, Spinner, Table, Tree, TreeGuides, TreeNode, VerticalAlign,
-        VerticalAlignMethod, align_text, inspect,
+        ProgressBar, Region, Row, Rule, Spinner, Table, Traceback, TracebackFrame, Tree,
+        TreeGuides, TreeNode, VerticalAlign, VerticalAlignMethod, align_text, inspect,
+        print_exception,
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};
     pub use crate::text::{JustifyMethod, OverflowMethod, Span, Text};
+    pub use crate::theme::{Theme, ThemeError, ThemeStackError};
 
     #[cfg(feature = "syntax")]
     pub use crate::renderables::{Syntax, SyntaxError};
@@ -197,3 +200,4 @@ pub use renderables::{Layout, LayoutSplitter, Region};
 pub use segment::Segment;
 pub use style::{Attributes, Style};
 pub use text::{Span, Text};
+pub use theme::{Theme, ThemeError, ThemeStackError};

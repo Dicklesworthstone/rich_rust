@@ -25,7 +25,10 @@ static DEFAULT_STYLES: LazyLock<HashMap<String, Style>> = LazyLock::new(|| {
         }
 
         let (name, definition) = line.split_once('\t').unwrap_or_else(|| {
-            panic!("src/default_styles.tsv:{}: expected TAB-separated name + style", line_no + 1)
+            panic!(
+                "src/default_styles.tsv:{}: expected TAB-separated name + style",
+                line_no + 1
+            )
         });
 
         let style = Style::parse(definition).unwrap_or_else(|err| {
@@ -82,8 +85,11 @@ impl Theme {
         let mut parsed = HashMap::new();
         for (name, definition) in styles {
             let name = name.into();
-            let style = Style::parse(definition.as_ref())
-                .map_err(|err| ThemeError::InvalidStyle { name: name.clone(), err })?;
+            let style =
+                Style::parse(definition.as_ref()).map_err(|err| ThemeError::InvalidStyle {
+                    name: name.clone(),
+                    err,
+                })?;
             parsed.insert(name, style);
         }
         Ok(Self::new(Some(parsed), inherit))
@@ -200,7 +206,7 @@ impl Default for Theme {
     }
 }
 
-/// Errors returned by Theme / ThemeStack operations.
+/// Errors returned by Theme / `ThemeStack` operations.
 #[derive(Debug)]
 pub enum ThemeError {
     Io {
@@ -225,7 +231,9 @@ pub enum ThemeError {
 impl fmt::Display for ThemeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Io { path, err } => write!(f, "failed to read theme file {path:?}: {err}"),
+            Self::Io { path, err } => {
+                write!(f, "failed to read theme file {}: {err}", path.display())
+            }
             Self::MissingStylesSection => write!(f, "theme ini is missing a [styles] section"),
             Self::InvalidIniLine { line_no, line } => {
                 write!(f, "invalid theme ini line {line_no}: {line:?}")
@@ -233,10 +241,9 @@ impl fmt::Display for ThemeError {
             Self::DuplicateIniKey { line_no, name } => {
                 write!(f, "duplicate theme key {name:?} at line {line_no}")
             }
-            Self::InvalidStyle { name, err } => write!(
-                f,
-                "invalid style definition for theme key {name:?}: {err}"
-            ),
+            Self::InvalidStyle { name, err } => {
+                write!(f, "invalid style definition for theme key {name:?}: {err}")
+            }
         }
     }
 }
@@ -266,7 +273,7 @@ impl ThemeStack {
     #[must_use]
     pub fn new(theme: Theme) -> Self {
         Self {
-            entries: vec![theme.styles.clone()],
+            entries: vec![theme.styles],
         }
     }
 
@@ -279,11 +286,7 @@ impl ThemeStack {
     /// Push a theme on top of the stack.
     pub fn push_theme(&mut self, theme: Theme, inherit: bool) {
         let styles = if inherit {
-            let mut merged = self
-                .entries
-                .last()
-                .cloned()
-                .unwrap_or_else(HashMap::new);
+            let mut merged = self.entries.last().cloned().unwrap_or_else(HashMap::new);
             merged.extend(theme.styles);
             merged
         } else {
@@ -315,7 +318,8 @@ mod tests {
 
     #[test]
     fn theme_from_style_definitions_overrides_defaults() {
-        let theme = Theme::from_style_definitions([("rule.line", "bold red")], true).expect("theme");
+        let theme =
+            Theme::from_style_definitions([("rule.line", "bold red")], true).expect("theme");
         assert_eq!(theme.get("rule.line").unwrap().to_string(), "bold red");
     }
 

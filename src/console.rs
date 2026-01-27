@@ -91,9 +91,10 @@ use crate::live::LiveInner;
 use crate::markup;
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment};
-use crate::style::{Attributes, Style};
+use crate::style::{Attributes, Style, StyleParseError};
 use crate::terminal;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
+use crate::theme::{Theme, ThemeStack, ThemeStackError};
 
 /// Console dimensions in cells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,6 +343,8 @@ pub struct Console {
     emoji: bool,
     /// Enable syntax highlighting.
     highlight: bool,
+    /// Theme stack for named styles (Python Rich parity).
+    theme_stack: Mutex<ThemeStack>,
     /// Override width.
     width: Option<usize>,
     /// Override height.
@@ -408,6 +411,7 @@ impl Console {
             markup: true,
             emoji: true,
             highlight: true,
+            theme_stack: Mutex::new(ThemeStack::new(Theme::default())),
             width: None,
             height: None,
             safe_box: false,
@@ -469,6 +473,51 @@ impl Console {
     #[must_use]
     pub const fn emoji(&self) -> bool {
         self.emoji
+    }
+
+    /// Get a style by theme name or parse a style definition.
+    ///
+    /// Mirrors Python Rich `Console.get_style()`:
+    /// - Check the active theme stack for an exact name match
+    /// - Fall back to parsing a style definition
+    ///
+    /// If parsing fails, this returns an empty style.
+    #[must_use]
+    pub fn get_style(&self, name: &str) -> Style {
+        self.try_get_style(name).unwrap_or_else(|_| Style::new())
+    }
+
+    /// Like [`Self::get_style`], but returns an error if the style can't be parsed.
+    pub fn try_get_style(&self, name: &str) -> Result<Style, StyleParseError> {
+        if let Ok(stack) = self.theme_stack.lock()
+            && let Some(style) = stack.get(name)
+        {
+            return Ok(style.clone());
+        }
+        Style::parse(name)
+    }
+
+    /// Push a theme on to the theme stack.
+    pub fn push_theme(&self, theme: Theme, inherit: bool) {
+        if let Ok(mut stack) = self.theme_stack.lock() {
+            stack.push_theme(theme, inherit);
+        }
+    }
+
+    /// Pop the current theme from the theme stack.
+    pub fn pop_theme(&self) -> Result<(), ThemeStackError> {
+        let Ok(mut stack) = self.theme_stack.lock() else {
+            // Best-effort: most Console methods ignore poisoned locks.
+            return Ok(());
+        };
+        stack.pop_theme()
+    }
+
+    /// Use a theme for the duration of the returned guard.
+    #[must_use]
+    pub fn use_theme(&self, theme: Theme, inherit: bool) -> ThemeGuard<'_> {
+        self.push_theme(theme, inherit);
+        ThemeGuard { console: self }
     }
 
     /// Check if colors are enabled.
@@ -664,6 +713,13 @@ impl Console {
         self.print_segments(&segments);
     }
 
+    /// Print an exception / traceback renderable.
+    ///
+    /// This is a convenience wrapper mirroring Python Rich's `Console.print_exception`.
+    pub fn print_exception(&self, traceback: &crate::renderables::Traceback) {
+        self.print_renderable(traceback);
+    }
+
     /// Print with custom options.
     pub fn print_with_options(&self, content: &str, options: &PrintOptions) {
         if let Ok(mut file) = self.file.lock() {
@@ -729,7 +785,9 @@ impl Console {
         // Parse markup if enabled
         let parse_markup = options.markup.unwrap_or(self.markup);
         let mut text = if parse_markup {
-            markup::render_or_plain(content.as_ref())
+            markup::render_or_plain_with_style_resolver(content.as_ref(), |definition| {
+                self.get_style(definition)
+            })
         } else {
             Text::new(content.as_ref())
         };
@@ -1272,6 +1330,17 @@ pub enum LogLevel {
     Error,
 }
 
+/// RAII guard returned by [`Console::use_theme`].
+pub struct ThemeGuard<'a> {
+    console: &'a Console,
+}
+
+impl Drop for ThemeGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.console.pop_theme();
+    }
+}
+
 /// Builder for creating a Console with custom settings.
 #[derive(Default)]
 pub struct ConsoleBuilder {
@@ -1284,6 +1353,7 @@ pub struct ConsoleBuilder {
     width: Option<usize>,
     height: Option<usize>,
     safe_box: Option<bool>,
+    theme: Option<Theme>,
     file: Option<Box<dyn Write + Send>>,
 }
 
@@ -1299,6 +1369,7 @@ impl std::fmt::Debug for ConsoleBuilder {
             .field("width", &self.width)
             .field("height", &self.height)
             .field("safe_box", &self.safe_box)
+            .field("theme", &self.theme.as_ref().map(|_| "<Theme>"))
             .field("file", &self.file.as_ref().map(|_| "<dyn Write>"))
             .finish()
     }
@@ -1375,6 +1446,13 @@ impl ConsoleBuilder {
         self
     }
 
+    /// Set the initial console theme.
+    #[must_use]
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
     /// Set the output stream.
     #[must_use]
     pub fn file(mut self, writer: Box<dyn Write + Send>) -> Self {
@@ -1420,6 +1498,9 @@ impl ConsoleBuilder {
         }
         if let Some(sb) = self.safe_box {
             console.safe_box = sb;
+        }
+        if let Some(theme) = self.theme {
+            console.theme_stack = Mutex::new(ThemeStack::new(theme));
         }
         if let Some(f) = self.file {
             console.file = Mutex::new(f);
@@ -1512,6 +1593,31 @@ mod tests {
 
         let captured: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(captured.contains("Hello"));
+    }
+
+    #[test]
+    fn test_print_exception_renders_traceback() {
+        use crate::renderables::{Traceback, TracebackFrame};
+
+        let mut console = Console::builder().width(60).markup(false).build();
+        console.begin_capture();
+
+        let traceback = Traceback::new(
+            vec![
+                TracebackFrame::new("<module>", 14),
+                TracebackFrame::new("level1", 11),
+            ],
+            "ErrorType",
+            "boom",
+        );
+
+        console.print_exception(&traceback);
+        let segments = console.end_capture();
+        let captured: String = segments.iter().map(|s| s.text.as_ref()).collect();
+
+        assert!(captured.contains("Traceback (most recent call last)"));
+        assert!(captured.contains("in <module>:14"));
+        assert!(captured.contains("ErrorType: boom"));
     }
 
     #[test]

@@ -587,6 +587,19 @@ impl Style {
         Ok(result)
     }
 
+    /// Normalize a style definition to a canonical string form.
+    ///
+    /// Mirrors Python Rich's `Style.normalize()` behavior:
+    /// - If the definition parses, return `Style::parse(def).to_string()`.
+    /// - If it doesn't parse, return the lowercased, trimmed input.
+    #[must_use]
+    pub fn normalize(style: &str) -> String {
+        match Self::parse(style) {
+            Ok(parsed) => parsed.to_string(),
+            Err(_) => style.trim().to_lowercase(),
+        }
+    }
+
     fn parse_uncached(style: &str) -> Result<Self, StyleParseError> {
         if style.is_empty() || style == "none" {
             return Ok(Self::null());
@@ -1061,34 +1074,29 @@ mod tests {
     #[test]
     fn test_style_parse_invalid_unknown_token() {
         let result = Style::parse("completely_invalid_token_xyz");
-        assert!(result.is_err());
-        if let Err(StyleParseError::UnknownToken(token)) = result {
-            assert_eq!(token, "completely_invalid_token_xyz");
-        } else {
-            panic!("Expected UnknownToken error");
-        }
+        assert!(matches!(
+            result,
+            Err(StyleParseError::UnknownToken(ref token))
+                if token == "completely_invalid_token_xyz"
+        ));
     }
 
     #[test]
     fn test_style_parse_invalid_not_without_attribute() {
         let result = Style::parse("not");
-        assert!(result.is_err());
-        if let Err(StyleParseError::InvalidFormat(msg)) = result {
-            assert!(msg.contains("requires an attribute"));
-        } else {
-            panic!("Expected InvalidFormat error");
-        }
+        assert!(matches!(
+            result,
+            Err(StyleParseError::InvalidFormat(ref msg)) if msg.contains("requires an attribute")
+        ));
     }
 
     #[test]
     fn test_style_parse_invalid_on_without_color() {
         let result = Style::parse("on");
-        assert!(result.is_err());
-        if let Err(StyleParseError::InvalidFormat(msg)) = result {
-            assert!(msg.contains("requires a color"));
-        } else {
-            panic!("Expected InvalidFormat error");
-        }
+        assert!(matches!(
+            result,
+            Err(StyleParseError::InvalidFormat(ref msg)) if msg.contains("requires a color")
+        ));
     }
 
     #[test]
@@ -1580,25 +1588,19 @@ mod tests {
     #[test]
     fn test_style_parse_not_with_unknown_attribute() {
         let result = Style::parse("not unknown_attr");
-        assert!(result.is_err());
-        match result {
-            Err(StyleParseError::UnknownAttribute(attr)) => {
-                assert_eq!(attr, "unknown_attr");
-            }
-            _ => panic!("Expected UnknownAttribute error"),
-        }
+        assert!(matches!(
+            result,
+            Err(StyleParseError::UnknownAttribute(ref attr)) if attr == "unknown_attr"
+        ));
     }
 
     #[test]
     fn test_style_parse_link_without_url() {
         let result = Style::parse("link");
-        assert!(result.is_err());
-        match result {
-            Err(StyleParseError::InvalidFormat(msg)) => {
-                assert!(msg.contains("requires a URL"));
-            }
-            _ => panic!("Expected InvalidFormat error"),
-        }
+        assert!(matches!(
+            result,
+            Err(StyleParseError::InvalidFormat(ref msg)) if msg.contains("requires a URL")
+        ));
     }
 
     #[test]

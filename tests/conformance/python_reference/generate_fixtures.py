@@ -35,6 +35,7 @@ try:
     from rich.json import JSON  # type: ignore
     from rich import box  # type: ignore
     from rich.theme import Theme  # type: ignore
+    from rich.traceback import Frame, Stack, Trace, Traceback  # type: ignore
 except Exception as exc:  # pragma: no cover - import error path
     raise SystemExit(f"Failed to import rich: {exc}")
 
@@ -208,6 +209,27 @@ CASES = [
         "input": {"code": "fn main() { println!(\"hi\"); }", "language": "rust"},
     },
     {
+        "id": "traceback/basic",
+        "kind": "traceback",
+        "compare_ansi": False,
+        "render_options": {"width": 60},
+        "input": {
+            "frames": [
+                {"name": "<module>", "line": 14},
+                {"name": "level1", "line": 11},
+                {"name": "level2", "line": 8},
+                {"name": "level3", "line": 5},
+            ],
+            "exception_type": "ZeroDivisionError",
+            "exception_message": "division by zero",
+            "extra_lines": 0,
+            "word_wrap": False,
+            "show_locals": False,
+            "indent_guides": False,
+        },
+        "notes": "Deterministic traceback generated from synthetic frames.",
+    },
+    {
         "id": "terminal/no_color",
         "kind": "text",
         "render_options": {"color_system": "auto", "force_terminal": None},
@@ -330,6 +352,40 @@ def build_renderable(case: Dict[str, Any]):
         code = inp.get("code", "")
         language = inp.get("language", "rust")
         return Syntax(code, language)
+
+    if kind == "traceback":
+        width = case.get("render_options", {}).get("width", DEFAULTS["width"])
+        extra_lines = inp.get("extra_lines", 0)
+        word_wrap = inp.get("word_wrap", False)
+        show_locals = inp.get("show_locals", False)
+        indent_guides = inp.get("indent_guides", False)
+        frames = [
+            Frame(
+                filename="<traceback_fixture>",
+                lineno=int(frame.get("line", 0)),
+                name=str(frame.get("name", "")),
+            )
+            for frame in inp.get("frames", [])
+        ]
+        exception_type = inp.get("exception_type", "Error")
+        exception_message = inp.get("exception_message", "")
+        trace = Trace(
+            stacks=[
+                Stack(
+                    exc_type=str(exception_type),
+                    exc_value=str(exception_message),
+                    frames=frames,
+                )
+            ]
+        )
+        return Traceback(
+            trace=trace,
+            width=width,
+            extra_lines=extra_lines,
+            word_wrap=word_wrap,
+            show_locals=show_locals,
+            indent_guides=indent_guides,
+        )
 
     raise ValueError(f"Unknown kind: {kind}")
 

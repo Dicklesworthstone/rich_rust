@@ -2776,9 +2776,10 @@ features (not planned) from **planned-but-not-yet-implemented** features.
 |---------|--------|
 | Theme + named styles | Implemented (`Theme`, `Console::get_style`, `.ini` loading via `Theme::read`) |
 | Pretty / Inspect | Implemented (`renderables::Pretty`, `renderables::Inspect`, `renderables::inspect`; `Debug`-based, best-effort field extraction) |
+| Traceback rendering | Partial (`renderables::Traceback`, `Console::print_exception`; synthetic frames only; no locals/code/backtrace capture yet) |
 | Live display (`Live`) | Implemented (stdout/stderr redirection is best-effort; no Jupyter integration) |
 | Layout engine (`Layout`) | Implemented (ratio splits + named lookup; no render-map caching) |
-| Logging handler integration | Implemented (`RichLogger` for `log` crate; no traceback rendering) |
+| Logging handler integration | Implemented (`RichLogger` for `log` crate; tracebacks not yet integrated) |
 | Console export (HTML/SVG) | Implemented (minimal HTML/SVG export; no full theme templates) |
 
 ### 15.3 Implemented (No Longer Excluded)
@@ -2791,6 +2792,7 @@ in `rich_rust` (some behind feature flags):
 - Syntax highlighting (feature `syntax`, `renderables::syntax`)
 - Markdown rendering (feature `markdown`, `renderables::markdown`)
 - JSON pretty-printing (feature `json`, `renderables::json`)
+- Traceback rendering (`renderables::traceback`)
 
 ---
 
@@ -3862,8 +3864,9 @@ with Live(layout, screen=true) {
 
 **Implementation note (Rust):** `src/logging.rs` provides `RichLogger`, a `log`-crate
 logger with level/time/path formatting and keyword highlighting. An optional
-`RichTracingLayer` is available behind the `tracing` feature. Traceback rendering
-is out of scope for now.
+`RichTracingLayer` is available behind the `tracing` feature. `renderables::Traceback`
+and `Console::print_exception` exist, but automatic traceback rendering inside the
+logger/layer is not implemented yet.
 
 > Source: `rich/logging.py` (298 lines), `rich/_log_render.py` (95 lines)
 
@@ -4081,6 +4084,10 @@ fn render_message(&self, record: &LogRecord, message: &str) -> Box<dyn Renderabl
 ```
 
 ### 18.9 Rich Tracebacks
+
+**Implementation note (Rust):** `renderables::Traceback` currently supports deterministic
+rendering from synthetic frames for conformance and tests. A higher-fidelity integration
+can be built later (captured Rust backtraces, code context, locals).
 
 When `rich_tracebacks` is enabled and an exception is attached to the record:
 

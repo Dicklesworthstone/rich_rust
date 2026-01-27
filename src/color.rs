@@ -516,7 +516,17 @@ impl Color {
 
         // Try named color
         if let Some(&number) = NAMED_COLORS.get(color) {
-            return Ok(Self::from_ansi(number));
+            let color_type = if number < 16 {
+                ColorType::Standard
+            } else {
+                ColorType::EightBit
+            };
+            return Ok(Self {
+                name: color.to_string(),
+                color_type,
+                number: Some(number),
+                triplet: None,
+            });
         }
 
         Err(ColorParseError::UnknownColor(color.to_string()))

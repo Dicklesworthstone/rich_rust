@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-01-27T20:39:39.591781+00:00",
+  "generated_at": "2026-01-27T21:04:53.865101+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -458,6 +458,47 @@
         "ansi": "\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m           \u001b[0m\n"
       },
       "notes": null
+    },
+    {
+      "id": "traceback/basic",
+      "kind": "traceback",
+      "compare_ansi": false,
+      "render_options": {
+        "width": 60
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "frames": [
+          {
+            "name": "<module>",
+            "line": 14
+          },
+          {
+            "name": "level1",
+            "line": 11
+          },
+          {
+            "name": "level2",
+            "line": 8
+          },
+          {
+            "name": "level3",
+            "line": 5
+          }
+        ],
+        "exception_type": "ZeroDivisionError",
+        "exception_message": "division by zero",
+        "extra_lines": 0,
+        "word_wrap": false,
+        "show_locals": false,
+        "indent_guides": false
+      },
+      "expected": {
+        "plain": "╭─────────── Traceback (most recent call last) ────────────╮\n│ in <module>:14                                           │\n│ in level1:11                                             │\n│ in level2:8                                              │\n│ in level3:5                                              │\n╰──────────────────────────────────────────────────────────╯\nZeroDivisionError: division by zero\n",
+        "ansi": "\u001b[31m╭─\u001b[0m\u001b[31m──────────\u001b[0m\u001b[31m \u001b[0m\u001b[1;31mTraceback \u001b[0m\u001b[1;2;31m(most recent call last)\u001b[0m\u001b[31m \u001b[0m\u001b[31m───────────\u001b[0m\u001b[31m─╮\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92m<module>\u001b[0m:\u001b[94m14\u001b[0m                                           \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel1\u001b[0m:\u001b[94m11\u001b[0m                                             \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel2\u001b[0m:\u001b[94m8\u001b[0m                                              \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel3\u001b[0m:\u001b[94m5\u001b[0m                                              \u001b[31m│\u001b[0m\n\u001b[31m╰──────────────────────────────────────────────────────────╯\u001b[0m\n\u001b[1;91mZeroDivisionError: \u001b[0mdivision by zero\n"
+      },
+      "notes": "Deterministic traceback generated from synthetic frames."
     },
     {
       "id": "terminal/no_color",

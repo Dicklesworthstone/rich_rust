@@ -16,3 +16,7 @@ a.out
 
 # Test output artifacts
 golden_outputs/
+
+# Python caches (conformance tooling)
+__pycache__/
+*.pyc

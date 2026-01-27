@@ -107,6 +107,7 @@ pub mod pretty;
 pub mod progress;
 pub mod rule;
 pub mod table;
+pub mod traceback;
 pub mod tree;
 
 // Re-export commonly used types
@@ -120,6 +121,7 @@ pub use pretty::{Inspect, InspectOptions, Pretty, PrettyOptions, inspect};
 pub use progress::{BarStyle, ProgressBar, Spinner};
 pub use rule::Rule;
 pub use table::{Cell, Column, Row, Table, VerticalAlign};
+pub use traceback::{Traceback, TracebackFrame, print_exception};
 pub use tree::{Tree, TreeGuides, TreeNode};
 
 impl Renderable for Table {
@@ -152,7 +154,9 @@ impl Renderable for str {
 
         // Honor the markup setting from ConsoleOptions
         let text = if options.markup.unwrap_or(true) {
-            markup::render_or_plain(content.as_ref())
+            markup::render_or_plain_with_style_resolver(content.as_ref(), |definition| {
+                console.get_style(definition)
+            })
         } else {
             Text::new(content.as_ref())
         };

@@ -521,6 +521,29 @@ console.print_renderable(&Pretty::new(&cfg));
 inspect(&console, &cfg);
 ```
 
+### Tracebacks
+
+`Traceback` is a renderable inspired by Python Rich's `rich.traceback`. For now it renders
+from **synthetic frames** (name + line number), which makes output deterministic in tests.
+
+```rust
+use rich_rust::prelude::*;
+
+let console = Console::new();
+let traceback = Traceback::new(
+    vec![
+        TracebackFrame::new("<module>", 14),
+        TracebackFrame::new("level1", 11),
+        TracebackFrame::new("level2", 8),
+        TracebackFrame::new("level3", 5),
+    ],
+    "ZeroDivisionError",
+    "division by zero",
+);
+
+console.print_exception(&traceback);
+```
+
 ---
 
 ## Architecture
@@ -604,6 +627,7 @@ See `FEATURE_PARITY.md` for the authoritative matrix and `RICH_SPEC.md` for deta
 - Syntax highlighting (feature `syntax`)
 - Markdown rendering (feature `markdown`)
 - JSON pretty-print (feature `json`)
+- Traceback rendering (`Traceback`, `Console::print_exception`) (synthetic frames; no automatic Rust backtrace capture yet)
 - Unicode width handling + auto color downgrade
 
 **Out of scope**

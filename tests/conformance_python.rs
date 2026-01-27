@@ -9,7 +9,9 @@ use std::fs;
 use rich_rust::color::ColorSystem;
 use rich_rust::console::{Console, PrintOptions};
 use rich_rust::prelude::*;
-use rich_rust::renderables::{Align, Columns, Padding, Panel, Rule, Table, Tree, TreeNode};
+use rich_rust::renderables::{
+    Align, Columns, Padding, Panel, Rule, Table, Traceback, TracebackFrame, Tree, TreeNode,
+};
 use rich_rust::segment::Segment;
 use serde_json::Value;
 
@@ -456,7 +458,11 @@ fn build_renderable(
             }
             #[cfg(not(feature = "markdown"))]
             {
-                panic!("markdown conformance requires the markdown feature");
+                assert!(
+                    false,
+                    "markdown conformance requires the markdown feature"
+                );
+                Box::new(Text::new(""))
             }
         }
         "json" => {
@@ -469,7 +475,8 @@ fn build_renderable(
             }
             #[cfg(not(feature = "json"))]
             {
-                panic!("json conformance requires the json feature");
+                assert!(false, "json conformance requires the json feature");
+                Box::new(Text::new(""))
             }
         }
         "syntax" => {
@@ -483,18 +490,38 @@ fn build_renderable(
             }
             #[cfg(not(feature = "syntax"))]
             {
-                panic!("syntax conformance requires the syntax feature");
+                assert!(false, "syntax conformance requires the syntax feature");
+                Box::new(Text::new(""))
             }
         }
-        other => panic!("unsupported kind: {other}"),
+        "traceback" => {
+            let mut frames: Vec<TracebackFrame> = Vec::new();
+            if let Some(frame_values) = input.get("frames").and_then(|v| v.as_array()) {
+                for frame in frame_values {
+                    let name = frame.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    let line = frame.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    if !name.is_empty() && line > 0 {
+                        frames.push(TracebackFrame::new(name, line));
+                    }
+                }
+            }
+
+            let exception_type =
+                value_string(input, "exception_type").unwrap_or_else(|| "Error".to_string());
+            let exception_message = value_string(input, "exception_message").unwrap_or_default();
+            Box::new(Traceback::new(frames, exception_type, exception_message))
+        }
+        other => {
+            assert!(false, "unsupported kind: {other}");
+            Box::new(Text::new(""))
+        }
     }
 }
 
 #[test]
 fn python_rich_fixtures() {
     let fixture_path = "tests/conformance/fixtures/python_rich.json";
-    let raw = fs::read_to_string(fixture_path)
-        .unwrap_or_else(|_| panic!("missing fixtures at {fixture_path}"));
+    let raw = fs::read_to_string(fixture_path).expect("missing python rich conformance fixtures");
     let data: Value = serde_json::from_str(&raw).expect("invalid fixture JSON");
 
     let defaults = data.get("defaults").expect("defaults missing");

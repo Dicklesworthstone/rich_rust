@@ -170,6 +170,19 @@ fn parse_tag(content: &str) -> Tag {
 /// let text = render("[bold]Hello[/] [red]World[/]").unwrap();
 /// ```
 pub fn render(markup: &str) -> Result<Text, MarkupError> {
+    render_with_style_resolver(markup, |definition| {
+        Style::parse(definition).unwrap_or_else(|_| Style::new())
+    })
+}
+
+/// Render markup string to a Text object using a custom style resolver.
+///
+/// The resolver is given the normalized tag name (see [`Style::normalize`]) and
+/// must return the style to apply to that tag.
+pub fn render_with_style_resolver<F>(markup: &str, resolve_style: F) -> Result<Text, MarkupError>
+where
+    F: Fn(&str) -> Style,
+{
     // Optimization: if no '[', return plain text
     if !markup.contains('[') {
         return Ok(Text::new(markup));
@@ -205,21 +218,22 @@ pub fn render(markup: &str) -> Result<Text, MarkupError> {
                 };
 
                 // Apply style from the opening tag
-                let style = tag_to_style(&open_tag);
+                let style = tag_to_style_with_resolver(&open_tag, &resolve_style);
                 let end = text.len();
                 if start < end {
                     text.stylize(start, end, style);
                 }
             } else {
                 // Opening tag - push to stack
-                style_stack.push((text.len(), tag));
+                let normalized = Tag::new(Style::normalize(&tag.name), tag.parameters.clone());
+                style_stack.push((text.len(), normalized));
             }
         }
     }
 
     // Auto-close any unclosed tags
     while let Some((start, tag)) = style_stack.pop() {
-        let style = tag_to_style(&tag);
+        let style = tag_to_style_with_resolver(&tag, &resolve_style);
         let end = text.len();
         if start < end {
             text.stylize(start, end, style);
@@ -231,28 +245,23 @@ pub fn render(markup: &str) -> Result<Text, MarkupError> {
 
 /// Pop a matching tag from the stack by name.
 fn pop_matching(stack: &mut Vec<(usize, Tag)>, name: &str) -> Option<(usize, Tag)> {
-    fn normalize_tag(tag_name: &str) -> String {
-        tag_name
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_lowercase()
-    }
-
-    let search_name = normalize_tag(name);
+    let search_name = Style::normalize(name);
 
     // Search from top of stack
     for i in (0..stack.len()).rev() {
-        let tag_name = normalize_tag(&stack[i].1.name);
-        if tag_name == search_name {
+        // Stack entries are normalized on push.
+        if stack[i].1.name == search_name {
             return Some(stack.remove(i));
         }
     }
     None
 }
 
-/// Convert a tag to a Style.
-fn tag_to_style(tag: &Tag) -> Style {
+/// Convert a tag to a Style using a custom resolver.
+fn tag_to_style_with_resolver<F>(tag: &Tag, resolve_style: &F) -> Style
+where
+    F: Fn(&str) -> Style,
+{
     // Handle link tag specially
     if tag.name.eq_ignore_ascii_case("link")
         && let Some(ref url) = tag.parameters
@@ -260,9 +269,7 @@ fn tag_to_style(tag: &Tag) -> Style {
         return Style::new().link(url);
     }
 
-    // Parse tag name as style string
-    // The tag name can contain multiple style parts like "bold red on blue"
-    Style::parse(&tag.name).unwrap_or_else(|_| Style::new())
+    resolve_style(&tag.name)
 }
 
 /// Escape text for use in markup.
@@ -280,6 +287,15 @@ pub fn escape(text: &str) -> String {
 #[must_use]
 pub fn render_or_plain(markup: &str) -> Text {
     render(markup).unwrap_or_else(|_| Text::new(markup))
+}
+
+/// Render markup to Text using a custom style resolver, returning plain text on error.
+#[must_use]
+pub fn render_or_plain_with_style_resolver<F>(markup: &str, resolve_style: F) -> Text
+where
+    F: Fn(&str) -> Style,
+{
+    render_with_style_resolver(markup, resolve_style).unwrap_or_else(|_| Text::new(markup))
 }
 
 #[cfg(test)]
@@ -317,6 +333,20 @@ mod tests {
     #[test]
     fn test_render_multiple_styles() {
         let text = render("[bold red]hello[/]").unwrap();
+        assert_eq!(text.plain(), "hello");
+        assert_eq!(text.spans().len(), 1);
+    }
+
+    #[test]
+    fn test_render_normalizes_style_token_order() {
+        let text = render("[red bold]hello[/bold red]").unwrap();
+        assert_eq!(text.plain(), "hello");
+        assert_eq!(text.spans().len(), 1);
+    }
+
+    #[test]
+    fn test_render_explicit_close_with_different_token_order() {
+        let text = render("[red bold]hello[/red bold]").unwrap();
         assert_eq!(text.plain(), "hello");
         assert_eq!(text.spans().len(), 1);
     }
