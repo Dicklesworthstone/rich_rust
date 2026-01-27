@@ -36,9 +36,9 @@ fn main() {
     }
 
     let state = if cfg.quick {
-        state::SharedDemoState::new(1, 0)
+        state::SharedDemoState::new(1, cfg.seed)
     } else {
-        state::SharedDemoState::demo_seeded(1, 0)
+        state::SharedDemoState::demo_seeded(1, cfg.seed)
     };
 
     state.update(|demo| {
@@ -115,6 +115,7 @@ struct Config {
     help: bool,
     list_scenes: bool,
     scene: Option<String>,
+    seed: u64,
 
     quick: bool,
     speed: f64,
@@ -129,6 +130,7 @@ struct Config {
     color_system: ColorMode,
     emoji: Option<bool>,
     safe_box: Option<bool>,
+    links: Option<bool>,
 
     export: ExportMode,
 }
@@ -165,6 +167,10 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Config, String> 
                     ));
                 }
                 cfg.scene = Some(scene);
+            }
+            "--seed" => {
+                let raw = next_value(&mut iter, "--seed")?;
+                cfg.seed = parse_u64_flag("--seed", &raw)?;
             }
             "--quick" => cfg.quick = true,
             "--speed" => {
@@ -203,6 +209,8 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Config, String> 
             "--no-emoji" => cfg.emoji = Some(false),
             "--safe-box" => cfg.safe_box = Some(true),
             "--no-safe-box" => cfg.safe_box = Some(false),
+            "--links" => cfg.links = Some(true),
+            "--no-links" => cfg.links = Some(false),
 
             "--export" => {
                 if !matches!(cfg.export, ExportMode::Off) {
@@ -249,6 +257,11 @@ fn parse_usize_flag(flag: &str, raw: &str) -> Result<usize, String> {
         return Err(format!("Invalid {flag} value `{raw}` (expected >= 1)."));
     }
     Ok(value)
+}
+
+fn parse_u64_flag(flag: &str, raw: &str) -> Result<u64, String> {
+    raw.parse::<u64>()
+        .map_err(|_| format!("Invalid {flag} value `{raw}` (expected a non-negative integer)."))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -333,6 +346,7 @@ USAGE:
 OPTIONS:
     --list-scenes               List available scenes and exit
     --scene <name>              Run a single scene (see --list-scenes)
+    --seed <u64>                Seed deterministic demo data (default: 0)
     --quick                     Reduce sleeps/runtime (CI-friendly)
     --speed <multiplier>        Animation speed multiplier (default: 1.0)
 
@@ -351,6 +365,8 @@ OPTIONS:
     --no-emoji                  Disable emoji
     --safe-box                  Use ASCII-safe box characters
     --no-safe-box               Use Unicode box characters (default)
+    --links                     Enable OSC8 hyperlinks
+    --no-links                  Disable OSC8 hyperlinks
 
     --export                    Write an HTML/SVG bundle to a temp dir
     --export-dir <path>         Write an HTML/SVG bundle to a directory
@@ -414,6 +430,7 @@ mod tests {
             "--no-screen",
             "--no-emoji",
             "--safe-box",
+            "--no-links",
         ])
         .expect("parse");
 
@@ -422,6 +439,7 @@ mod tests {
         assert_eq!(cfg.screen, Some(false));
         assert_eq!(cfg.emoji, Some(false));
         assert_eq!(cfg.safe_box, Some(true));
+        assert_eq!(cfg.links, Some(false));
     }
 
     #[test]
@@ -431,6 +449,27 @@ mod tests {
 
         let err = parse(&["demo_showcase", "--speed", "0"]).expect_err("error");
         assert!(err.contains("> 0"));
+    }
+
+    #[test]
+    fn seed_parses_as_u64() {
+        let cfg = parse(&["demo_showcase", "--seed", "42"]).expect("parse");
+        assert_eq!(cfg.seed, 42);
+
+        let err = parse(&["demo_showcase", "--seed", "wat"]).expect_err("error");
+        assert!(err.contains("Invalid --seed"));
+
+        let err = parse(&["demo_showcase", "--seed", "-1"]).expect_err("error");
+        assert!(err.contains("Invalid --seed"));
+    }
+
+    #[test]
+    fn links_toggle_parses() {
+        let cfg = parse(&["demo_showcase", "--links"]).expect("parse");
+        assert_eq!(cfg.links, Some(true));
+
+        let cfg = parse(&["demo_showcase", "--no-links"]).expect("parse");
+        assert_eq!(cfg.links, Some(false));
     }
 
     #[test]

@@ -675,6 +675,7 @@ USAGE:
 OPTIONS:
     --list-scenes               List available scenes and exit
     --scene <name>              Run a single scene (see --list-scenes)
+    --seed <u64>                Seed deterministic demo data (default: 0)
     --quick                     Reduce sleeps/runtime (CI-friendly)
     --speed <multiplier>        Animation speed multiplier (default: 1.0)
 
@@ -693,6 +694,8 @@ OPTIONS:
     --no-emoji                  Disable emoji
     --safe-box                  Use ASCII-safe box characters
     --no-safe-box               Use Unicode box characters (default)
+    --links                     Enable OSC8 hyperlinks
+    --no-links                  Disable OSC8 hyperlinks
 
     --export                    Write an HTML/SVG bundle to a temp dir
     --export-dir <path>         Write an HTML/SVG bundle to a directory
@@ -705,6 +708,7 @@ OPTIONS:
 - `interactive=auto` means: interactive only when stdout is a TTY and `TERM` is not `dumb`/`unknown`.
 - `live=auto` means: `live = interactive`.
 - `screen=auto` means: `screen = live && interactive` (TTY-only).
+- `links=auto` means: hyperlinks only when `interactive`; override with `--links` / `--no-links`.
 - `FORCE_COLOR` may force color output, but must **not** enable interactive/live behavior; use `--force-terminal` to intentionally override TTY checks.
 
 **Safety requirements**
