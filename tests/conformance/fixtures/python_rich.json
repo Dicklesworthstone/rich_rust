@@ -1,6 +1,6 @@
 {
-  "rich_version": "legacy",
-  "generated_at": "2026-01-25T04:56:41.995210+00:00",
+  "rich_version": "13.9.4",
+  "generated_at": "2026-01-27T18:47:00.827656+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -19,6 +19,36 @@
       "expected": {
         "plain": "Hello, World!\n",
         "ansi": "Hello, World!\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/emoji_code",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "hi :smile:"
+      },
+      "expected": {
+        "plain": "hi 😄\n",
+        "ansi": "hi 😄\n"
+      },
+      "notes": null
+    },
+    {
+      "id": "text/emoji_variant_text",
+      "kind": "text",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "input": {
+        "markup": "hi :smile-text:"
+      },
+      "expected": {
+        "plain": "hi 😄︎\n",
+        "ansi": "hi 😄︎\n"
       },
       "notes": null
     },

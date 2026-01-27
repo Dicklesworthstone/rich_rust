@@ -86,6 +86,7 @@ use std::sync::{
 };
 
 use crate::color::ColorSystem;
+use crate::emoji;
 use crate::live::LiveInner;
 use crate::markup;
 use crate::renderables::Renderable;
@@ -464,6 +465,12 @@ impl Console {
         self.color_system.or(self.detected_color_system)
     }
 
+    /// Check if Rich-style emoji code replacement is enabled.
+    #[must_use]
+    pub const fn emoji(&self) -> bool {
+        self.emoji
+    }
+
     /// Check if colors are enabled.
     #[must_use]
     pub fn is_color_enabled(&self) -> bool {
@@ -713,12 +720,18 @@ impl Console {
     }
 
     fn render_str_segments(&self, content: &str, options: &PrintOptions) -> Vec<Segment<'static>> {
+        let content = if self.emoji {
+            emoji::replace(content, None)
+        } else {
+            std::borrow::Cow::Borrowed(content)
+        };
+
         // Parse markup if enabled
         let parse_markup = options.markup.unwrap_or(self.markup);
         let mut text = if parse_markup {
-            markup::render_or_plain(content)
+            markup::render_or_plain(content.as_ref())
         } else {
-            Text::new(content)
+            Text::new(content.as_ref())
         };
 
         if let Some(justify) = options.justify {
@@ -1590,6 +1603,20 @@ mod tests {
         let console = Console::builder().markup(false).build();
         let output = console.export_text("[bold]Hello[/]");
         assert_eq!(output, "[bold]Hello[/]\n");
+    }
+
+    #[test]
+    fn test_export_text_replaces_emoji_codes_by_default() {
+        let console = Console::builder().markup(false).build();
+        let output = console.export_text("hi :smile:");
+        assert_eq!(output, "hi 😄\n");
+    }
+
+    #[test]
+    fn test_export_text_does_not_replace_emoji_codes_when_disabled() {
+        let console = Console::builder().markup(false).emoji(false).build();
+        let output = console.export_text("hi :smile:");
+        assert_eq!(output, "hi :smile:\n");
     }
 
     #[test]

@@ -54,6 +54,16 @@ CASES = [
         "input": {"markup": "Hello, World!"},
     },
     {
+        "id": "text/emoji_code",
+        "kind": "text",
+        "input": {"markup": "hi :smile:"},
+    },
+    {
+        "id": "text/emoji_variant_text",
+        "kind": "text",
+        "input": {"markup": "hi :smile-text:"},
+    },
+    {
         "id": "text/markup_bold",
         "kind": "text",
         "input": {"markup": "[bold]Bold[/]"},
@@ -371,7 +381,17 @@ def render_case(case: Dict[str, Any]) -> Dict[str, str]:
 
 
 def main() -> int:
-    rich_version = getattr(rich, "__version__", "legacy")
+    if LEGACY_RICH.exists():
+        rich_version = "legacy"
+    else:
+        rich_version = getattr(rich, "__version__", None)
+        if not rich_version:
+            try:
+                from importlib import metadata
+
+                rich_version = metadata.version("rich")
+            except Exception:  # pragma: no cover - metadata fallback
+                rich_version = "unknown"
     output = {
         "rich_version": rich_version,
         "generated_at": datetime.now(timezone.utc).isoformat(),

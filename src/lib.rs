@@ -144,6 +144,7 @@ pub mod r#box;
 pub mod cells;
 pub mod color;
 pub mod console;
+pub mod emoji;
 pub mod live;
 pub mod logging;
 pub mod markup;
@@ -159,15 +160,16 @@ pub mod prelude {
     pub use crate::r#box::BoxChars;
     pub use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
     pub use crate::console::{Console, ConsoleOptions};
+    pub use crate::emoji::EmojiVariant;
     pub use crate::live::{Live, LiveOptions, VerticalOverflowMethod};
     pub use crate::logging::RichLogger;
     #[cfg(feature = "tracing")]
     pub use crate::logging::RichTracingLayer;
     pub use crate::measure::Measurement;
     pub use crate::renderables::{
-        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, Layout, LayoutSplitter,
-        PaddingDimensions, Panel, ProgressBar, Region, Row, Rule, Spinner, Table, Tree, TreeGuides,
-        TreeNode, VerticalAlign, VerticalAlignMethod, align_text,
+        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, Emoji, Layout,
+        LayoutSplitter, PaddingDimensions, Panel, ProgressBar, Region, Row, Rule, Spinner, Table,
+        Tree, TreeGuides, TreeNode, VerticalAlign, VerticalAlignMethod, align_text,
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};

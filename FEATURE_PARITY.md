@@ -40,6 +40,7 @@ This document is the source of truth. If code or docs change, update this file, 
 | Color | Named/ANSI/8-bit/truecolor | Implemented | `src/color.rs` | Unit tests + property tests |
 | Color | Auto downgrade by terminal | Implemented | `src/color.rs`, `src/terminal.rs` | Regression tests |
 | Markup | Rich markup parsing | Implemented | `src/markup/mod.rs` | E2E + regression tests |
+| Emoji | Emoji code replacement (`:smile:`) | Implemented | `src/emoji.rs`, `src/console.rs` | Unit tests + Python fixture conformance |
 | Text | Styled spans, wrapping | Implemented | `src/text.rs` | E2E + property tests |
 | Measurement | Min/max width protocol | Implemented | `src/measure.rs` | Unit + property tests |
 | Unicode width | CJK/emoji width | Implemented | `src/cells.rs` | Unit + regression tests |
@@ -57,6 +58,7 @@ This document is the source of truth. If code or docs change, update this file, 
 | Tree | Hierarchical trees | Implemented | `src/renderables/tree.rs` | E2E + golden tests |
 | Progress | Progress bars + spinners | Implemented | `src/renderables/progress.rs` | E2E + golden tests |
 | Columns | Multi-column layout | Implemented | `src/renderables/columns.rs` | Golden tests |
+| Emoji | Emoji renderable | Implemented | `src/renderables/emoji.rs` | Unit tests |
 | Padding | Padding | Implemented | `src/renderables/padding.rs` | Golden tests |
 | Align | Alignment | Implemented | `src/renderables/align.rs` | Golden tests |
 | Syntax | Syntax highlighting | Implemented | `src/renderables/syntax.rs` (feature `syntax`) | Tests present; parity vs Python Rich not yet fixture-based |
@@ -101,7 +103,6 @@ These are intentionally not planned for the Rust port:
 - Jupyter/IPython integration
 - Python `inspect` module features
 - Python `traceback` module features
-- Emoji code database (e.g., `:smile:`) beyond Unicode
 - Theme `.ini` files (code-defined themes only)
 - Input widgets (interactive inputs are out of scope for this library)
 - Legacy Windows cmd.exe (use VT sequences via modern terminals)

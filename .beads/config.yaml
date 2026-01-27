@@ -1,15 +1,15 @@
 # Beads Configuration File
-# This file configures default behavior for all bd commands in this repository
-# All settings can also be set via environment variables (BD_* prefix)
+# This file configures default behavior for all br (beads_rust) commands in this repository
+# All settings can also be set via environment variables (BEADS_* prefix)
 # or overridden with command-line flags
 
-# Issue prefix for this repository (used by bd init)
-# If not set, bd init will auto-detect from directory name
+# Issue prefix for this repository (used by br init)
+# If not set, br init will auto-detect from directory name
 # Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
 # issue-prefix: ""
 
 # Use no-db mode: load from JSONL, no SQLite, write back after each command
-# When true, bd will use .beads/issues.jsonl as the source of truth
+# When true, br will use .beads/issues.jsonl as the source of truth
 # instead of SQLite database
 # no-db: false
 
@@ -25,7 +25,7 @@
 # Enable JSON output by default
 # json: false
 
-# Default actor for audit trails (overridden by BD_ACTOR or --actor)
+# Default actor for audit trails (overridden by BEADS_ACTOR or --actor)
 # actor: ""
 
 # Path to database (overridden by BEADS_DB or --db)
@@ -37,14 +37,14 @@
 # Debounce interval for auto-flush (can also use BEADS_FLUSH_DEBOUNCE)
 # flush-debounce: "5s"
 
-# Git branch for beads commits (bd sync will commit to this branch)
+# Git branch for beads commits (br sync will commit to this branch)
 # IMPORTANT: Set this for team projects so all clones use the same sync branch.
 # This setting persists across clones (unlike database config which is gitignored).
 # Can also use BEADS_SYNC_BRANCH env var for local override.
-# If not set, bd sync will require you to run 'bd config set sync.branch <branch>'.
+# If not set, br sync will require you to run 'br config set sync.branch <branch>'.
 # sync-branch: "beads-sync"
 
-# Multi-repo configuration (experimental - bd-307)
+# Multi-repo configuration (experimental)
 # Allows hydrating from multiple repositories and routing writes to the correct JSONL
 # repos:
 #   primary: "."  # Primary repo (where this database lives)
@@ -52,7 +52,7 @@
 #     - ~/beads-planning  # Personal planning repo
 #     - ~/work-planning   # Work planning repo
 
-# Integration settings (access with 'bd config get/set')
+# Integration settings (access with 'br config get/set')
 # These are stored in the database, not in this file:
 # - jira.url
 # - jira.project

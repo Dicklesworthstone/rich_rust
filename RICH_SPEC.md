@@ -2771,7 +2771,6 @@ features (not planned) from **planned-but-not-yet-implemented** features.
 | `inspect` module | Python runtime reflection |
 | `traceback` module | Python exception handling |
 | Legacy Windows (cmd.exe) | Use modern VT sequences via crossterm |
-| Emoji code database (`:smile:`) | Use native unicode |
 | Theme `.ini` files | Code-defined themes only |
 | Input widgets | Out of scope for this output-focused library |
 | Pretty-printing Python objects | Python-specific |
@@ -2791,6 +2790,7 @@ The following were previously listed as Phase 2+ items and are **now implemented
 in `rich_rust` (some behind feature flags):
 
 - Progress bars & spinners (`renderables::progress`)
+- Emoji code replacement (`:name:`) and `Emoji` renderable (`emoji`, `renderables::emoji`)
 - Syntax highlighting (feature `syntax`, `renderables::syntax`)
 - Markdown rendering (feature `markdown`, `renderables::markdown`)
 - JSON pretty-printing (feature `json`, `renderables::json`)

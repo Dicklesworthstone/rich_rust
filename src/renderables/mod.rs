@@ -9,6 +9,7 @@
 //! - [`Rule`]: Horizontal divider lines
 //! - [`Columns`]: Multi-column text layout
 //! - [`Align`]: Text alignment utilities
+//! - [`Emoji`]: Single emoji renderable (Rich-style)
 //!
 //! # Examples
 //!
@@ -98,6 +99,7 @@ pub trait Renderable {
 
 pub mod align;
 pub mod columns;
+pub mod emoji;
 pub mod layout;
 pub mod padding;
 pub mod panel;
@@ -109,6 +111,7 @@ pub mod tree;
 // Re-export commonly used types
 pub use align::{Align, AlignLines, AlignMethod, VerticalAlignMethod, align_text};
 pub use columns::Columns;
+pub use emoji::{Emoji, NoEmoji};
 pub use layout::{Layout, LayoutSplitter, Region};
 pub use padding::{Padding, PaddingDimensions};
 pub use panel::Panel;
@@ -138,12 +141,18 @@ impl Renderable for Table {
 }
 
 impl Renderable for str {
-    fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        let content = if console.emoji() {
+            crate::emoji::replace(self, None)
+        } else {
+            std::borrow::Cow::Borrowed(self)
+        };
+
         // Honor the markup setting from ConsoleOptions
         let text = if options.markup.unwrap_or(true) {
-            markup::render_or_plain(self)
+            markup::render_or_plain(content.as_ref())
         } else {
-            Text::new(self)
+            Text::new(content.as_ref())
         };
         text.render("")
             .into_iter()
