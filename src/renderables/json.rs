@@ -148,14 +148,20 @@ impl Default for JsonTheme {
         Self {
             key: Style::new().color_str("blue").unwrap_or_default().bold(),
             string: Style::new().color_str("green").unwrap_or_default(),
-            number: Style::new().color_str("cyan").unwrap_or_default(),
-            boolean: Style::new().color_str("yellow").unwrap_or_default(),
+            number: Style::new()
+                .color_str("cyan")
+                .unwrap_or_default()
+                .bold(),
+            boolean: Style::new()
+                .color_str("yellow")
+                .unwrap_or_default()
+                .bold(),
             null: Style::new()
                 .color_str("magenta")
                 .unwrap_or_default()
                 .italic(),
-            bracket: Style::new().color_str("white").unwrap_or_default(),
-            punctuation: Style::new().color_str("white").unwrap_or_default(),
+            bracket: Style::new().bold(),
+            punctuation: Style::new(),
         }
     }
 }

@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-01-27T21:04:53.865101+00:00",
+  "generated_at": "2026-01-27T22:05:06.895763+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -413,7 +413,7 @@
     {
       "id": "markdown/plain",
       "kind": "markdown",
-      "compare_ansi": false,
+      "compare_ansi": true,
       "render_options": null,
       "env": null,
       "theme": null,
@@ -424,12 +424,31 @@
         "plain": "Just text                               \n",
         "ansi": "Just text                               \n"
       },
-      "notes": null
+      "notes": "No styling; ANSI output is identical to plain."
+    },
+    {
+      "id": "markdown/emphasis_no_terminal",
+      "kind": "markdown",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": false
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "text": "This is **bold** and *italic*."
+      },
+      "expected": {
+        "plain": "This is bold and italic.                \n",
+        "ansi": "This is bold and italic.                \n"
+      },
+      "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage."
     },
     {
       "id": "json/basic",
       "kind": "json",
-      "compare_ansi": false,
+      "compare_ansi": true,
       "render_options": null,
       "env": null,
       "theme": null,
@@ -440,7 +459,23 @@
         "plain": "{\n  \"age\": 30,\n  \"name\": \"Alice\"\n}\n",
         "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"age\"\u001b[0m: \u001b[1;36m30\u001b[0m,\n  \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"Alice\"\u001b[0m\n\u001b[1m}\u001b[0m\n"
       },
-      "notes": null
+      "notes": "Default JSON styling is intended to match Python Rich defaults."
+    },
+    {
+      "id": "json/nested",
+      "kind": "json",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "theme": null,
+      "input": {
+        "json": "{\"items\": [{\"id\": 1, \"name\": \"A\"}, {\"id\": 2, \"name\": \"B\"}]}"
+      },
+      "expected": {
+        "plain": "{\n  \"items\": [\n    {\n      \"id\": 1,\n      \"name\": \"A\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"B\"\n    }\n  ]\n}\n",
+        "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"items\"\u001b[0m: \u001b[1m[\u001b[0m\n    \u001b[1m{\u001b[0m\n      \u001b[1;34m\"id\"\u001b[0m: \u001b[1;36m1\u001b[0m,\n      \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"A\"\u001b[0m\n    \u001b[1m}\u001b[0m,\n    \u001b[1m{\u001b[0m\n      \u001b[1;34m\"id\"\u001b[0m: \u001b[1;36m2\u001b[0m,\n      \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"B\"\u001b[0m\n    \u001b[1m}\u001b[0m\n  \u001b[1m]\u001b[0m\n\u001b[1m}\u001b[0m\n"
+      },
+      "notes": "Nested structures with default JSON styling."
     },
     {
       "id": "syntax/basic",
@@ -457,7 +492,27 @@
         "plain": "fn main() { println!(\"hi\"); }           \n",
         "ansi": "\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m           \u001b[0m\n"
       },
-      "notes": null
+      "notes": "Rust uses syntect; Python Rich uses Pygments, so ANSI differs. Plain comparison still guards layout."
+    },
+    {
+      "id": "syntax/no_terminal",
+      "kind": "syntax",
+      "compare_ansi": true,
+      "render_options": {
+        "color_system": "auto",
+        "force_terminal": false
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "code": "fn main() { println!(\"hi\"); }",
+        "language": "rust"
+      },
+      "expected": {
+        "plain": "fn main() { println!(\"hi\"); }           \n",
+        "ansi": "fn main() { println!(\"hi\"); }           \n"
+      },
+      "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage."
     },
     {
       "id": "traceback/basic",

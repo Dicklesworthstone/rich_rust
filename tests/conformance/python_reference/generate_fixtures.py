@@ -193,20 +193,48 @@ CASES = [
     {
         "id": "markdown/plain",
         "kind": "markdown",
-        "compare_ansi": False,
+        "compare_ansi": True,
         "input": {"text": "Just text"},
+        "notes": "No styling; ANSI output is identical to plain.",
+    },
+    {
+        "id": "markdown/emphasis_no_terminal",
+        "kind": "markdown",
+        "compare_ansi": True,
+        "render_options": {"color_system": "auto", "force_terminal": False},
+        "input": {"text": "This is **bold** and *italic*."},
+        "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage.",
     },
     {
         "id": "json/basic",
         "kind": "json",
-        "compare_ansi": False,
+        "compare_ansi": True,
         "input": {"json": "{\"age\": 30, \"name\": \"Alice\"}"},
+        "notes": "Default JSON styling is intended to match Python Rich defaults.",
+    },
+    {
+        "id": "json/nested",
+        "kind": "json",
+        "compare_ansi": True,
+        "input": {
+            "json": "{\"items\": [{\"id\": 1, \"name\": \"A\"}, {\"id\": 2, \"name\": \"B\"}]}"
+        },
+        "notes": "Nested structures with default JSON styling.",
     },
     {
         "id": "syntax/basic",
         "kind": "syntax",
         "compare_ansi": False,
         "input": {"code": "fn main() { println!(\"hi\"); }", "language": "rust"},
+        "notes": "Rust uses syntect; Python Rich uses Pygments, so ANSI differs. Plain comparison still guards layout.",
+    },
+    {
+        "id": "syntax/no_terminal",
+        "kind": "syntax",
+        "compare_ansi": True,
+        "render_options": {"color_system": "auto", "force_terminal": False},
+        "input": {"code": "fn main() { println!(\"hi\"); }", "language": "rust"},
+        "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage.",
     },
     {
         "id": "traceback/basic",

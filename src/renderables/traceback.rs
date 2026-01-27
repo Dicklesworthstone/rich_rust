@@ -17,6 +17,7 @@ use super::panel::Panel;
 /// A single traceback frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TracebackFrame {
+    pub filename: Option<String>,
     pub name: String,
     pub line: usize,
 }
@@ -25,9 +26,16 @@ impl TracebackFrame {
     #[must_use]
     pub fn new(name: impl Into<String>, line: usize) -> Self {
         Self {
+            filename: None,
             name: name.into(),
             line,
         }
+    }
+
+    #[must_use]
+    pub fn filename(mut self, filename: impl Into<String>) -> Self {
+        self.filename = Some(filename.into());
+        self
     }
 }
 
@@ -38,6 +46,7 @@ pub struct Traceback {
     exception_type: String,
     exception_message: String,
     title: Text,
+    extra_lines: usize,
 }
 
 impl Traceback {
@@ -53,6 +62,7 @@ impl Traceback {
             exception_type: exception_type.into(),
             exception_message: exception_message.into(),
             title: Text::new("Traceback (most recent call last)"),
+            extra_lines: 0,
         }
     }
 
@@ -60,6 +70,12 @@ impl Traceback {
     #[must_use]
     pub fn title(mut self, title: impl Into<Text>) -> Self {
         self.title = title.into();
+        self
+    }
+
+    #[must_use]
+    pub fn extra_lines(mut self, extra_lines: usize) -> Self {
+        self.extra_lines = extra_lines;
         self
     }
 
@@ -73,16 +89,39 @@ impl Renderable for Traceback {
     fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
         let width = options.max_width.max(1);
 
-        let content_lines: Vec<Vec<Segment<'static>>> = self
-            .frames
-            .iter()
-            .map(|frame| {
-                vec![Segment::new(
-                    format!("in {}:{}", frame.name, frame.line),
-                    None,
-                )]
-            })
-            .collect();
+        let mut content_lines: Vec<Vec<Segment<'static>>> = Vec::new();
+        for frame in &self.frames {
+            if let Some(filename) = frame.filename.as_deref() {
+                if let Ok(source) = std::fs::read_to_string(filename) {
+                    content_lines.push(vec![Segment::new(
+                        format!("{filename}:{} in {}", frame.line, frame.name),
+                        None,
+                    )]);
+                    content_lines.push(vec![Segment::new(String::new(), None)]);
+
+                    let source_lines: Vec<&str> = source.lines().collect();
+                    if frame.line > 0 && frame.line <= source_lines.len() {
+                        let start = frame.line.saturating_sub(self.extra_lines).max(1);
+                        let end = (frame.line + self.extra_lines).min(source_lines.len());
+                        let line_number_width = end.to_string().len() + 5;
+
+                        for line_no in start..=end {
+                            let code = source_lines[line_no - 1].trim_start();
+                            let indicator = if line_no == frame.line { "❱" } else { " " };
+                            let line = format!("{indicator} {line_no:<line_number_width$}{code}");
+                            content_lines.push(vec![Segment::new(line, None)]);
+                        }
+                    }
+
+                    continue;
+                }
+            }
+
+            content_lines.push(vec![Segment::new(
+                format!("in {}:{}", frame.name, frame.line),
+                None,
+            )]);
+        }
 
         let panel = Panel::new(content_lines)
             .title(self.title.clone())
