@@ -456,7 +456,7 @@ impl Markdown {
                         Tag::Item => {
                             ensure_blockquote_prefix!(segments);
                             // Add indent based on list nesting
-                            let indent_len = list_stack.len().saturating_sub(1) * self.list_indent;
+                            let indent_len = list_stack.len() * self.list_indent;
                             let indent = " ".repeat(indent_len);
                             segments.push(Segment::new(indent, None));
 
