@@ -1459,6 +1459,7 @@ fn test_export_file_sizes_reasonable() {
 // ============================================================================
 
 #[test]
+#[cfg(feature = "syntax")]
 fn test_syntax_scene_shows_real_content_when_enabled() {
     common::init_test_logging();
 
@@ -1489,6 +1490,7 @@ fn test_syntax_scene_shows_real_content_when_enabled() {
 }
 
 #[test]
+#[cfg(feature = "markdown")]
 fn test_markdown_scene_shows_real_content_when_enabled() {
     common::init_test_logging();
 
@@ -1519,6 +1521,7 @@ fn test_markdown_scene_shows_real_content_when_enabled() {
 }
 
 #[test]
+#[cfg(feature = "json")]
 fn test_json_scene_shows_real_content_when_enabled() {
     common::init_test_logging();
 
@@ -1549,6 +1552,7 @@ fn test_json_scene_shows_real_content_when_enabled() {
 }
 
 #[test]
+#[cfg(feature = "tracing")]
 fn test_tracing_scene_shows_real_content_when_enabled() {
     common::init_test_logging();
 

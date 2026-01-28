@@ -74,6 +74,40 @@ fn snapshot_debug_tools_scene() {
 }
 
 // ============================================================================
+// Dashboard Scene Snapshots
+// ============================================================================
+
+/// Snapshot for dashboard scene in non-interactive mode.
+///
+/// This test captures the dashboard output with:
+/// - Pipeline progress display
+/// - Services status panel
+/// - Log stream panel
+#[test]
+fn snapshot_dashboard_scene() {
+    common::init_test_logging();
+
+    let result = DemoRunner::new()
+        .arg("--scene")
+        .arg("dashboard")
+        .arg("--quick")
+        .arg("--seed")
+        .arg("42")
+        .arg("--color-system")
+        .arg("none")
+        .arg("--no-interactive")
+        .timeout_secs(15)
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    let normalized = normalize_for_snapshot(&result.stdout);
+    insta::assert_snapshot!("dashboard_scene", normalized);
+}
+
+// ============================================================================
 // Traceback Scene Snapshots
 // ============================================================================
 

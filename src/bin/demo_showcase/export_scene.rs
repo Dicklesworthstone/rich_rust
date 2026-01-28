@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use rich_rust::r#box::{DOUBLE, ROUNDED};
 use rich_rust::console::Console;
+use rich_rust::markup::render_or_plain;
 use rich_rust::renderables::panel::Panel;
 use rich_rust::style::Style;
 
@@ -64,17 +65,18 @@ fn render_export_formats(console: &Console, cfg: &Config) {
     console.print("");
 
     // HTML format panel
-    let html_content = r#"[bold]HTML Export[/]
+    let html_content = render_or_plain(
+        "[bold]HTML Export[/]\n\n\
+         Generates a standalone HTML file with inline or external CSS.\n\
+         - Colors and styles preserved\n\
+         - Works in any modern browser\n\
+         - Easy to share via email or hosting\n\n\
+         [dim]Use `--export` or `--export-dir <path>`[/]",
+    );
+    let html_title = render_or_plain("[cyan]demo_showcase.html[/]");
 
-Generates a standalone HTML file with inline or external CSS.
-- Colors and styles preserved
-- Works in any modern browser
-- Easy to share via email or hosting
-
-[dim]Use `--export` or `--export-dir <path>`[/]"#;
-
-    let html_panel = Panel::from_text(html_content)
-        .title("[cyan]demo_showcase.html[/]")
+    let html_panel = Panel::from_rich_text(&html_content, 76)
+        .title(html_title)
         .box_style(&ROUNDED)
         .border_style(Style::parse("cyan").unwrap_or_default())
         .safe_box(cfg.is_safe_box());
@@ -84,17 +86,18 @@ Generates a standalone HTML file with inline or external CSS.
     console.print("");
 
     // SVG format panel
-    let svg_content = r#"[bold]SVG Export[/]
+    let svg_content = render_or_plain(
+        "[bold]SVG Export[/]\n\n\
+         Generates a scalable vector graphic with embedded fonts.\n\
+         - Perfect for documentation\n\
+         - Scales to any size without pixelation\n\
+         - Uses `<foreignObject>` for text rendering\n\n\
+         [dim]Note: Best viewed in modern browsers (Chrome, Firefox, Safari)[/]",
+    );
+    let svg_title = render_or_plain("[magenta]demo_showcase.svg[/]");
 
-Generates a scalable vector graphic with embedded fonts.
-- Perfect for documentation
-- Scales to any size without pixelation
-- Uses `<foreignObject>` for text rendering
-
-[dim]Note: Best viewed in modern browsers (Chrome, Firefox, Safari)[/]"#;
-
-    let svg_panel = Panel::from_text(svg_content)
-        .title("[magenta]demo_showcase.svg[/]")
+    let svg_panel = Panel::from_rich_text(&svg_content, 76)
+        .title(svg_title)
         .box_style(&ROUNDED)
         .border_style(Style::parse("magenta").unwrap_or_default())
         .safe_box(cfg.is_safe_box());
@@ -135,20 +138,19 @@ fn render_export_summary(console: &Console, cfg: &Config) {
         let html_path = export_dir.join("demo_showcase.html");
         let svg_path = export_dir.join("demo_showcase.svg");
 
-        let summary = format!(
-            r#"[bold green]Files will be written to:[/]
-
-  [cyan]HTML:[/] {}
-  [magenta]SVG:[/]  {}
-
-[dim]Open the HTML file in your browser to view the output.
-The SVG can be embedded in documentation or presentations.[/]"#,
+        let summary = render_or_plain(&format!(
+            "[bold green]Files will be written to:[/]\n\n\
+             [cyan]HTML:[/] {}\n\
+             [magenta]SVG:[/]  {}\n\n\
+             [dim]Open the HTML file in your browser to view the output.\n\
+             The SVG can be embedded in documentation or presentations.[/]",
             html_path.display(),
             svg_path.display()
-        );
+        ));
+        let summary_title = render_or_plain("[bold]Export Complete[/]");
 
-        let summary_panel = Panel::from_text(&summary)
-            .title("[bold]Export Complete[/]")
+        let summary_panel = Panel::from_rich_text(&summary, 76)
+            .title(summary_title)
             .box_style(&DOUBLE)
             .border_style(Style::parse("green").unwrap_or_default())
             .safe_box(cfg.is_safe_box());

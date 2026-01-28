@@ -3,6 +3,9 @@
 //! Provides graceful pager support for long content, falling back to inline
 //! output when pager is unavailable or non-interactive mode is active.
 
+// Module prepared for future scene implementations
+#![allow(dead_code)]
+
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 use std::sync::Arc;

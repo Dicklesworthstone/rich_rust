@@ -4,6 +4,9 @@
 //! with stages, progress updates, and log entries. It's designed to work with
 //! the `DemoState` model and respect `--quick`/`--speed` timing settings.
 
+// Some helper functions prepared for future scene implementations
+#![allow(dead_code)]
+
 use std::time::Duration;
 
 use crate::state::{LogLevel, PipelineStage, SharedDemoState, StageStatus};
@@ -169,7 +172,11 @@ pub fn simulate_stage(
                 }
                 demo.push_log(
                     LogLevel::Error,
-                    format!("[{}] FAILED at {:.0}%", stage_name.to_uppercase(), progress * 100.0),
+                    format!(
+                        "[{}] FAILED at {:.0}%",
+                        stage_name.to_uppercase(),
+                        progress * 100.0
+                    ),
                 );
             });
             return StageResult::Failed;
@@ -232,11 +239,7 @@ pub fn run_pipeline(
 
         if result == StageResult::Failed {
             state.update(|demo| {
-                demo.headline = format!(
-                    "Pipeline failed at stage {}/{}",
-                    idx + 1,
-                    stage_count
-                );
+                demo.headline = format!("Pipeline failed at stage {}/{}", idx + 1, stage_count);
             });
             return false;
         }
@@ -254,18 +257,20 @@ pub fn run_pipeline(
 ///
 /// Returns a configured `ProgressBar` renderable for the given stage.
 #[must_use]
-pub fn stage_progress_bar(stage: &PipelineStage, width: usize) -> rich_rust::renderables::ProgressBar {
+pub fn stage_progress_bar(
+    stage: &PipelineStage,
+    width: usize,
+) -> rich_rust::renderables::ProgressBar {
     use rich_rust::renderables::ProgressBar;
 
-    let completed = (stage.progress * 100.0).round() as usize;
-    let mut bar = ProgressBar::with_total(100)
-        .completed(completed)
-        .width(width);
+    let completed = (stage.progress * 100.0).round() as u64;
+    let mut bar = ProgressBar::with_total(100).width(width);
+    bar.update(completed);
 
     if let Some(eta) = stage.eta {
-        bar = bar.description(&format!("{} (eta: {}s)", stage.name, eta.as_secs()));
+        bar = bar.description(format!("{} (eta: {}s)", stage.name, eta.as_secs()));
     } else {
-        bar = bar.description(&stage.name);
+        bar = bar.description(stage.name.as_str());
     }
 
     if stage.status == StageStatus::Done {

@@ -15,22 +15,20 @@ use std::time::Duration;
 
 use rich_rust::console::Console;
 use rich_rust::live::{Live, LiveOptions, VerticalOverflowMethod};
-use rich_rust::renderables::panel::Panel;
-use rich_rust::renderables::progress::ProgressBar;
-use rich_rust::renderables::table::{Column, Table};
+use rich_rust::markup::render_or_plain;
 use rich_rust::renderables::Renderable;
+use rich_rust::renderables::panel::Panel;
 use rich_rust::segment::Segment;
-use rich_rust::style::Style;
 use rich_rust::text::Text;
 
+use crate::Config;
 use crate::log_pane::LogPane;
-use crate::simulation::{init_pipeline, run_pipeline, stage_progress_bar, PIPELINE_STAGES};
+use crate::scenes::{Scene, SceneError};
+use crate::simulation::{init_pipeline, run_pipeline};
 use crate::state::{
-    DemoState, LogLevel, PipelineStage, ServiceHealth, ServiceInfo, SharedDemoState, StageStatus,
+    LogLevel, PipelineStage, ServiceHealth, ServiceInfo, SharedDemoState, StageStatus,
 };
 use crate::timing::{DemoRng, Timing};
-use crate::Config;
-use crate::scenes::{Scene, SceneError};
 
 /// Dashboard scene: live split-screen dashboard with pipeline simulation.
 pub struct DashboardScene;
@@ -129,11 +127,10 @@ fn run_live_dashboard(
         vertical_overflow: VerticalOverflowMethod::Ellipsis,
     };
 
-    let live = Live::with_options(Arc::clone(console), options)
-        .get_renderable(move || {
-            let snapshot = state_for_render.snapshot();
-            Box::new(DashboardRenderable::new(&snapshot, safe_box))
-        });
+    let live = Live::with_options(Arc::clone(console), options).get_renderable(move || {
+        let snapshot = state_for_render.snapshot();
+        Box::new(DashboardRenderable::new(&snapshot, safe_box))
+    });
 
     live.start(true)?;
 
@@ -143,10 +140,10 @@ fn run_live_dashboard(
     // Final update
     state.update(|demo| {
         if success {
-            demo.headline = "✓ Pipeline completed successfully!".to_string();
+            demo.headline = "Pipeline completed successfully!".to_string();
             demo.push_log(LogLevel::Info, "All stages complete");
         } else {
-            demo.headline = "✗ Pipeline failed".to_string();
+            demo.headline = "Pipeline failed".to_string();
         }
     });
 
@@ -159,9 +156,9 @@ fn run_live_dashboard(
     console.print("");
     let snapshot = state.snapshot();
     if success {
-        console.print("[bold green]✓ Pipeline completed successfully[/]");
+        console.print("[bold green]Pipeline completed successfully[/]");
     } else {
-        console.print("[bold red]✗ Pipeline failed[/]");
+        console.print("[bold red]Pipeline failed[/]");
     }
     console.print(&format!(
         "[dim]Completed in {:.1}s[/]",
@@ -212,68 +209,54 @@ fn render_static_dashboard(
 }
 
 /// A renderable that combines the full dashboard layout.
+///
+/// Stores the data needed to render, but builds panels on-demand
+/// during rendering to avoid lifetime issues with Panel.
 struct DashboardRenderable {
-    header: Text,
-    pipeline_panel: Panel<Text>,
-    services_panel: Panel<Text>,
-    logs_panel: Panel<Text>,
+    headline: String,
+    run_id: u64,
+    seed: u64,
+    pipeline: Vec<PipelineStage>,
+    services: Vec<ServiceInfo>,
+    logs: Vec<crate::state::LogLine>,
+    safe_box: bool,
 }
 
 impl DashboardRenderable {
     fn new(snapshot: &crate::state::DemoStateSnapshot, safe_box: bool) -> Self {
-        // Header
-        let header = Text::from_markup(&format!(
-            "[bold cyan]{}[/]  [dim]Run #{}  Seed: {}[/]",
-            snapshot.headline, snapshot.run_id, snapshot.seed
-        ));
-
-        // Pipeline progress
-        let pipeline_text = Self::render_pipeline(&snapshot.pipeline);
-        let pipeline_panel = Panel::from_rich_text(&pipeline_text, 60)
-            .title("[bold]Pipeline[/]")
-            .safe_box(safe_box);
-
-        // Services status
-        let services_text = Self::render_services(&snapshot.services);
-        let services_panel = Panel::from_rich_text(&services_text, 30)
-            .title("[bold]Services[/]")
-            .safe_box(safe_box);
-
-        // Log stream
-        let log_pane = LogPane::from_snapshot(&snapshot.logs, 8);
-        let logs_text = log_pane.as_text();
-        let logs_panel = Panel::from_rich_text(&logs_text, 80)
-            .title("[bold]Logs[/]")
-            .safe_box(safe_box);
-
         Self {
-            header,
-            pipeline_panel,
-            services_panel,
-            logs_panel,
+            headline: snapshot.headline.clone(),
+            run_id: snapshot.run_id,
+            seed: snapshot.seed,
+            pipeline: snapshot.pipeline.clone(),
+            services: snapshot.services.clone(),
+            logs: snapshot.logs.clone(),
+            safe_box,
         }
     }
 
-    fn render_pipeline(stages: &[PipelineStage]) -> Text {
+    fn render_pipeline_text(stages: &[PipelineStage]) -> Text {
         let mut lines = Vec::new();
 
         for stage in stages {
             let status_badge = match stage.status {
-                StageStatus::Pending => "[dim]○[/]",
-                StageStatus::Running => "[bold yellow]●[/]",
-                StageStatus::Done => "[bold green]✓[/]",
-                StageStatus::Failed => "[bold red]✗[/]",
+                StageStatus::Pending => "[dim]O[/]",
+                StageStatus::Running => "[bold yellow]*[/]",
+                StageStatus::Done => "[bold green]v[/]",
+                StageStatus::Failed => "[bold red]x[/]",
             };
 
             let progress = if stage.status == StageStatus::Running {
                 let pct = (stage.progress * 100.0).round() as u32;
-                let bar = "█".repeat((pct as usize) / 5);
-                let empty = "░".repeat(20 - (pct as usize) / 5);
-                format!(" [cyan]{bar}{empty}[/] {pct}%")
+                let filled = (pct as usize) / 5;
+                let empty = 20 - filled;
+                let bar = "#".repeat(filled);
+                let rest = "-".repeat(empty);
+                format!(" [cyan][{bar}{rest}][/] {pct:>3}%")
             } else if stage.status == StageStatus::Done {
-                " [green]████████████████████[/] 100%".to_string()
+                " [green][####################][/] 100%".to_string()
             } else {
-                " [dim]░░░░░░░░░░░░░░░░░░░░[/]   0%".to_string()
+                " [dim][--------------------][/]   0%".to_string()
             };
 
             let eta = stage
@@ -283,24 +266,21 @@ impl DashboardRenderable {
 
             lines.push(format!(
                 "{} [bold]{:<12}[/]{}{}",
-                status_badge,
-                stage.name,
-                progress,
-                eta
+                status_badge, stage.name, progress, eta
             ));
         }
 
-        Text::from_markup(&lines.join("\n"))
+        render_or_plain(&lines.join("\n"))
     }
 
-    fn render_services(services: &[ServiceInfo]) -> Text {
+    fn render_services_text(services: &[ServiceInfo]) -> Text {
         let mut lines = Vec::new();
 
         for svc in services {
             let health_badge = match svc.health {
-                ServiceHealth::Ok => "[green]●[/]",
-                ServiceHealth::Warn => "[yellow]●[/]",
-                ServiceHealth::Err => "[red]●[/]",
+                ServiceHealth::Ok => "[green]OK[/]",
+                ServiceHealth::Warn => "[yellow]WARN[/]",
+                ServiceHealth::Err => "[red]ERR[/]",
             };
 
             let latency = if svc.latency.as_millis() > 0 {
@@ -310,53 +290,66 @@ impl DashboardRenderable {
             };
 
             lines.push(format!(
-                "{} [bold]{:<8}[/] [dim]v{}[/]  {}",
-                health_badge,
-                svc.name,
-                svc.version,
-                latency
+                "{:<6} [bold]{:<8}[/] [dim]v{}[/]  {}",
+                health_badge, svc.name, svc.version, latency
             ));
         }
 
-        Text::from_markup(&lines.join("\n"))
+        render_or_plain(&lines.join("\n"))
     }
 }
 
 impl Renderable for DashboardRenderable {
     fn render<'a>(
         &'a self,
-        console: &Console,
+        _console: &Console,
         options: &rich_rust::console::ConsoleOptions,
     ) -> Vec<Segment<'a>> {
         let mut segments = Vec::new();
-
-        // Header
-        segments.extend(self.header.render("").into_iter().map(Segment::into_owned));
-        segments.push(Segment::new("\n\n", None));
-
         let max_width = options.max_width;
 
+        // Header
+        let header = render_or_plain(&format!(
+            "[bold cyan]{}[/]  [dim]Run #{}  Seed: {}[/]",
+            self.headline, self.run_id, self.seed
+        ));
+        segments.extend(header.render("").into_iter().map(Segment::into_owned));
+        segments.push(Segment::new("\n\n".to_string(), None));
+
         // Pipeline panel
+        let pipeline_text = Self::render_pipeline_text(&self.pipeline);
+        let pipeline_panel = Panel::from_rich_text(&pipeline_text, 60)
+            .title("[bold]Pipeline[/]")
+            .safe_box(self.safe_box);
         segments.extend(
-            self.pipeline_panel
+            pipeline_panel
                 .render(max_width)
                 .into_iter()
                 .map(Segment::into_owned),
         );
-        segments.push(Segment::new("\n", None));
+        segments.push(Segment::new("\n".to_string(), None));
 
         // Services panel
+        let services_text = Self::render_services_text(&self.services);
+        let services_panel = Panel::from_rich_text(&services_text, 30)
+            .title("[bold]Services[/]")
+            .safe_box(self.safe_box);
         segments.extend(
-            self.services_panel
+            services_panel
                 .render(max_width)
                 .into_iter()
                 .map(Segment::into_owned),
         );
-        segments.push(Segment::new("\n", None));
+        segments.push(Segment::new("\n".to_string(), None));
 
         // Logs panel
+        let log_pane = LogPane::from_snapshot(&self.logs, 8);
+        let logs_text = log_pane.as_text();
+        let logs_panel = Panel::from_rich_text(&logs_text, 80)
+            .title("[bold]Logs[/]")
+            .safe_box(self.safe_box);
         segments.extend(
-            self.logs_panel
+            logs_panel
                 .render(max_width)
                 .into_iter()
                 .map(Segment::into_owned),

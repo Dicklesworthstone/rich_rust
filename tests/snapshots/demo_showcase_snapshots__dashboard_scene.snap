@@ -1,0 +1,35 @@
+---
+source: tests/demo_showcase_snapshots.rs
+assertion_line: 107
+expression: normalized
+---
+Nebula Deploy v1.2.3 (snapshot)  Run #42  Seed: 42
+
+╭─────────────────── [bold]Pipeline[/] ────────────────────╮
+│ v lint          100%                                     │
+│ * build          42% (8s)                                │
+│ O unit_tests   [--------------------]   0%               │
+│ O package      [--------------------]   0%               │
+│ O deploy       [--------------------]   0%               │
+│ O smoke_tests  [--------------------]   0%               │
+╰──────────────────────────────────────────────────────────╯
+
+╭──── [bold]Services[/] ─────╮
+│ OK api      v1.2.3  12ms   │
+│ OK worker   v1.2.3  25ms   │
+│ OK db       v13.4  8ms     │
+│ WARN cache    v7.0  3ms    │
+╰────────────────────────────╯
+
+╭─────────────────────────────── [bold]Logs[/] ────────────────────────────────╮
+│    0ms  INFO Pipeline initialized                                            │
+│    0ms  INFO Dashboard initialized                                           │
+│    0ms  INFO Starting deployment pipeline                                    │
+│    0ms DEBUG Loading configuration from deploy.toml                          │
+│    0ms  INFO  Starting                                                       │
+│    0ms  INFO  Completed                                                      │
+│    0ms  INFO  Starting                                                       │
+│    0ms DEBUG Compiling 127 crates...                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Run with --no-interactive false for live updates.
