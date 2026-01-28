@@ -14,6 +14,7 @@ use rich_rust::console::Console;
 use crate::Config;
 use crate::debug_tools::DebugToolsScene;
 use crate::hero::HeroScene;
+use crate::layout_scene::LayoutScene;
 use crate::panel_scene::PanelScene;
 use crate::table_scene::TableScene;
 use crate::traceback_scene::TracebackScene;
@@ -208,6 +209,7 @@ pub fn build_registry() -> SceneRegistry {
     registry.register(TableScene::new());
     registry.register(PanelScene::new());
     registry.register(TreeScene::new());
+    registry.register(LayoutScene::new());
     registry.register(DebugToolsScene::new());
     registry.register(TracebackScene::new());
     registry.register(PlaceholderScene::new("export", "Export HTML/SVG bundle."));
@@ -281,6 +283,7 @@ mod tests {
             "table",
             "panels",
             "tree",
+            "layout",
             "debug_tools",
             "traceback",
             "export",

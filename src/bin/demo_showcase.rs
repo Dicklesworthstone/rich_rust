@@ -6,6 +6,8 @@ mod console_builder;
 mod debug_tools;
 #[path = "demo_showcase/hero.rs"]
 mod hero;
+#[path = "demo_showcase/layout_scene.rs"]
+mod layout_scene;
 #[path = "demo_showcase/log_pane.rs"]
 mod log_pane;
 #[path = "demo_showcase/panel_scene.rs"]
