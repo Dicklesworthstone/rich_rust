@@ -6,6 +6,8 @@
 use std::num::NonZeroUsize;
 use std::sync::{LazyLock, Mutex};
 
+use crate::sync::lock_recover;
+
 use lru::LruCache;
 use unicode_width::UnicodeWidthChar;
 
@@ -50,19 +52,18 @@ pub fn cell_len(text: &str) -> usize {
     }
 
     // Check cache first
-    if let Ok(mut cache) = CELL_LEN_CACHE.lock()
-        && let Some(&cached) = cache.get(text)
     {
-        return cached;
+        let mut cache = lock_recover(&CELL_LEN_CACHE);
+        if let Some(&cached) = cache.get(text) {
+            return cached;
+        }
     }
 
     // Compute width using character-level function for consistency
     let width = compute_cell_width(text);
 
     // Store in cache
-    if let Ok(mut cache) = CELL_LEN_CACHE.lock() {
-        cache.put(text.to_string(), width);
-    }
+    lock_recover(&CELL_LEN_CACHE).put(text.to_string(), width);
 
     width
 }

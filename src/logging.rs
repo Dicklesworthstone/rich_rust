@@ -5,6 +5,8 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::sync::lock_recover;
+
 use log::{Level, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use time::{OffsetDateTime, format_description::OwnedFormatItem};
 
@@ -149,10 +151,7 @@ impl RichLogger {
         if self.show_time {
             let time_str = self.format_time();
             let display = if self.omit_repeated_times {
-                let mut last = self
-                    .last_time
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut last = lock_recover(&self.last_time);
                 if last.as_ref() == Some(&time_str) {
                     " ".repeat(time_str.len())
                 } else {

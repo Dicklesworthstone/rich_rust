@@ -64,6 +64,7 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::color::{Color, ColorParseError, ColorSystem, ColorTriplet};
+use crate::sync::lock_recover;
 
 bitflags! {
     /// Text attribute flags.
@@ -500,19 +501,18 @@ impl Style {
             LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(256).expect("non-zero"))));
 
         // Try to get cached result
-        if let Ok(mut cache) = ANSI_CACHE.lock()
-            && let Some(cached) = cache.get(&(self.clone(), color_system))
         {
-            return cached.clone();
+            let mut cache = lock_recover(&ANSI_CACHE);
+            if let Some(cached) = cache.get(&(self.clone(), color_system)) {
+                return cached.clone();
+            }
         }
 
         // Compute result
         let result = Arc::new(self.render_ansi_uncached(color_system));
 
         // Cache the result
-        if let Ok(mut cache) = ANSI_CACHE.lock() {
-            cache.put((self.clone(), color_system), result.clone());
-        }
+        lock_recover(&ANSI_CACHE).put((self.clone(), color_system), result.clone());
 
         result
     }
@@ -572,17 +572,16 @@ impl Style {
 
         let normalized = style.trim().to_lowercase();
 
-        if let Ok(mut cache) = CACHE.lock()
-            && let Some(cached) = cache.get(&normalized)
         {
-            return Ok(cached.clone());
+            let mut cache = lock_recover(&CACHE);
+            if let Some(cached) = cache.get(&normalized) {
+                return Ok(cached.clone());
+            }
         }
 
         let result = Self::parse_uncached(&normalized)?;
 
-        if let Ok(mut cache) = CACHE.lock() {
-            cache.put(normalized, result.clone());
-        }
+        lock_recover(&CACHE).put(normalized, result.clone());
 
         Ok(result)
     }

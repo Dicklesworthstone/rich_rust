@@ -233,7 +233,8 @@ impl Status {
         let message = Arc::new(Mutex::new(message.into()));
 
         if !console.is_interactive() {
-            if let Ok(message) = message.lock() {
+            {
+                let message = crate::sync::lock_recover(&message);
                 console.print_plain(&message);
             }
             return Ok(Self {
@@ -259,10 +260,7 @@ impl Status {
                 let tick = elapsed.as_millis() / frame_interval.as_millis().max(1);
                 let idx = (tick as usize) % frames.len();
                 let frame = frames[idx];
-                let msg = message_for_render
-                    .lock()
-                    .map(|m| m.clone())
-                    .unwrap_or_default();
+                let msg = crate::sync::lock_recover(&message_for_render).clone();
                 Box::new(Text::new(format!("{frame} {msg}")))
             });
 
@@ -276,9 +274,7 @@ impl Status {
 
     /// Update the displayed message (best-effort).
     pub fn update(&self, message: impl Into<String>) {
-        if let Ok(mut slot) = self.message.lock() {
-            *slot = message.into();
-        }
+        *crate::sync::lock_recover(&self.message) = message.into();
 
         if let Some(live) = &self.live {
             let _ = live.refresh();
@@ -374,6 +370,7 @@ pub struct Prompt {
     show_default: bool,
     markup: bool,
     validator: Option<PromptValidator>,
+    max_length: usize,
 }
 
 impl std::fmt::Debug for Prompt {
@@ -384,6 +381,7 @@ impl std::fmt::Debug for Prompt {
             .field("allow_empty", &self.allow_empty)
             .field("show_default", &self.show_default)
             .field("markup", &self.markup)
+            .field("max_length", &self.max_length)
             .field("validator", &self.validator.as_ref().map(|_| "<validator>"))
             .finish()
     }
@@ -400,6 +398,7 @@ impl Prompt {
             show_default: true,
             markup: true,
             validator: None,
+            max_length: DEFAULT_MAX_INPUT_LENGTH,
         }
     }
 
@@ -441,6 +440,16 @@ impl Prompt {
         self
     }
 
+    /// Set maximum input length in bytes.
+    ///
+    /// If input exceeds this limit, `ask()` returns `PromptError::InputTooLong`.
+    /// Defaults to [`DEFAULT_MAX_INPUT_LENGTH`] (64 KiB).
+    #[must_use]
+    pub const fn max_length(mut self, max_bytes: usize) -> Self {
+        self.max_length = max_bytes;
+        self
+    }
+
     /// Ask for input using stdin.
     pub fn ask(&self, console: &Console) -> Result<String, PromptError> {
         let stdin = io::stdin();
@@ -458,15 +467,10 @@ impl Prompt {
             return self.default.clone().ok_or(PromptError::NotInteractive);
         }
 
-        let mut line = String::new();
         loop {
             self.print_prompt(console);
 
-            line.clear();
-            let bytes = reader.read_line(&mut line)?;
-            if bytes == 0 {
-                return Err(PromptError::Eof);
-            }
+            let line = read_line_limited(reader, self.max_length)?;
             let input = trim_newline(&line);
             let mut value = if input.is_empty() {
                 self.default.clone().unwrap_or_default()
@@ -633,6 +637,63 @@ fn print_exact(console: &Console, content: &str) {
         content,
         &PrintOptions::new().with_markup(false).with_no_newline(true),
     );
+}
+
+/// Read a line from input with a maximum byte length limit.
+///
+/// Unlike `BufRead::read_line`, this function enforces the limit *during* reading
+/// rather than after, preventing memory exhaustion from extremely long input.
+///
+/// Returns the line as a `String` (including trailing newline if present).
+/// On EOF with no data, returns `Err(PromptError::Eof)`.
+/// On exceeding the limit, returns `Err(PromptError::InputTooLong)`.
+fn read_line_limited<R: io::BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> Result<String, PromptError> {
+    let mut buf = Vec::with_capacity(max_bytes.min(1024));
+    let mut total = 0usize;
+
+    loop {
+        let available = reader.fill_buf()?;
+
+        if available.is_empty() {
+            // EOF reached
+            if buf.is_empty() {
+                return Err(PromptError::Eof);
+            }
+            break;
+        }
+
+        // Look for newline in the available buffer
+        if let Some(newline_pos) = available.iter().position(|&b| b == b'\n') {
+            let line_len = newline_pos + 1; // include the newline
+            if total + line_len > max_bytes {
+                return Err(PromptError::InputTooLong {
+                    limit: max_bytes,
+                    received: total + line_len,
+                });
+            }
+            buf.extend_from_slice(&available[..line_len]);
+            reader.consume(line_len);
+            break;
+        }
+
+        // No newline yet; check running total
+        if total + available.len() > max_bytes {
+            return Err(PromptError::InputTooLong {
+                limit: max_bytes,
+                received: total + available.len(),
+            });
+        }
+
+        buf.extend_from_slice(available);
+        total += available.len();
+        let len = available.len();
+        reader.consume(len);
+    }
+
+    String::from_utf8(buf).map_err(|e| PromptError::Validation(format!("invalid UTF-8: {e}")))
 }
 
 fn trim_newline(line: &str) -> &str {
@@ -1769,5 +1830,188 @@ mod tests {
     fn test_default_max_input_length_constant() {
         assert_eq!(super::DEFAULT_MAX_INPUT_LENGTH, 64 * 1024);
         assert_eq!(super::DEFAULT_MAX_INPUT_LENGTH, 65536);
+    }
+
+    // ========================================================================
+    // read_line_limited tests (bd-uqdk)
+    // ========================================================================
+
+    #[test]
+    fn test_read_line_limited_normal_input() {
+        let mut reader = io::Cursor::new("hello world\n");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result, "hello world\n");
+    }
+
+    #[test]
+    fn test_read_line_limited_exactly_at_limit() {
+        let input = "ab\n"; // 3 bytes
+        let mut reader = io::Cursor::new(input);
+        let result = super::read_line_limited(&mut reader, 3).unwrap();
+        assert_eq!(result, "ab\n");
+    }
+
+    #[test]
+    fn test_read_line_limited_exceeds_limit() {
+        let mut reader = io::Cursor::new("this is a long input\n");
+        let result = super::read_line_limited(&mut reader, 5);
+        assert!(matches!(
+            result,
+            Err(PromptError::InputTooLong { limit: 5, .. })
+        ));
+    }
+
+    #[test]
+    fn test_read_line_limited_empty_eof() {
+        let mut reader = io::Cursor::new("");
+        let result = super::read_line_limited(&mut reader, 100);
+        assert!(matches!(result, Err(PromptError::Eof)));
+    }
+
+    #[test]
+    fn test_read_line_limited_no_newline_eof() {
+        let mut reader = io::Cursor::new("no newline");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result, "no newline");
+    }
+
+    #[test]
+    fn test_read_line_limited_empty_line() {
+        let mut reader = io::Cursor::new("\n");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result, "\n");
+    }
+
+    #[test]
+    fn test_read_line_limited_unicode_input() {
+        let mut reader = io::Cursor::new("héllo 世界\n");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result, "héllo 世界\n");
+    }
+
+    #[test]
+    fn test_read_line_limited_invalid_utf8() {
+        let invalid: Vec<u8> = vec![0xff, 0xfe, b'\n'];
+        let mut reader = io::Cursor::new(invalid);
+        let result = super::read_line_limited(&mut reader, 100);
+        assert!(
+            matches!(result, Err(PromptError::Validation(ref msg)) if msg.contains("UTF-8")),
+            "Expected Validation error with UTF-8 message, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_read_line_limited_one_byte_limit() {
+        // Only a single newline fits
+        let mut reader = io::Cursor::new("\n");
+        let result = super::read_line_limited(&mut reader, 1).unwrap();
+        assert_eq!(result, "\n");
+
+        // Anything longer fails
+        let mut reader2 = io::Cursor::new("a\n");
+        let result2 = super::read_line_limited(&mut reader2, 1);
+        assert!(matches!(
+            result2,
+            Err(PromptError::InputTooLong { limit: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn test_read_line_limited_multiple_lines_reads_first() {
+        let mut reader = io::Cursor::new("line1\nline2\n");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result, "line1\n");
+        // Second line is still available
+        let result2 = super::read_line_limited(&mut reader, 100).unwrap();
+        assert_eq!(result2, "line2\n");
+    }
+
+    #[test]
+    fn test_read_line_limited_crlf_input() {
+        let mut reader = io::Cursor::new("hello\r\n");
+        let result = super::read_line_limited(&mut reader, 100).unwrap();
+        // Reads up to and including \n; \r is part of the content
+        assert_eq!(result, "hello\r\n");
+    }
+
+    // ========================================================================
+    // Prompt max_length integration tests (bd-1jm0)
+    // ========================================================================
+
+    #[test]
+    fn test_prompt_max_length_builder() {
+        let prompt = Prompt::new("Test").max_length(100);
+        assert_eq!(prompt.max_length, 100);
+    }
+
+    #[test]
+    fn test_prompt_default_max_length() {
+        let prompt = Prompt::new("Test");
+        assert_eq!(prompt.max_length, super::DEFAULT_MAX_INPUT_LENGTH);
+    }
+
+    #[test]
+    fn test_prompt_max_length_in_debug() {
+        let prompt = Prompt::new("Test").max_length(256);
+        let debug_str = format!("{prompt:?}");
+        assert!(
+            debug_str.contains("256"),
+            "Debug should contain max_length value: {debug_str}"
+        );
+        assert!(
+            debug_str.contains("max_length"),
+            "Debug should contain 'max_length' field: {debug_str}"
+        );
+    }
+
+    #[test]
+    fn test_prompt_input_too_long_via_ask_from() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let prompt = Prompt::new("Name").max_length(5);
+        // "this is too long\n" exceeds 5-byte limit
+        let input = b"this is too long\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let result = prompt.ask_from(&console, &mut reader);
+        assert!(
+            matches!(result, Err(PromptError::InputTooLong { limit: 5, .. })),
+            "Expected InputTooLong error, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_prompt_input_within_max_length() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let prompt = Prompt::new("Name").max_length(100);
+        let input = b"Alice\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = prompt.ask_from(&console, &mut reader).expect("prompt");
+        assert_eq!(answer, "Alice");
+    }
+
+    #[test]
+    fn test_prompt_max_length_chaining() {
+        let prompt = Prompt::new("Test")
+            .default("default")
+            .max_length(256)
+            .allow_empty(true)
+            .validate(|_| Ok(()));
+
+        assert_eq!(prompt.max_length, 256);
+        assert_eq!(prompt.default, Some("default".to_string()));
+        assert!(prompt.allow_empty);
     }
 }

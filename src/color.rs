@@ -81,6 +81,8 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
+use crate::sync::lock_recover;
+
 /// RGB color triplet with values 0-255.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ColorTriplet {
@@ -427,17 +429,16 @@ impl Color {
 
         let normalized = color.trim().to_lowercase();
 
-        if let Ok(mut cache) = CACHE.lock()
-            && let Some(cached) = cache.get(&normalized)
         {
-            return Ok(cached.clone());
+            let mut cache = lock_recover(&CACHE);
+            if let Some(cached) = cache.get(&normalized) {
+                return Ok(cached.clone());
+            }
         }
 
         let result = Self::parse_uncached(&normalized)?;
 
-        if let Ok(mut cache) = CACHE.lock() {
-            cache.put(normalized, result.clone());
-        }
+        lock_recover(&CACHE).put(normalized, result.clone());
 
         Ok(result)
     }

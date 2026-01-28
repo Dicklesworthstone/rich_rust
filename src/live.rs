@@ -11,6 +11,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::console::{Console, ConsoleOptions, RenderHook};
+use crate::sync::{lock_recover, read_recover, write_recover};
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment, split_lines};
 use crate::style::Style;
@@ -137,9 +138,7 @@ impl Live {
     where
         R: Renderable + Send + Sync + 'static,
     {
-        if let Ok(mut slot) = self.inner.renderable.write() {
-            *slot = Some(Box::new(renderable));
-        }
+        *write_recover(&self.inner.renderable) = Some(Box::new(renderable));
         self
     }
 
@@ -149,9 +148,7 @@ impl Live {
     where
         F: Fn() -> Box<dyn Renderable + Send + Sync> + Send + Sync + 'static,
     {
-        if let Ok(mut slot) = self.inner.get_renderable.lock() {
-            *slot = Some(Arc::new(callback));
-        }
+        *lock_recover(&self.inner.get_renderable) = Some(Arc::new(callback));
         self
     }
 
@@ -234,9 +231,7 @@ impl Live {
     where
         R: Renderable + Send + Sync + 'static,
     {
-        if let Ok(mut slot) = self.inner.renderable.write() {
-            *slot = Some(Box::new(renderable));
-        }
+        *write_recover(&self.inner.renderable) = Some(Box::new(renderable));
         if refresh {
             let _ = self.refresh();
         }
@@ -268,13 +263,11 @@ impl Drop for Live {
 
 impl LiveInner {
     fn options(&self) -> LiveOptions {
-        self.options.lock().map(|o| o.clone()).unwrap_or_default()
+        lock_recover(&self.options).clone()
     }
 
     fn options_mut(&self) -> std::sync::MutexGuard<'_, LiveOptions> {
-        self.options
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        lock_recover(&self.options)
     }
 
     fn current_renderable(
@@ -282,11 +275,7 @@ impl LiveInner {
         console: &Console,
         options: &ConsoleOptions,
     ) -> Vec<Segment<'static>> {
-        let callback = self
-            .get_renderable
-            .lock()
-            .ok()
-            .and_then(|slot| slot.clone());
+        let callback = lock_recover(&self.get_renderable).clone();
         if let Some(callback) = callback {
             let renderable = callback();
             return renderable
@@ -296,14 +285,15 @@ impl LiveInner {
                 .collect();
         }
 
-        if let Ok(slot) = self.renderable.read()
-            && let Some(renderable) = slot.as_ref()
         {
-            return renderable
-                .render(console, options)
-                .into_iter()
-                .map(Segment::into_owned)
-                .collect();
+            let slot = read_recover(&self.renderable);
+            if let Some(renderable) = slot.as_ref() {
+                return renderable
+                    .render(console, options)
+                    .into_iter()
+                    .map(Segment::into_owned)
+                    .collect();
+            }
         }
 
         Vec::new()
@@ -331,10 +321,7 @@ impl LiveInner {
     }
 
     fn live_render_controls_restore(&self) -> Vec<ControlCode> {
-        self.live_render
-            .lock()
-            .map(|render| render.restore_cursor_controls())
-            .unwrap_or_default()
+        lock_recover(&self.live_render).restore_cursor_controls()
     }
 
     fn render_live_segments(
@@ -419,16 +406,12 @@ impl LiveInner {
             }
         });
 
-        if let Ok(mut slot) = self.refresh_thread.lock() {
-            *slot = Some(handle);
-        }
+        *lock_recover(&self.refresh_thread) = Some(handle);
     }
 
     fn stop_refresh_thread(&self) {
         self.refresh_stop.store(true, Ordering::Relaxed);
-        if let Ok(mut slot) = self.refresh_thread.lock()
-            && let Some(handle) = slot.take()
-        {
+        if let Some(handle) = lock_recover(&self.refresh_thread).take() {
             let _ = handle.join();
         }
     }
@@ -455,9 +438,7 @@ impl RenderHook for LiveInner {
         let options = console.options();
         let overflow = self.options().vertical_overflow;
 
-        let Ok(mut render) = self.live_render.lock() else {
-            return segments.to_vec();
-        };
+        let mut render = lock_recover(&self.live_render);
 
         let mut output = Vec::new();
         if console.is_interactive() {
