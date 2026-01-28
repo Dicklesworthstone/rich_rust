@@ -5,7 +5,7 @@
 
 use crate::cells;
 use crate::console::{Console, ConsoleOptions};
-use crate::filesize::{binary, binary_speed, decimal, decimal_speed};
+use crate::filesize::{self, SizeUnit, binary, binary_speed, decimal, decimal_speed};
 use crate::renderables::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -854,6 +854,320 @@ pub fn dots_bar() -> ProgressBar {
 #[must_use]
 pub fn gradient_bar() -> ProgressBar {
     ProgressBar::new().bar_style(BarStyle::Gradient)
+}
+
+// =============================================================================
+// Standalone File Size and Transfer Speed Columns
+// =============================================================================
+
+/// A renderable that displays a file size in human-readable format.
+#[derive(Debug, Clone)]
+pub struct FileSizeColumn {
+    size: u64,
+    unit: SizeUnit,
+    precision: usize,
+    style: Style,
+}
+
+impl FileSizeColumn {
+    #[must_use]
+    pub fn new(size: u64) -> Self {
+        Self {
+            size,
+            unit: SizeUnit::Decimal,
+            precision: 1,
+            style: Style::new().color_str("green").unwrap_or_default(),
+        }
+    }
+
+    #[must_use]
+    pub fn unit(mut self, unit: SizeUnit) -> Self {
+        self.unit = unit;
+        self
+    }
+
+    #[must_use]
+    pub fn precision(mut self, precision: usize) -> Self {
+        self.precision = precision;
+        self
+    }
+
+    #[must_use]
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn set_size(&mut self, size: u64) {
+        self.size = size;
+    }
+
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    #[must_use]
+    pub fn render_plain(&self) -> String {
+        #[allow(clippy::cast_possible_wrap)]
+        filesize::format_size(self.size as i64, self.unit, self.precision)
+    }
+
+    #[must_use]
+    pub fn render(&self) -> Vec<Segment<'static>> {
+        vec![Segment::new(self.render_plain(), Some(self.style.clone()))]
+    }
+}
+
+impl Default for FileSizeColumn {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+/// A renderable that displays a total file size.
+#[derive(Debug, Clone)]
+pub struct TotalFileSizeColumn {
+    inner: FileSizeColumn,
+}
+
+impl TotalFileSizeColumn {
+    #[must_use]
+    pub fn new(size: u64) -> Self {
+        Self { inner: FileSizeColumn::new(size) }
+    }
+
+    #[must_use]
+    pub fn unit(mut self, unit: SizeUnit) -> Self {
+        self.inner = self.inner.unit(unit);
+        self
+    }
+
+    #[must_use]
+    pub fn precision(mut self, precision: usize) -> Self {
+        self.inner = self.inner.precision(precision);
+        self
+    }
+
+    #[must_use]
+    pub fn style(mut self, style: Style) -> Self {
+        self.inner = self.inner.style(style);
+        self
+    }
+
+    #[must_use]
+    pub fn render_plain(&self) -> String {
+        self.inner.render_plain()
+    }
+
+    #[must_use]
+    pub fn render(&self) -> Vec<Segment<'static>> {
+        self.inner.render()
+    }
+}
+
+impl Default for TotalFileSizeColumn {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+/// A renderable that displays download progress as "current/total unit".
+#[derive(Debug, Clone)]
+pub struct DownloadColumn {
+    current: u64,
+    total: u64,
+    unit: SizeUnit,
+    precision: usize,
+    current_style: Style,
+    separator_style: Style,
+    total_style: Style,
+}
+
+impl DownloadColumn {
+    #[must_use]
+    pub fn new(current: u64, total: u64) -> Self {
+        let green_style = Style::new().color_str("green").unwrap_or_default();
+        Self {
+            current,
+            total,
+            unit: SizeUnit::Decimal,
+            precision: 1,
+            current_style: green_style.clone(),
+            separator_style: Style::new(),
+            total_style: green_style,
+        }
+    }
+
+    #[must_use]
+    pub fn unit(mut self, unit: SizeUnit) -> Self {
+        self.unit = unit;
+        self
+    }
+
+    #[must_use]
+    pub fn precision(mut self, precision: usize) -> Self {
+        self.precision = precision;
+        self
+    }
+
+    #[must_use]
+    pub fn current_style(mut self, style: Style) -> Self {
+        self.current_style = style;
+        self
+    }
+
+    #[must_use]
+    pub fn total_style(mut self, style: Style) -> Self {
+        self.total_style = style;
+        self
+    }
+
+    pub fn set_current(&mut self, current: u64) {
+        self.current = current;
+    }
+
+    pub fn set_total(&mut self, total: u64) {
+        self.total = total;
+    }
+
+    #[must_use]
+    pub fn current(&self) -> u64 {
+        self.current
+    }
+
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.total
+    }
+
+    #[must_use]
+    pub fn render_plain(&self) -> String {
+        #[allow(clippy::cast_possible_wrap)]
+        let current_str = filesize::format_size(self.current as i64, self.unit, self.precision);
+        #[allow(clippy::cast_possible_wrap)]
+        let total_str = filesize::format_size(self.total as i64, self.unit, self.precision);
+        let parts: Vec<&str> = total_str.rsplitn(2, ' ').collect();
+        if parts.len() == 2 {
+            let unit_str = parts[0];
+            let total_value = parts[1];
+            let current_parts: Vec<&str> = current_str.rsplitn(2, ' ').collect();
+            let current_value = if current_parts.len() == 2 { current_parts[1] } else { &current_str };
+            format!("{current_value}/{total_value} {unit_str}")
+        } else {
+            format!("{current_str}/{total_str}")
+        }
+    }
+
+    #[must_use]
+    pub fn render(&self) -> Vec<Segment<'static>> {
+        #[allow(clippy::cast_possible_wrap)]
+        let current_str = filesize::format_size(self.current as i64, self.unit, self.precision);
+        #[allow(clippy::cast_possible_wrap)]
+        let total_str = filesize::format_size(self.total as i64, self.unit, self.precision);
+        let parts: Vec<&str> = total_str.rsplitn(2, ' ').collect();
+        if parts.len() == 2 {
+            let unit_str = parts[0];
+            let total_value = parts[1];
+            let current_parts: Vec<&str> = current_str.rsplitn(2, ' ').collect();
+            let current_value = if current_parts.len() == 2 { current_parts[1] } else { &current_str };
+            vec![
+                Segment::new(current_value.to_string(), Some(self.current_style.clone())),
+                Segment::new("/", Some(self.separator_style.clone())),
+                Segment::new(format!("{total_value} {unit_str}"), Some(self.total_style.clone())),
+            ]
+        } else {
+            vec![
+                Segment::new(current_str, Some(self.current_style.clone())),
+                Segment::new("/", Some(self.separator_style.clone())),
+                Segment::new(total_str, Some(self.total_style.clone())),
+            ]
+        }
+    }
+}
+
+impl Default for DownloadColumn {
+    fn default() -> Self {
+        Self::new(0, 0)
+    }
+}
+
+/// A renderable that displays a transfer speed in human-readable format.
+#[derive(Debug, Clone)]
+pub struct TransferSpeedColumn {
+    speed: f64,
+    unit: SizeUnit,
+    precision: usize,
+    style: Style,
+}
+
+impl TransferSpeedColumn {
+    #[must_use]
+    pub fn new(speed: f64) -> Self {
+        Self {
+            speed,
+            unit: SizeUnit::Decimal,
+            precision: 1,
+            style: Style::new().color_str("red").unwrap_or_default(),
+        }
+    }
+
+    #[must_use]
+    pub fn from_transfer(bytes: u64, duration: Duration) -> Self {
+        let secs = duration.as_secs_f64();
+        #[allow(clippy::cast_precision_loss)]
+        let speed = if secs > 0.0 { bytes as f64 / secs } else { 0.0 };
+        Self::new(speed)
+    }
+
+    #[must_use]
+    pub fn unit(mut self, unit: SizeUnit) -> Self {
+        self.unit = unit;
+        self
+    }
+
+    #[must_use]
+    pub fn precision(mut self, precision: usize) -> Self {
+        self.precision = precision;
+        self
+    }
+
+    #[must_use]
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn set_speed(&mut self, speed: f64) {
+        self.speed = speed;
+    }
+
+    pub fn update_from_transfer(&mut self, bytes: u64, duration: Duration) {
+        let secs = duration.as_secs_f64();
+        #[allow(clippy::cast_precision_loss)]
+        { self.speed = if secs > 0.0 { bytes as f64 / secs } else { 0.0 }; }
+    }
+
+    #[must_use]
+    pub fn speed(&self) -> f64 {
+        self.speed
+    }
+
+    #[must_use]
+    pub fn render_plain(&self) -> String {
+        filesize::format_speed(self.speed, self.unit, self.precision)
+    }
+
+    #[must_use]
+    pub fn render(&self) -> Vec<Segment<'static>> {
+        vec![Segment::new(self.render_plain(), Some(self.style.clone()))]
+    }
+}
+
+impl Default for TransferSpeedColumn {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
 }
 
 #[cfg(test)]
