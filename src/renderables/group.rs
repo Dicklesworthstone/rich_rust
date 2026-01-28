@@ -583,7 +583,9 @@ mod tests {
 
         let segments = g.render(&console, &options);
         // Verify segments contain expected content
-        let any_match = segments.iter().any(|s| s.text.as_ref().contains("test content"));
+        let any_match = segments
+            .iter()
+            .any(|s| s.text.as_ref().contains("test content"));
         assert!(any_match);
     }
 
@@ -651,10 +653,7 @@ mod tests {
 
         // Inner group rendered in fit mode, so A and B should be adjacent (no newline between them)
         // But outer group adds newlines between its children
-        let newlines_in_outer = segments
-            .iter()
-            .filter(|s| s.text.as_ref() == "\n")
-            .count();
+        let newlines_in_outer = segments.iter().filter(|s| s.text.as_ref() == "\n").count();
         // Outer has 3 children → 2 newlines from outer
         assert_eq!(newlines_in_outer, 2);
     }

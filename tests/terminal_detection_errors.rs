@@ -26,12 +26,13 @@ impl Write for BufferWriter {
     }
 }
 
-fn make_console(color: Option<ColorSystem>, force_term: Option<bool>) -> (Console, Arc<Mutex<Vec<u8>>>) {
+fn make_console(
+    color: Option<ColorSystem>,
+    force_term: Option<bool>,
+) -> (Console, Arc<Mutex<Vec<u8>>>) {
     let buf = Arc::new(Mutex::new(Vec::new()));
     let writer = BufferWriter(Arc::clone(&buf));
-    let mut builder = Console::builder()
-        .width(80)
-        .file(Box::new(writer));
+    let mut builder = Console::builder().width(80).file(Box::new(writer));
     if let Some(cs) = color {
         builder = builder.color_system(cs);
     }
@@ -71,7 +72,11 @@ fn non_tty_console_reports_color_disabled() {
     let (console, _buf) = make_console(None, Some(false));
 
     assert!(!console.is_color_enabled(), "non-TTY should disable color");
-    assert_eq!(console.color_system(), None, "non-TTY should yield None color system");
+    assert_eq!(
+        console.color_system(),
+        None,
+        "non-TTY should yield None color system"
+    );
 }
 
 #[test]
@@ -254,7 +259,10 @@ fn print_with_markup_degrades_to_plain_text_without_color() {
     );
     // The text content should still appear
     assert!(out.contains("Error:"), "text content should be preserved");
-    assert!(out.contains("file not found"), "text content should be preserved");
+    assert!(
+        out.contains("file not found"),
+        "text content should be preserved"
+    );
 }
 
 #[test]
@@ -269,7 +277,10 @@ fn print_styled_degrades_to_plain_text_without_color() {
         !out.contains("\x1b["),
         "non-TTY console should produce no ANSI escapes, got: {out:?}"
     );
-    assert!(out.contains("decorated text"), "text content should be preserved");
+    assert!(
+        out.contains("decorated text"),
+        "text content should be preserved"
+    );
 }
 
 // ============================================================================
@@ -327,7 +338,10 @@ fn safe_box_console_creation() {
     // safe_box consoles should be usable without panicking
     console.print_plain("safe box output");
     let out = output(&buf);
-    assert!(out.contains("safe box output"), "safe_box console should produce output");
+    assert!(
+        out.contains("safe box output"),
+        "safe_box console should produce output"
+    );
 }
 
 // ============================================================================
@@ -348,7 +362,10 @@ fn no_color_plus_non_tty_suppresses_all_ansi() {
         .file(Box::new(writer))
         .build();
 
-    assert!(!console.is_color_enabled(), "no_color + non-TTY should disable color");
+    assert!(
+        !console.is_color_enabled(),
+        "no_color + non-TTY should disable color"
+    );
 
     console.print_styled("no color", Style::new().bold());
     let out = output(&buf);
@@ -371,7 +388,10 @@ fn color_system_after_no_color_restores_color() {
         .file(Box::new(writer))
         .build();
 
-    assert!(console.is_color_enabled(), "color_system should restore color after no_color");
+    assert!(
+        console.is_color_enabled(),
+        "color_system should restore color after no_color"
+    );
     assert_eq!(console.color_system(), Some(ColorSystem::Standard));
 }
 

@@ -11,10 +11,10 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::console::{Console, ConsoleOptions, RenderHook};
-use crate::sync::{lock_recover, read_recover, write_recover};
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment, split_lines};
 use crate::style::Style;
+use crate::sync::{lock_recover, read_recover, write_recover};
 use crate::text::{JustifyMethod, OverflowMethod, Text};
 
 /// Vertical overflow handling for Live renders.

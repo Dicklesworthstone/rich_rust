@@ -2228,8 +2228,14 @@ mod tests {
     fn test_pager_debug_impl() {
         let pager = Pager::new().command("less");
         let debug = format!("{pager:?}");
-        assert!(debug.contains("Pager"), "Debug should contain 'Pager': {debug}");
-        assert!(debug.contains("less"), "Debug should contain command: {debug}");
+        assert!(
+            debug.contains("Pager"),
+            "Debug should contain 'Pager': {debug}"
+        );
+        assert!(
+            debug.contains("less"),
+            "Debug should contain command: {debug}"
+        );
     }
 
     #[test]
@@ -2391,9 +2397,12 @@ mod tests {
 
             let confirm = Confirm::new("Continue?");
             let mut reader = io::Cursor::new(*input_bytes);
-            let answer = confirm
-                .ask_from(&console, &mut reader)
-                .unwrap_or_else(|_| panic!("Failed on input: {:?}", String::from_utf8_lossy(input_bytes)));
+            let answer = confirm.ask_from(&console, &mut reader).unwrap_or_else(|_| {
+                panic!(
+                    "Failed on input: {:?}",
+                    String::from_utf8_lossy(input_bytes)
+                )
+            });
             assert!(
                 answer,
                 "Expected true for input {:?}",
@@ -2417,9 +2426,12 @@ mod tests {
 
             let confirm = Confirm::new("Continue?");
             let mut reader = io::Cursor::new(*input_bytes);
-            let answer = confirm
-                .ask_from(&console, &mut reader)
-                .unwrap_or_else(|_| panic!("Failed on input: {:?}", String::from_utf8_lossy(input_bytes)));
+            let answer = confirm.ask_from(&console, &mut reader).unwrap_or_else(|_| {
+                panic!(
+                    "Failed on input: {:?}",
+                    String::from_utf8_lossy(input_bytes)
+                )
+            });
             assert!(
                 !answer,
                 "Expected false for input {:?}",

@@ -503,8 +503,7 @@ fn test_select_by_text() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Color")
-        .choices(["red", "green", "blue"]);
+    let select = Select::new("Color").choices(["red", "green", "blue"]);
     let mut reader = input("green\n");
 
     let result = select.ask_from(&console, &mut reader).unwrap();
@@ -517,8 +516,7 @@ fn test_select_by_number() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Fruit")
-        .choices(["apple", "banana", "cherry"]);
+    let select = Select::new("Fruit").choices(["apple", "banana", "cherry"]);
     let mut reader = input("2\n");
 
     let result = select.ask_from(&console, &mut reader).unwrap();
@@ -546,8 +544,7 @@ fn test_select_invalid_then_valid() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Color")
-        .choices(["red", "green", "blue"]);
+    let select = Select::new("Color").choices(["red", "green", "blue"]);
     // "purple" is not a valid choice, "1" selects "red"
     let mut reader = input("purple\n1\n");
 
@@ -561,8 +558,7 @@ fn test_select_case_insensitive() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Pick")
-        .choices(["Red", "Green", "Blue"]);
+    let select = Select::new("Pick").choices(["Red", "Green", "Blue"]);
     let mut reader = input("red\n");
 
     let result = select.ask_from(&console, &mut reader).unwrap();
@@ -589,9 +585,7 @@ fn test_select_non_interactive_returns_default() {
     init_test_logging();
 
     let console = non_interactive_console();
-    let select = Select::new("Pick")
-        .choices(["a", "b", "c"])
-        .default("b");
+    let select = Select::new("Pick").choices(["a", "b", "c"]).default("b");
 
     let result = select.ask(&console).unwrap();
     assert_eq!(result, "b");
@@ -603,8 +597,7 @@ fn test_select_non_interactive_no_default_errors() {
     init_test_logging();
 
     let console = non_interactive_console();
-    let select = Select::new("Pick")
-        .choices(["a", "b", "c"]);
+    let select = Select::new("Pick").choices(["a", "b", "c"]);
 
     let result = select.ask(&console);
     assert!(result.is_err());
@@ -616,15 +609,13 @@ fn test_select_boundary_numbers() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Pick")
-        .choices(["first", "middle", "last"]);
+    let select = Select::new("Pick").choices(["first", "middle", "last"]);
 
     let mut reader = input("1\n");
     let result = select.ask_from(&console, &mut reader).unwrap();
     assert_eq!(result, "first");
 
-    let select = Select::new("Pick")
-        .choices(["first", "middle", "last"]);
+    let select = Select::new("Pick").choices(["first", "middle", "last"]);
     let mut reader = input("3\n");
     let result = select.ask_from(&console, &mut reader).unwrap();
     assert_eq!(result, "last");
@@ -636,8 +627,7 @@ fn test_select_out_of_range_number() {
     init_test_logging();
 
     let console = interactive_console();
-    let select = Select::new("Pick")
-        .choices(["a", "b"]);
+    let select = Select::new("Pick").choices(["a", "b"]);
     // 5 is out of range, then "a" is valid
     let mut reader = input("5\na\n");
 
@@ -837,8 +827,7 @@ fn test_full_interactive_workflow() {
     assert_eq!(name, "Alice");
 
     // Step 2: Select a role
-    let select = Select::new("Role")
-        .choices(["admin", "user", "guest"]);
+    let select = Select::new("Role").choices(["admin", "user", "guest"]);
     let mut reader = input("2\n");
     let role = select.ask_from(&console, &mut reader).unwrap();
     assert_eq!(role, "user");

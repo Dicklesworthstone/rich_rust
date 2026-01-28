@@ -24,8 +24,7 @@ use rich_rust::text::Text;
 /// Generates arbitrary strings that may contain bracket characters.
 fn arbitrary_markup() -> impl Strategy<Value = String> {
     // Mix of regular chars, brackets, backslashes, tags, and Unicode
-    prop::string::string_regex(r"[\x00-\x7f\[\]/\\#]{0,200}")
-        .unwrap()
+    prop::string::string_regex(r"[\x00-\x7f\[\]/\\#]{0,200}").unwrap()
 }
 
 /// Generates strings with valid-looking tag syntax but random tag names.
@@ -163,7 +162,10 @@ fn invalid_hex_colors_no_panic() {
     ];
     for input in &invalids {
         let text = markup::render_or_plain(input);
-        assert!(text.plain().contains("text"), "plain text lost for: {input}");
+        assert!(
+            text.plain().contains("text"),
+            "plain text lost for: {input}"
+        );
     }
 }
 
@@ -178,7 +180,10 @@ fn invalid_color_names_no_panic() {
     ];
     for input in &invalids {
         let text = markup::render_or_plain(input);
-        assert!(text.plain().contains("text"), "plain text lost for: {input}");
+        assert!(
+            text.plain().contains("text"),
+            "plain text lost for: {input}"
+        );
     }
 }
 
@@ -270,7 +275,10 @@ fn valid_then_unmatched_close() {
 #[test]
 fn close_without_open() {
     let result = markup::render("[/]");
-    assert!(result.is_err(), "closing with nothing to close should error");
+    assert!(
+        result.is_err(),
+        "closing with nothing to close should error"
+    );
     // render_or_plain falls back to plain text
     let text = markup::render_or_plain("[/]");
     assert!(!text.plain().is_empty());
@@ -394,9 +402,7 @@ fn very_long_with_tags() {
 
 #[test]
 fn many_short_tagged_segments() {
-    let input: String = (0..10_000)
-        .map(|i| format!("[bold]w{i}[/]"))
-        .collect();
+    let input: String = (0..10_000).map(|i| format!("[bold]w{i}[/]")).collect();
     let text = markup::render_or_plain(&input);
     // Should contain all words
     assert!(text.plain().contains("w0"));

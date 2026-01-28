@@ -10,8 +10,8 @@ mod common;
 
 use common::e2e_harness::AnsiParser;
 use common::init_test_logging;
-use rich_rust::prelude::*;
 use rich_rust::r#box::{DOUBLE, HEAVY};
+use rich_rust::prelude::*;
 
 // =============================================================================
 // Helper: render via Console to a String buffer
@@ -106,10 +106,7 @@ fn e2e_table_with_styled_cells() {
 
     // Validate ANSI is well-formed
     let errors = AnsiParser::validate(&output);
-    assert!(
-        errors.is_empty(),
-        "ANSI validation errors: {errors:?}"
-    );
+    assert!(errors.is_empty(), "ANSI validation errors: {errors:?}");
 
     tracing::info!("E2E table with styled cells test PASSED");
 }
@@ -141,7 +138,10 @@ fn e2e_panel_containing_table() {
     // Panel structure checks
     assert!(output.contains("Configuration"), "Missing panel title");
     assert!(output.contains("host"), "Missing table key 'host'");
-    assert!(output.contains("localhost"), "Missing table value 'localhost'");
+    assert!(
+        output.contains("localhost"),
+        "Missing table value 'localhost'"
+    );
     assert!(output.contains("8080"), "Missing table value '8080'");
 
     // Panel borders should be present
@@ -189,7 +189,10 @@ fn e2e_tree_in_panel() {
 
     // Double-line border chars
     assert!(output.contains('╔'), "Missing double-line top-left corner");
-    assert!(output.contains('╝'), "Missing double-line bottom-right corner");
+    assert!(
+        output.contains('╝'),
+        "Missing double-line bottom-right corner"
+    );
 
     tracing::info!("E2E tree in panel test PASSED");
 }
@@ -206,19 +209,28 @@ fn e2e_progress_bar_states() {
     // 0% progress
     let bar_empty = ProgressBar::with_total(100);
     let out_empty = bar_empty.render_plain(40);
-    assert!(!out_empty.is_empty(), "Empty progress bar should produce output");
+    assert!(
+        !out_empty.is_empty(),
+        "Empty progress bar should produce output"
+    );
 
     // 50% progress
     let mut bar_half = ProgressBar::with_total(100);
     bar_half.update(50);
     let out_half = bar_half.render_plain(40);
-    assert!(!out_half.is_empty(), "Half progress bar should produce output");
+    assert!(
+        !out_half.is_empty(),
+        "Half progress bar should produce output"
+    );
 
     // 100% progress
     let mut bar_full = ProgressBar::with_total(100);
     bar_full.update(100);
     let out_full = bar_full.render_plain(40);
-    assert!(!out_full.is_empty(), "Full progress bar should produce output");
+    assert!(
+        !out_full.is_empty(),
+        "Full progress bar should produce output"
+    );
 
     // All three should produce different output
     assert_ne!(out_empty, out_full, "0% and 100% should differ");
@@ -281,7 +293,10 @@ fn e2e_rule_as_divider() {
     // Rule without title
     let plain_rule = Rule::new();
     let plain_output = plain_rule.render_plain(60);
-    assert!(plain_output.contains('─'), "Plain rule should have line chars");
+    assert!(
+        plain_output.contains('─'),
+        "Plain rule should have line chars"
+    );
 
     tracing::info!("E2E rule as divider test PASSED");
 }
@@ -430,9 +445,7 @@ fn e2e_nested_panels() {
     let inner_output = inner.render_plain(40);
 
     // Outer panel wrapping the inner
-    let outer = Panel::from_text(&inner_output)
-        .title("Outer")
-        .width(50);
+    let outer = Panel::from_text(&inner_output).title("Outer").width(50);
     let output = outer.render_plain(60);
 
     assert!(output.contains("Outer"), "Missing outer panel title");
@@ -512,9 +525,21 @@ fn e2e_table_column_alignment_and_widths() {
     tracing::info!("Starting E2E table column alignment test");
 
     let mut table = Table::new()
-        .with_column(Column::new("Left").justify(JustifyMethod::Left).min_width(10))
-        .with_column(Column::new("Center").justify(JustifyMethod::Center).min_width(12))
-        .with_column(Column::new("Right").justify(JustifyMethod::Right).min_width(10));
+        .with_column(
+            Column::new("Left")
+                .justify(JustifyMethod::Left)
+                .min_width(10),
+        )
+        .with_column(
+            Column::new("Center")
+                .justify(JustifyMethod::Center)
+                .min_width(12),
+        )
+        .with_column(
+            Column::new("Right")
+                .justify(JustifyMethod::Right)
+                .min_width(10),
+        );
 
     table.add_row_cells(["a", "b", "c"]);
     table.add_row_cells(["longer text", "medium", "x"]);

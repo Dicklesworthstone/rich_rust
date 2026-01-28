@@ -622,8 +622,8 @@ fn test_concurrent_access_with_panicking_threads() {
 /// poison recovery via the sync module.
 #[test]
 fn test_status_mutex_poison_recovery() {
-    use std::sync::{Arc, Mutex};
     use rich_rust::sync::lock_recover;
+    use std::sync::{Arc, Mutex};
 
     // Simulate what Status does internally: Arc<Mutex<String>>
     let message = Arc::new(Mutex::new("Working...".to_string()));

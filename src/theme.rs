@@ -989,8 +989,8 @@ mod tests {
 
     #[test]
     fn test_theme_stack_deep_nesting() {
-        let base = Theme::from_style_definitions([("a", "bold"), ("b", "italic")], false)
-            .expect("base");
+        let base =
+            Theme::from_style_definitions([("a", "bold"), ("b", "italic")], false).expect("base");
         let mut stack = ThemeStack::new(base);
 
         let layer1 =
@@ -1100,8 +1100,8 @@ mod tests {
     fn test_theme_override_default_style() {
         // Custom styles should override defaults when inherit=true
         let default_rule = Theme::default().get("rule.line").unwrap().to_string();
-        let theme = Theme::from_style_definitions([("rule.line", "bold magenta")], true)
-            .expect("theme");
+        let theme =
+            Theme::from_style_definitions([("rule.line", "bold magenta")], true).expect("theme");
         let custom_rule = theme.get("rule.line").unwrap().to_string();
         assert_ne!(default_rule, custom_rule);
         assert_eq!(custom_rule, "bold magenta");

@@ -255,8 +255,14 @@ fn test_line_numbers_disabled() {
     let text_with: String = segs_with.iter().map(|s| s.text.as_ref()).collect();
 
     // With line numbers should have the separator character
-    assert!(text_with.contains("│"), "Should contain separator with line numbers");
-    assert!(!text_no.contains("│"), "Should not contain separator without line numbers");
+    assert!(
+        text_with.contains("│"),
+        "Should contain separator with line numbers"
+    );
+    assert!(
+        !text_no.contains("│"),
+        "Should not contain separator without line numbers"
+    );
 }
 
 /// Test: custom start_line offsets the line numbering.
@@ -372,8 +378,7 @@ fn test_word_wrap_none() {
 fn test_background_color_override() {
     init_test_logging();
 
-    let syntax = Syntax::new("x = 1", "python")
-        .background_color(Color::parse("blue").unwrap());
+    let syntax = Syntax::new("x = 1", "python").background_color(Color::parse("blue").unwrap());
     let segments = syntax.render(Some(80)).expect("render");
 
     // At least some segments should have a background color style
@@ -434,10 +439,7 @@ fn test_available_languages_non_empty() {
     init_test_logging();
 
     let languages = Syntax::available_languages();
-    assert!(
-        !languages.is_empty(),
-        "Should have available languages"
-    );
+    assert!(!languages.is_empty(), "Should have available languages");
 }
 
 // =============================================================================
@@ -456,10 +458,7 @@ fn test_large_code_block() {
 
     let syntax = Syntax::new(&code, "rust").line_numbers(true);
     let segments = syntax.render(Some(80)).expect("render");
-    assert!(
-        !segments.is_empty(),
-        "100-line code block should render"
-    );
+    assert!(!segments.is_empty(), "100-line code block should render");
 
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("func_0"), "Should contain first function");
@@ -573,7 +572,10 @@ fn test_plain_text_extraction() {
     let code = "fn hello() {}";
     let syntax = Syntax::new(code, "rust");
     let plain = syntax.plain_text();
-    assert!(plain.contains("fn hello()"), "Plain text should contain the code");
+    assert!(
+        plain.contains("fn hello()"),
+        "Plain text should contain the code"
+    );
 }
 
 // =============================================================================
@@ -597,7 +599,10 @@ fn test_syntax_console_integration() {
     console.print_renderable(&syntax);
     let html = console.export_html(true);
 
-    assert!(html.contains("main"), "Console render should include code content");
+    assert!(
+        html.contains("main"),
+        "Console render should include code content"
+    );
 }
 
 /// Test: Syntax export to SVG works.

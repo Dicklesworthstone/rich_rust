@@ -69,7 +69,10 @@ fn simple_object_renders_key_value() {
     let json = Json::from_str(r#"{"name": "Alice"}"#).unwrap();
     let plain = render_json_plain(&json);
     assert!(plain.contains(r#""name""#), "should contain key: {plain}");
-    assert!(plain.contains(r#""Alice""#), "should contain value: {plain}");
+    assert!(
+        plain.contains(r#""Alice""#),
+        "should contain value: {plain}"
+    );
 }
 
 #[test]
@@ -116,14 +119,14 @@ fn nested_object_renders_indented() {
 
 #[test]
 fn deeply_nested_structures() {
-    let json = Json::from_str(
-        r#"{"a": {"b": {"c": {"d": {"e": "deep"}}}}}"#,
-    )
-    .unwrap();
+    let json = Json::from_str(r#"{"a": {"b": {"c": {"d": {"e": "deep"}}}}}"#).unwrap();
     let plain = render_json_plain(&json);
     assert!(plain.contains(r#""deep""#));
     // Each level adds 2 spaces of indentation (default)
-    assert!(plain.contains("        "), "should have 8+ spaces for depth 4");
+    assert!(
+        plain.contains("        "),
+        "should have 8+ spaces for depth 4"
+    );
 }
 
 #[test]
@@ -140,10 +143,7 @@ fn object_with_nested_array() {
 
 #[test]
 fn array_of_objects() {
-    let json = Json::from_str(
-        r#"[{"name": "Alice"}, {"name": "Bob"}]"#,
-    )
-    .unwrap();
+    let json = Json::from_str(r#"[{"name": "Alice"}, {"name": "Bob"}]"#).unwrap();
     let plain = render_json_plain(&json);
     assert!(plain.contains(r#""Alice""#));
     assert!(plain.contains(r#""Bob""#));
@@ -441,7 +441,10 @@ fn default_indent_is_2_spaces() {
     let plain = render_json_plain(&json);
     // With default 2-space indent, the key line should start with 2 spaces
     let lines: Vec<&str> = plain.lines().collect();
-    assert!(lines.len() >= 3, "should have at least 3 lines (open, content, close)");
+    assert!(
+        lines.len() >= 3,
+        "should have at least 3 lines (open, content, close)"
+    );
     assert!(
         lines[1].starts_with("  "),
         "content line should start with 2 spaces: {:?}",
@@ -472,7 +475,10 @@ fn indent_0_still_has_newlines() {
     let json = Json::from_str(r#"{"key": "value"}"#).unwrap().indent(0);
     let plain = render_json_plain(&json);
     // Even with indent 0, pretty-printing adds newlines
-    assert!(plain.contains('\n'), "should contain newlines even with indent 0");
+    assert!(
+        plain.contains('\n'),
+        "should contain newlines even with indent 0"
+    );
 }
 
 #[test]
@@ -481,7 +487,9 @@ fn indent_affects_nested_levels() {
     let plain = render_json_plain(&json);
     let lines: Vec<&str> = plain.lines().collect();
     // Depth 1: 3 spaces, depth 2: 6 spaces
-    let has_3_space = lines.iter().any(|l| l.starts_with("   ") && !l.starts_with("      "));
+    let has_3_space = lines
+        .iter()
+        .any(|l| l.starts_with("   ") && !l.starts_with("      "));
     let has_6_space = lines.iter().any(|l| l.starts_with("      "));
     assert!(has_3_space, "should have 3-space indented lines: {plain}");
     assert!(has_6_space, "should have 6-space indented lines: {plain}");

@@ -106,7 +106,9 @@ use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// This function never panics. It always recovers from poison.
 #[inline]
 pub fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Lock a mutex with context logging on poison recovery (debug builds only).
@@ -160,7 +162,9 @@ pub fn lock_recover_debug<'a, T>(mutex: &'a Mutex<T>, context: &str) -> MutexGua
 /// ```
 #[inline]
 pub fn read_recover<T>(rwlock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    rwlock.read().unwrap_or_else(std::sync::PoisonError::into_inner)
+    rwlock
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Acquire a write lock on an RwLock, recovering from poison if necessary.
@@ -182,7 +186,9 @@ pub fn read_recover<T>(rwlock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
 /// ```
 #[inline]
 pub fn write_recover<T>(rwlock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    rwlock.write().unwrap_or_else(std::sync::PoisonError::into_inner)
+    rwlock
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]

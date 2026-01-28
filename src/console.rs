@@ -88,12 +88,12 @@ use std::time::SystemTime;
 
 use crate::color::ColorSystem;
 use crate::emoji;
-use crate::sync::lock_recover;
 use crate::live::LiveInner;
 use crate::markup;
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment};
 use crate::style::{Attributes, Style, StyleParseError};
+use crate::sync::lock_recover;
 use crate::terminal;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
 use crate::theme::{Theme, ThemeStack, ThemeStackError};
@@ -937,8 +937,7 @@ impl Console {
         segments: &[Segment<'_>],
     ) -> io::Result<()> {
         if self.record.load(Ordering::Relaxed) {
-            lock_recover(&self.buffer)
-                .extend(segments.iter().cloned().map(Segment::into_owned));
+            lock_recover(&self.buffer).extend(segments.iter().cloned().map(Segment::into_owned));
         }
 
         let color_system = self.color_system();

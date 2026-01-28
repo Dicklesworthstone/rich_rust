@@ -118,10 +118,7 @@ fn e2e_console_survives_poison() {
     console.print_plain("Final message after chaos");
     let output_final = buf_contents(&buf);
     eprintln!("  Final output length: {} bytes", output_final.len());
-    eprintln!(
-        "  Contains 'Final': {}",
-        output_final.contains("Final")
-    );
+    eprintln!("  Contains 'Final': {}", output_final.contains("Final"));
     assert!(
         output_final.contains("Final"),
         "Console should still work after panic"
@@ -295,7 +292,10 @@ fn e2e_live_display_stability() {
     eprintln!("{}", "-".repeat(50));
     let final_count = *lock_recover(&counter);
     eprintln!("  Final counter value: {final_count}");
-    assert!(final_count >= 10, "at least 10 updates from 2 surviving threads");
+    assert!(
+        final_count >= 10,
+        "at least 10 updates from 2 surviving threads"
+    );
     live.stop().expect("Live should stop cleanly");
     eprintln!("  Live stopped successfully");
     eprintln!("  PHASE 3 PASSED\n");
@@ -400,7 +400,10 @@ fn e2e_full_pipeline_survives_poison() {
     console.print("[bold red]Error:[/] file not found");
     let output1 = buf_contents(&buf);
     eprintln!("  Output: {} bytes", output1.len());
-    assert!(output1.contains("Error:"), "styled output should contain text");
+    assert!(
+        output1.contains("Error:"),
+        "styled output should contain text"
+    );
     eprintln!("  PHASE 1 PASSED\n");
 
     // PHASE 2: Stress with panics

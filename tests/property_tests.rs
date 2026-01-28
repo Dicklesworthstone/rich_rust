@@ -704,7 +704,7 @@ proptest! {
 // Table Property Tests
 // ============================================================================
 
-use rich_rust::prelude::{Column, Row, Cell, Table};
+use rich_rust::prelude::{Cell, Column, Row, Table};
 use rich_rust::segment::split_lines;
 
 proptest! {

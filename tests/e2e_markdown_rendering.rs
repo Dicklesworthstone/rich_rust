@@ -137,7 +137,10 @@ fn ordered_list_renders_numbers() {
     assert!(plain.contains("Second"));
     assert!(plain.contains("Third"));
     // Should contain number markers
-    assert!(plain.contains("1.") || plain.contains("1"), "should have numbering");
+    assert!(
+        plain.contains("1.") || plain.contains("1"),
+        "should have numbering"
+    );
 }
 
 #[test]
@@ -191,14 +194,20 @@ fn task_list_renders_checkboxes() {
 #[test]
 fn inline_code_renders() {
     let plain = render_md_plain("Use `cargo test` to run tests.");
-    assert!(plain.contains("cargo test"), "inline code content missing: {plain}");
+    assert!(
+        plain.contains("cargo test"),
+        "inline code content missing: {plain}"
+    );
 }
 
 #[test]
 fn fenced_code_block_renders() {
     let source = "```rust\nfn main() {\n    println!(\"hello\");\n}\n```";
     let plain = render_md_plain(source);
-    assert!(plain.contains("fn main()"), "code block content missing: {plain}");
+    assert!(
+        plain.contains("fn main()"),
+        "code block content missing: {plain}"
+    );
     assert!(plain.contains("println!"));
 }
 
@@ -237,7 +246,10 @@ fn link_renders_text() {
 #[test]
 fn link_shows_url_by_default() {
     let plain = render_md_plain("[Docs](https://docs.rs)");
-    assert!(plain.contains("docs.rs"), "URL should be visible by default: {plain}");
+    assert!(
+        plain.contains("docs.rs"),
+        "URL should be visible by default: {plain}"
+    );
 }
 
 #[test]
@@ -246,10 +258,7 @@ fn link_hides_url_when_configured() {
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("Hidden"));
-    assert!(
-        !text.contains("secret.com"),
-        "URL should be hidden: {text}"
-    );
+    assert!(!text.contains("secret.com"), "URL should be hidden: {text}");
 }
 
 #[test]
@@ -279,7 +288,12 @@ fn table_has_borders() {
     let source = "| A | B |\n|---|---|\n| 1 | 2 |";
     let plain = render_md_plain(source);
     // Should contain box drawing characters
-    let has_border = plain.chars().any(|c| matches!(c, '┌' | '┐' | '└' | '┘' | '─' | '│' | '┼' | '┬' | '┴' | '├' | '┤'));
+    let has_border = plain.chars().any(|c| {
+        matches!(
+            c,
+            '┌' | '┐' | '└' | '┘' | '─' | '│' | '┼' | '┬' | '┴' | '├' | '┤'
+        )
+    });
     assert!(has_border, "table should have border chars: {plain}");
 }
 
@@ -361,7 +375,10 @@ fn italic_text_renders() {
 #[test]
 fn strikethrough_renders() {
     let plain = render_md_plain("This is ~~deleted~~ text.");
-    assert!(plain.contains("deleted"), "strikethrough text missing: {plain}");
+    assert!(
+        plain.contains("deleted"),
+        "strikethrough text missing: {plain}"
+    );
 }
 
 #[test]
@@ -487,8 +504,7 @@ fn horizontal_rule_between_sections() {
 
 #[test]
 fn custom_h1_style() {
-    let md = Markdown::new("# Custom")
-        .h1_style(Style::parse("#ff0000 bold").unwrap());
+    let md = Markdown::new("# Custom").h1_style(Style::parse("#ff0000 bold").unwrap());
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("Custom"));
@@ -499,8 +515,7 @@ fn custom_h1_style() {
 
 #[test]
 fn custom_emphasis_style() {
-    let md = Markdown::new("*emphasis*")
-        .emphasis_style(Style::parse("bold green").unwrap());
+    let md = Markdown::new("*emphasis*").emphasis_style(Style::parse("bold green").unwrap());
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("emphasis"));
@@ -508,8 +523,7 @@ fn custom_emphasis_style() {
 
 #[test]
 fn custom_code_style() {
-    let md = Markdown::new("`code`")
-        .code_style(Style::parse("yellow on black").unwrap());
+    let md = Markdown::new("`code`").code_style(Style::parse("yellow on black").unwrap());
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("code"));
@@ -517,8 +531,7 @@ fn custom_code_style() {
 
 #[test]
 fn custom_quote_style() {
-    let md = Markdown::new("> Quote")
-        .quote_style(Style::parse("italic cyan").unwrap());
+    let md = Markdown::new("> Quote").quote_style(Style::parse("italic cyan").unwrap());
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("Quote"));
@@ -550,9 +563,7 @@ fn very_long_paragraph() {
 
 #[test]
 fn many_headings() {
-    let source: String = (1..=100)
-        .map(|i| format!("## Heading {i}\n\n"))
-        .collect();
+    let source: String = (1..=100).map(|i| format!("## Heading {i}\n\n")).collect();
     let plain = render_md_plain(&source);
     assert!(plain.contains("Heading 1"));
     assert!(plain.contains("Heading 100"));

@@ -24,7 +24,10 @@ fn render_md_text(source: &str, width: usize) -> String {
 
 fn render_md_segments(source: &str, width: usize) -> Vec<rich_rust::segment::Segment<'static>> {
     let md = Markdown::new(source);
-    md.render(width).into_iter().map(|s| s.into_owned()).collect()
+    md.render(width)
+        .into_iter()
+        .map(|s| s.into_owned())
+        .collect()
 }
 
 fn render_md_to_html(source: &str, width: usize) -> String {
@@ -72,7 +75,10 @@ fn test_md_h1_heading() {
         .find(|s| s.text.contains("Main Title"))
         .expect("missing H1 segment");
     let style = title_seg.style.as_ref().expect("H1 should have style");
-    assert!(style.attributes.contains(Attributes::BOLD), "H1 should be bold");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "H1 should be bold"
+    );
     assert!(
         style.attributes.contains(Attributes::UNDERLINE),
         "H1 should be underlined"
@@ -91,7 +97,10 @@ fn test_md_h2_heading() {
         .find(|s| s.text.contains("Section"))
         .expect("missing H2 segment");
     let style = title_seg.style.as_ref().expect("H2 should have style");
-    assert!(style.attributes.contains(Attributes::BOLD), "H2 should be bold");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "H2 should be bold"
+    );
 }
 
 /// Test: H3 heading renders with bold style.
@@ -106,7 +115,10 @@ fn test_md_h3_heading() {
         .find(|s| s.text.contains("Subsection"))
         .expect("missing H3 segment");
     let style = title_seg.style.as_ref().expect("H3 should have style");
-    assert!(style.attributes.contains(Attributes::BOLD), "H3 should be bold");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "H3 should be bold"
+    );
 }
 
 /// Test: H4-H6 share the same style.
@@ -221,7 +233,10 @@ fn test_md_task_list_checked_style() {
         .iter()
         .find(|s| s.text.contains('☑'))
         .expect("missing checkbox segment");
-    let style = check_seg.style.as_ref().expect("checkbox should have style");
+    let style = check_seg
+        .style
+        .as_ref()
+        .expect("checkbox should have style");
     assert!(style.color.is_some(), "checked box should have a color");
 }
 
@@ -285,7 +300,10 @@ fn test_md_inline_code() {
     init_test_logging();
 
     let text = render_md_text("Use `println!()` here.", 80);
-    assert!(text.contains("println!()"), "inline code text should appear");
+    assert!(
+        text.contains("println!()"),
+        "inline code text should appear"
+    );
 }
 
 /// Test: Inline code has code_style applied.
@@ -299,7 +317,10 @@ fn test_md_inline_code_style() {
         .iter()
         .find(|s| s.text.contains("code"))
         .expect("missing inline code segment");
-    let style = code_seg.style.as_ref().expect("inline code should have style");
+    let style = code_seg
+        .style
+        .as_ref()
+        .expect("inline code should have style");
     assert!(style.bgcolor.is_some(), "code should have background color");
 }
 
@@ -517,10 +538,7 @@ fn test_md_table_border_style() {
         .iter()
         .find(|s| s.text.contains("┌") || s.text.contains("─"))
         .expect("missing border segment");
-    assert!(
-        border_seg.style.is_some(),
-        "table border should have style"
-    );
+    assert!(border_seg.style.is_some(), "table border should have style");
 }
 
 /// Test: Table with Unicode content has consistent column widths.
@@ -569,8 +587,14 @@ fn test_md_blockquote_multi_paragraph() {
     let text = render_md_text(source, 80);
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     assert!(lines.len() >= 2);
-    assert!(lines[0].starts_with("│ "), "first paragraph should have prefix");
-    assert!(lines[1].starts_with("│ "), "second paragraph should have prefix");
+    assert!(
+        lines[0].starts_with("│ "),
+        "first paragraph should have prefix"
+    );
+    assert!(
+        lines[1].starts_with("│ "),
+        "second paragraph should have prefix"
+    );
 }
 
 /// Test: Blockquote content has quote_style (italic).
@@ -680,7 +704,10 @@ fn test_md_bold_italic_combined() {
         .style
         .as_ref()
         .expect("combined should have style");
-    assert!(style.attributes.contains(Attributes::BOLD), "should be bold");
+    assert!(
+        style.attributes.contains(Attributes::BOLD),
+        "should be bold"
+    );
     assert!(
         style.attributes.contains(Attributes::ITALIC),
         "should be italic"

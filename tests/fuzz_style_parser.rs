@@ -196,7 +196,10 @@ proptest! {
 fn fuzz_style_parse_empty() {
     let result = Style::parse("");
     assert!(result.is_ok(), "empty string should produce null style");
-    assert!(result.unwrap().is_null(), "empty string should be null style");
+    assert!(
+        result.unwrap().is_null(),
+        "empty string should be null style"
+    );
 }
 
 proptest! {

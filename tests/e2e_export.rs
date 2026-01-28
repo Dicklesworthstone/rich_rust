@@ -28,12 +28,21 @@ fn test_export_html_document_structure() {
     console.print("Hello, World!");
     let html = console.export_html(true);
 
-    assert!(html.starts_with("<!DOCTYPE html>"), "Should start with DOCTYPE");
+    assert!(
+        html.starts_with("<!DOCTYPE html>"),
+        "Should start with DOCTYPE"
+    );
     assert!(html.contains("<html>"), "Should contain <html> tag");
     assert!(html.contains("<head>"), "Should contain <head> tag");
-    assert!(html.contains("<meta charset=\"utf-8\">"), "Should have UTF-8 charset");
+    assert!(
+        html.contains("<meta charset=\"utf-8\">"),
+        "Should have UTF-8 charset"
+    );
     assert!(html.contains("<body>"), "Should contain <body> tag");
-    assert!(html.contains("</body></html>"), "Should close body and html");
+    assert!(
+        html.contains("</body></html>"),
+        "Should close body and html"
+    );
 }
 
 /// Test: export_html wraps content in monospace pre block.
@@ -254,10 +263,7 @@ fn test_export_html_fg_and_bg_colors() {
     console.print("[white on blue]Colored box[/]");
     let html = console.export_html(true);
 
-    assert!(
-        html.contains("color:#"),
-        "Should have foreground color"
-    );
+    assert!(html.contains("color:#"), "Should have foreground color");
     assert!(
         html.contains("background-color:#"),
         "Should have background color"
@@ -356,9 +362,7 @@ fn test_export_html_hyperlink() {
         .markup(true)
         .build();
 
-    let style = Style::new()
-        .bold()
-        .link("https://example.com");
+    let style = Style::new().bold().link("https://example.com");
     let mut text = Text::new("Click here");
     text.stylize_all(style);
 
@@ -400,10 +404,7 @@ fn test_export_html_entity_escaping() {
         html.contains("&lt;script&gt;"),
         "< and > should be escaped to &lt; and &gt;"
     );
-    assert!(
-        html.contains("&#x27;"),
-        "Single quotes should be escaped"
-    );
+    assert!(html.contains("&#x27;"), "Single quotes should be escaped");
 }
 
 /// Test: ampersands are properly escaped.
@@ -559,10 +560,7 @@ fn test_export_svg_document_structure() {
         svg.contains("<svg xmlns=\"http://www.w3.org/2000/svg\""),
         "Should have SVG namespace"
     );
-    assert!(
-        svg.contains("</svg>"),
-        "Should close SVG tag"
-    );
+    assert!(svg.contains("</svg>"), "Should close SVG tag");
 }
 
 /// Test: SVG uses foreignObject to embed HTML.
@@ -606,10 +604,7 @@ fn test_export_svg_dimensions() {
     let svg = console.export_svg(true);
 
     // SVG should have width and height attributes
-    assert!(
-        svg.contains("width=\""),
-        "SVG should have width attribute"
-    );
+    assert!(svg.contains("width=\""), "SVG should have width attribute");
     assert!(
         svg.contains("height=\""),
         "SVG should have height attribute"
@@ -673,7 +668,10 @@ fn test_export_svg_styled_content() {
     console.print("[bold]Bold in SVG[/]");
     let svg = console.export_svg(true);
 
-    assert!(svg.contains("Bold in SVG"), "SVG should contain text content");
+    assert!(
+        svg.contains("Bold in SVG"),
+        "SVG should contain text content"
+    );
     assert!(
         svg.contains("font-weight:bold"),
         "SVG should contain styled content via embedded HTML"
@@ -788,10 +786,7 @@ fn test_export_text_plain() {
 fn test_export_renderable_text() {
     init_test_logging();
 
-    let console = Console::builder()
-        .width(80)
-        .force_terminal(true)
-        .build();
+    let console = Console::builder().width(80).force_terminal(true).build();
 
     let text = Text::new("Renderable export test");
     let exported = console.export_renderable_text(&text);
@@ -909,14 +904,16 @@ fn test_export_html_panel() {
         .markup(true)
         .build();
 
-    let panel = Panel::from_text("Panel content")
-        .title("My Panel");
+    let panel = Panel::from_text("Panel content").title("My Panel");
 
     console.begin_capture();
     console.print_renderable(&panel);
     let html = console.export_html(true);
 
-    assert!(html.contains("Panel content"), "Panel body should be in HTML");
+    assert!(
+        html.contains("Panel content"),
+        "Panel body should be in HTML"
+    );
     assert!(html.contains("My Panel"), "Panel title should be in HTML");
 }
 
@@ -976,10 +973,7 @@ fn test_export_html_combined_styles() {
 fn test_export_html_empty_content() {
     init_test_logging();
 
-    let console = Console::builder()
-        .width(80)
-        .force_terminal(true)
-        .build();
+    let console = Console::builder().width(80).force_terminal(true).build();
 
     console.begin_capture();
     // Don't print anything
@@ -996,10 +990,7 @@ fn test_export_html_empty_content() {
 fn test_export_svg_empty_content() {
     init_test_logging();
 
-    let console = Console::builder()
-        .width(80)
-        .force_terminal(true)
-        .build();
+    let console = Console::builder().width(80).force_terminal(true).build();
 
     console.begin_capture();
     let svg = console.export_svg(true);

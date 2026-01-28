@@ -128,7 +128,10 @@ fn console_survives_thread_panic() {
 
     let binding = lock_recover(&buf);
     let output = String::from_utf8_lossy(&binding);
-    assert!(output.contains("after panic"), "console should still work after thread panic");
+    assert!(
+        output.contains("after panic"),
+        "console should still work after thread panic"
+    );
 }
 
 // ============================================================================
@@ -142,7 +145,7 @@ fn style_parse_concurrent() {
         handles.push(thread::spawn(|| {
             let style = Style::parse("bold red").unwrap();
             // Verify parsing succeeded (bold style was parsed correctly)
-let _ = style;
+            let _ = style;
         }));
     }
     for h in handles {
@@ -218,5 +221,5 @@ fn concurrent_style_parse_with_panic_survivor() {
     // Style::parse should still work after the panic
     let style = Style::parse("bold red on white").unwrap();
     // Verify parsing succeeded (bold style was parsed correctly)
-let _ = style;
+    let _ = style;
 }

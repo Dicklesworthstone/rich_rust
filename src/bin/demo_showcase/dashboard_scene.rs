@@ -72,7 +72,10 @@ impl Scene for DashboardScene {
             demo.push_log(LogLevel::Info, "Dashboard initialized");
         });
 
-        if cfg.is_interactive() {
+        // Only use Live mode if both:
+        // 1. Interactive mode is allowed (not --no-interactive)
+        // 2. The console is actually attached to a terminal
+        if cfg.is_interactive() && console.is_terminal() {
             // Live mode: run the simulation with live updates
             run_live_dashboard(console, cfg, &state)?;
         } else {
