@@ -154,6 +154,7 @@ pub mod measure;
 pub mod renderables;
 pub mod segment;
 pub mod style;
+pub mod sync;
 pub mod terminal;
 pub mod text;
 pub mod theme;

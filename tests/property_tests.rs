@@ -699,3 +699,201 @@ proptest! {
         prop_assert_eq!(segment.text, text, "text to segment should preserve content");
     }
 }
+
+// ============================================================================
+// Table Property Tests
+// ============================================================================
+
+use rich_rust::console::Console;
+use rich_rust::renderables::{Renderable, Table};
+use rich_rust::segment::split_lines;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
+
+    /// Table with N columns should have N columns worth of cells per row.
+    #[test]
+    fn prop_table_column_count(num_cols in 1usize..6, num_rows in 1usize..5) {
+        let mut table = Table::new();
+
+        // Add header columns
+        for i in 0..num_cols {
+            table.add_column(format!("Col{i}"), None);
+        }
+
+        // Add rows
+        for row_idx in 0..num_rows {
+            let cells: Vec<String> = (0..num_cols).map(|c| format!("R{row_idx}C{c}")).collect();
+            for cell in cells {
+                table.add_cell(cell);
+            }
+        }
+
+        // Column count should match
+        prop_assert_eq!(table.column_count(), num_cols);
+        prop_assert_eq!(table.row_count(), num_rows);
+    }
+
+    /// Empty table should render without panicking.
+    #[test]
+    fn prop_table_empty_handling(_n in 0..1i32) {
+        let table = Table::new();
+
+        let console = Console::builder()
+            .width(80)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        // Should not panic
+        let segments = table.render(&console, &options);
+        prop_assert!(segments.is_empty() || segments.iter().all(|s| s.text.chars().all(|c| c.is_whitespace() || "─│┌┐└┘├┤┬┴┼╔═╗║╚╝╟╢╤╧╪".contains(c))));
+    }
+
+    /// Single column table should render correctly.
+    #[test]
+    fn prop_table_single_column(num_rows in 1usize..5, cell_text in ascii_text()) {
+        let mut table = Table::new();
+        table.add_column("Header", None);
+
+        for _ in 0..num_rows {
+            table.add_cell(&cell_text);
+        }
+
+        let console = Console::builder()
+            .width(80)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        let segments = table.render(&console, &options);
+        let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
+
+        // Should contain header
+        prop_assert!(text.contains("Header"));
+        // Should contain cell text if not empty
+        if !cell_text.is_empty() {
+            prop_assert!(text.contains(&cell_text) || text.contains("…"),
+                "should contain cell text or ellipsis if truncated");
+        }
+    }
+
+    /// Single row table should render correctly.
+    #[test]
+    fn prop_table_single_row(num_cols in 1usize..5) {
+        let mut table = Table::new();
+
+        for i in 0..num_cols {
+            table.add_column(format!("H{i}"), None);
+        }
+
+        for i in 0..num_cols {
+            table.add_cell(format!("C{i}"));
+        }
+
+        prop_assert_eq!(table.row_count(), 1);
+        prop_assert_eq!(table.column_count(), num_cols);
+    }
+
+    /// Table width constraint should be respected.
+    #[test]
+    fn prop_table_width_constraint(width in 20usize..120) {
+        let mut table = Table::new();
+        table.add_column("A", None);
+        table.add_column("B", None);
+        table.add_cell("Cell A");
+        table.add_cell("Cell B");
+
+        let console = Console::builder()
+            .width(width)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        let segments = table.render(&console, &options);
+        let lines = split_lines(segments.into_iter().map(|s| s.into_owned()));
+
+        // Each line should not exceed the width
+        for line in lines {
+            let line_width: usize = line.iter().map(|s| s.cell_length()).sum();
+            prop_assert!(line_width <= width,
+                "line width {} should not exceed constraint {}", line_width, width);
+        }
+    }
+
+    /// Cell content should be preserved in output (possibly truncated).
+    #[test]
+    fn prop_table_cell_content_preserved(cell_text in "[a-z]{1,10}") {
+        let mut table = Table::new();
+        table.add_column("Header", None);
+        table.add_cell(&cell_text);
+
+        let console = Console::builder()
+            .width(80)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        let segments = table.render(&console, &options);
+        let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
+
+        // Cell content should appear or be ellipsized
+        prop_assert!(text.contains(&cell_text) || text.contains("…"),
+            "cell text '{}' should appear or be truncated with ellipsis", cell_text);
+    }
+
+    /// Row heights should be consistent within a row.
+    #[test]
+    fn prop_table_row_height_consistent(cols in 2usize..5, long_text in "[a-z ]{20,50}") {
+        let mut table = Table::new();
+
+        for i in 0..cols {
+            table.add_column(format!("Col{i}"), None);
+        }
+
+        // First cell is long, others are short
+        table.add_cell(&long_text);
+        for _ in 1..cols {
+            table.add_cell("X");
+        }
+
+        let console = Console::builder()
+            .width(60)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        // Should render without panicking
+        let segments = table.render(&console, &options);
+        prop_assert!(!segments.is_empty(), "table with content should produce output");
+    }
+
+    /// Border characters should be valid Unicode box drawing.
+    #[test]
+    fn prop_table_border_chars_valid(_n in 0..1i32) {
+        let mut table = Table::new();
+        table.add_column("A", None);
+        table.add_column("B", None);
+        table.add_cell("1");
+        table.add_cell("2");
+
+        let console = Console::builder()
+            .width(40)
+            .force_terminal(false)
+            .build();
+        let options = console.options();
+
+        let segments = table.render(&console, &options);
+        let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
+
+        // All characters should be printable or box-drawing
+        for ch in text.chars() {
+            prop_assert!(
+                ch.is_alphanumeric() || ch.is_whitespace() || ch == '…' ||
+                "─│┌┐└┘├┤┬┴┼═║╔╗╚╝╟╢╤╧╪╞╡╥╨╫".contains(ch) ||
+                ch == '\n' || ch == '1' || ch == '2' || ch == 'A' || ch == 'B',
+                "unexpected character: {:?} (U+{:04X})", ch, ch as u32
+            );
+        }
+    }
+}

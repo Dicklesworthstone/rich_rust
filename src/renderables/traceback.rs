@@ -1040,10 +1040,7 @@ mod tests {
             // Short hex suffix also gets removed (behavior of implementation)
             assert_eq!(Traceback::demangle_name("func::habcd"), "func");
             // Non-hex suffix preserved
-            assert_eq!(
-                Traceback::demangle_name("func::hnotahex"),
-                "func::hnotahex"
-            );
+            assert_eq!(Traceback::demangle_name("func::hnotahex"), "func::hnotahex");
         }
 
         #[test]
