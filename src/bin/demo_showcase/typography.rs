@@ -921,15 +921,21 @@ mod tests {
 
     #[test]
     fn test_dashboard_constants_are_reasonable() {
-        assert!(
-            DASHBOARD_MIN_WIDTH_WIDE >= 60,
-            "wide mode needs reasonable min width"
-        );
-        assert!(
-            DASHBOARD_LOG_HEIGHT >= 4,
-            "log pane needs reasonable height"
-        );
-        assert!(DASHBOARD_HEADER_HEIGHT >= 1, "header needs at least 1 line");
+        const {
+            assert!(
+                DASHBOARD_MIN_WIDTH_WIDE >= 60,
+                "wide mode needs reasonable min width"
+            );
+        }
+        const {
+            assert!(
+                DASHBOARD_LOG_HEIGHT >= 4,
+                "log pane needs reasonable height"
+            );
+        }
+        const {
+            assert!(DASHBOARD_HEADER_HEIGHT >= 1, "header needs at least 1 line");
+        }
     }
 
     // ========== Narrow Layout Tests ==========
@@ -1010,14 +1016,18 @@ mod tests {
 
     #[test]
     fn test_narrow_constants_are_reasonable() {
-        assert!(
-            DASHBOARD_MIN_WIDTH_NARROW >= 30,
-            "narrow mode needs reasonable min width"
-        );
-        assert!(
-            DASHBOARD_MIN_WIDTH_NARROW < DASHBOARD_MIN_WIDTH_WIDE,
-            "narrow threshold should be less than wide"
-        );
+        const {
+            assert!(
+                DASHBOARD_MIN_WIDTH_NARROW >= 30,
+                "narrow mode needs reasonable min width"
+            );
+        }
+        const {
+            assert!(
+                DASHBOARD_MIN_WIDTH_NARROW < DASHBOARD_MIN_WIDTH_WIDE,
+                "narrow threshold should be less than wide"
+            );
+        }
     }
 
     #[test]

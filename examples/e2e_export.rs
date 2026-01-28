@@ -120,7 +120,7 @@ fn build_demo_content(console: &Console) {
 }
 
 fn export_bundle(label: &str, out_dir: &Path) -> std::io::Result<()> {
-    let mut console = Console::builder()
+    let console = Console::builder()
         .width(80)
         .height(24)
         .force_terminal(true)
@@ -150,7 +150,7 @@ fn export_bundle(label: &str, out_dir: &Path) -> std::io::Result<()> {
 }
 
 fn export_with_external_css(out_dir: &Path) -> std::io::Result<()> {
-    let mut console = Console::builder()
+    let console = Console::builder()
         .width(80)
         .height(24)
         .force_terminal(true)

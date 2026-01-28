@@ -458,7 +458,7 @@ fn test_piped_all_scenes_complete() {
     common::init_test_logging();
 
     // List of all implemented scenes (non-placeholder)
-    let scenes = ["hero", "debug_tools", "traceback", "table", "panels"];
+    let scenes = ["hero", "debug_tools", "traceback", "table", "panels", "tree"];
 
     for scene in scenes {
         let result = DemoRunner::new()
@@ -557,7 +557,7 @@ fn test_piped_no_blocking_pager() {
 fn test_piped_per_scene_output_bounded() {
     common::init_test_logging();
 
-    let scenes = ["hero", "debug_tools", "traceback", "table", "panels"];
+    let scenes = ["hero", "debug_tools", "traceback", "table", "panels", "tree"];
     const MAX_SCENE_OUTPUT: usize = 50 * 1024; // 50 KB per scene
 
     for scene in scenes {

@@ -1,6 +1,4 @@
-use rich_rust::console::Console;
 use rich_rust::renderables::table::{Column, Table};
-use rich_rust::segment::Segment;
 
 #[test]
 #[ignore = "Bug reproduction test: wide char overflow in narrow column"]
@@ -26,8 +24,8 @@ fn test_wide_char_in_narrow_column() {
 
     println!("Output:\n{}", output);
 
-    let header_width = lines[1].len(); // "|A|" -> 3 chars
-    let row_width = lines[3].len(); // "|日|" -> '|' (1) + '日' (3 bytes) + '|' (1) = 5 bytes? 
+    let _header_width = lines[1].len(); // "|A|" -> 3 chars
+    let _row_width = lines[3].len(); // "|日|" -> '|' (1) + '日' (3 bytes) + '|' (1) = 5 bytes? 
     // Wait, we need cell length, not byte length.
 
     use rich_rust::cells::cell_len;

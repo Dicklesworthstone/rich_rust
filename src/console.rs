@@ -1561,7 +1561,7 @@ mod tests {
 
     #[test]
     fn test_capture() {
-        let mut console = Console::new();
+        let console = Console::new();
         console.begin_capture();
 
         // Print would add to buffer
@@ -1587,7 +1587,7 @@ mod tests {
         }
 
         let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
-        let mut console = Console::builder()
+        let console = Console::builder()
             .width(40)
             .markup(false)
             .file(Box::new(buffer))
@@ -1605,7 +1605,7 @@ mod tests {
     fn test_print_exception_renders_traceback() {
         use crate::renderables::{Traceback, TracebackFrame};
 
-        let mut console = Console::builder().width(60).markup(false).build();
+        let console = Console::builder().width(60).markup(false).build();
         console.begin_capture();
 
         let traceback = Traceback::new(
@@ -1768,7 +1768,7 @@ mod tests {
         }
 
         let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
-        let mut console = Console::builder()
+        let console = Console::builder()
             .markup(false)
             .file(Box::new(buffer))
             .build();
@@ -1899,7 +1899,7 @@ mod tests {
     fn test_export_html_includes_renderable_content() {
         use crate::renderables::{Column, Panel, Table, Tree, TreeNode};
 
-        let mut console = Console::builder().width(30).build();
+        let console = Console::builder().width(30).build();
         console.begin_capture();
 
         let mut table = Table::new().with_column(Column::new("Col"));
@@ -2201,7 +2201,7 @@ mod tests {
 
     #[test]
     fn test_capture_empty() {
-        let mut console = Console::new();
+        let console = Console::new();
         console.begin_capture();
         let segments = console.end_capture();
         assert!(segments.is_empty());
@@ -2224,7 +2224,7 @@ mod tests {
         }
 
         let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
-        let mut console = Console::builder()
+        let console = Console::builder()
             .width(80)
             .markup(true)
             .color_system(ColorSystem::TrueColor)
@@ -2256,7 +2256,7 @@ mod tests {
         }
 
         let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
-        let mut console = Console::builder()
+        let console = Console::builder()
             .width(80)
             .markup(false)
             .file(Box::new(buffer))
