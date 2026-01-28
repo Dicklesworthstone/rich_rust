@@ -139,6 +139,44 @@ pub fn muted(text: &str) -> String {
     format!("[brand.muted]{}[/]", text)
 }
 
+/// Create a key-value row suitable for panels or lists.
+///
+/// Returns a formatted string with the key styled as a label and value as-is:
+/// `"[dim]key:[/] value"`
+///
+/// # Example
+/// ```ignore
+/// let row = kv_row("Version", "1.2.3");
+/// // Returns: "[dim]Version:[/] 1.2.3"
+/// ```
+#[must_use]
+pub fn kv_row(key: &str, value: &str) -> String {
+    format!("[dim]{}:[/] {}", key, value)
+}
+
+/// Create a key-value row with custom key and value styles.
+///
+/// # Example
+/// ```ignore
+/// let row = kv_row_styled("Status", "status.ok", "Running", "status.ok");
+/// ```
+#[must_use]
+pub fn kv_row_styled(key: &str, key_style: &str, value: &str, value_style: &str) -> String {
+    format!("[{}]{}:[/] [{}]{}[/]", key_style, key, value_style, value)
+}
+
+/// Generic badge helper that wraps text with a style.
+///
+/// # Example
+/// ```ignore
+/// let badge = badge("NEW", "brand.accent");
+/// // Returns: "[brand.accent] NEW [/]"
+/// ```
+#[must_use]
+pub fn badge(text: &str, style: &str) -> String {
+    format!("[{}] {} [/]", style, text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,5 +224,25 @@ mod tests {
         let rule = divider();
         // Just verify it compiles and creates a Rule
         let _ = rule;
+    }
+
+    #[test]
+    fn test_kv_row_formatting() {
+        assert_eq!(kv_row("Name", "Alice"), "[dim]Name:[/] Alice");
+        assert_eq!(kv_row("Version", "1.0.0"), "[dim]Version:[/] 1.0.0");
+    }
+
+    #[test]
+    fn test_kv_row_styled_formatting() {
+        assert_eq!(
+            kv_row_styled("Status", "bold", "Running", "status.ok"),
+            "[bold]Status:[/] [status.ok]Running[/]"
+        );
+    }
+
+    #[test]
+    fn test_badge_formatting() {
+        assert_eq!(badge("NEW", "brand.accent"), "[brand.accent] NEW [/]");
+        assert_eq!(badge("INFO", "status.info"), "[status.info] INFO [/]");
     }
 }
