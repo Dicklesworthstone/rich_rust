@@ -16,6 +16,8 @@ mod state;
 mod theme;
 #[path = "demo_showcase/timing.rs"]
 mod timing;
+#[path = "demo_showcase/traceback_scene.rs"]
+mod traceback_scene;
 #[path = "demo_showcase/typography.rs"]
 mod typography;
 
