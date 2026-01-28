@@ -4,6 +4,10 @@ use std::path::PathBuf;
 mod state;
 #[path = "demo_showcase/theme.rs"]
 mod theme;
+#[path = "demo_showcase/timing.rs"]
+mod timing;
+#[path = "demo_showcase/typography.rs"]
+mod typography;
 
 /// Standalone rich_rust showcase binary (roadmap).
 ///
@@ -35,10 +39,18 @@ fn main() {
         return;
     }
 
-    let state = if cfg.quick {
-        state::SharedDemoState::new(1, cfg.seed)
+    let timing = timing::Timing::new(cfg.speed, cfg.quick);
+    let mut rng = timing::DemoRng::new(cfg.seed);
+    let run_id = 1000 + rng.gen_range(0..9000);
+
+    // Touch these helpers early so they stay exercised in non-test builds.
+    let _scaled = timing.scale(std::time::Duration::from_millis(150));
+    timing.sleep(std::time::Duration::from_millis(1));
+
+    let state = if timing.quick() {
+        state::SharedDemoState::new(run_id, cfg.seed)
     } else {
-        state::SharedDemoState::demo_seeded(1, cfg.seed)
+        state::SharedDemoState::demo_seeded(run_id, cfg.seed)
     };
 
     state.update(|demo| {
