@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use rich_rust::cells::cell_len;
 use rich_rust::console::Console;
 use rich_rust::renderables::align::{Align, AlignMethod};
 use rich_rust::renderables::columns::Columns;
@@ -196,12 +197,57 @@ fn render_padding_demo(console: &Console) {
     console.print("[hint]Padding creates breathing room around content for a polished look.[/]");
 }
 
+/// Render panels side by side by combining their rendered lines horizontally.
+fn render_panels_side_by_side(
+    console: &Console,
+    panels: &[Panel<'_>],
+    panel_width: usize,
+    gutter: usize,
+) {
+    // Render each panel to plain text and split into lines
+    let rendered: Vec<Vec<String>> = panels
+        .iter()
+        .map(|p| {
+            let text = p.render_plain(panel_width);
+            text.lines().map(String::from).collect()
+        })
+        .collect();
+
+    // Find max height (number of lines)
+    let max_lines = rendered.iter().map(|r| r.len()).max().unwrap_or(0);
+
+    // Find width of each panel (by measuring actual rendered content)
+    let widths: Vec<usize> = rendered
+        .iter()
+        .map(|lines| lines.iter().map(|l| cell_len(l)).max().unwrap_or(0))
+        .collect();
+
+    // Build combined lines
+    for line_idx in 0..max_lines {
+        let mut combined = String::new();
+        for (panel_idx, lines) in rendered.iter().enumerate() {
+            if panel_idx > 0 {
+                combined.push_str(&" ".repeat(gutter));
+            }
+            let line = lines.get(line_idx).map(|s| s.as_str()).unwrap_or("");
+            let line_width = cell_len(line);
+            let this_panel_width = widths[panel_idx];
+            combined.push_str(line);
+            // Pad to panel width for alignment
+            if line_width < this_panel_width {
+                combined.push_str(&" ".repeat(this_panel_width - line_width));
+            }
+        }
+        console.print(&combined);
+    }
+}
+
 /// Render practical composition demonstration.
 fn render_composition_demo(console: &Console, cfg: &Config) {
     console.print("[brand.accent]Composition: Putting It Together[/]");
     console.print("");
 
-    // Create a multi-card layout using panels in columns
+    // Create a multi-card layout using panels side by side
     let card1 = Panel::from_text(
         "[bold green]Production[/]\n\n\
          Status: Healthy\n\
@@ -232,12 +278,8 @@ fn render_composition_demo(console: &Console, cfg: &Config) {
     .width(28)
     .safe_box(cfg.is_safe_box());
 
-    // Print cards side by side (manual approach since panels can't go in Columns directly)
-    console.print_renderable(&card1);
-    console.print("");
-    console.print_renderable(&card2);
-    console.print("");
-    console.print_renderable(&card3);
+    // Render cards side by side
+    render_panels_side_by_side(console, &[card1, card2, card3], 28, 2);
 
     console.print("");
 

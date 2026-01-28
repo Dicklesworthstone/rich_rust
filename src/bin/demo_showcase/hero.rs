@@ -71,33 +71,79 @@ impl Scene for HeroScene {
     }
 }
 
+/// Calculate padding to center content of given visible width within total width.
+fn center_padding(content_visible_width: usize, total_width: usize) -> String {
+    if content_visible_width >= total_width {
+        return String::new();
+    }
+    let padding = (total_width - content_visible_width) / 2;
+    " ".repeat(padding)
+}
+
 /// Render the big branded title with tagline.
 fn render_brand_title(console: &Console) {
     let width = console.width();
 
     // Use compact layout for narrow terminals
     if width < 50 {
-        // Narrow layout: simple centered text
-        console.print("[brand.title]┌────────────────────────┐[/]");
-        console.print("[brand.title]│[/] [bold #a78bfa]✦ NEBULA DEPLOY ✦[/] [brand.title]│[/]");
-        console.print("[brand.title]└────────────────────────┘[/]");
+        // Narrow layout: simple centered text using a panel
+        let title_text = "✦ NEBULA DEPLOY ✦";
+        let box_width = title_text.chars().count() + 4; // │ + space + title + space + │
+        let inner_width = box_width - 2;
+
+        let top = format!("┌{}┐", "─".repeat(inner_width));
+        let mid_content = format!(" {} ", title_text);
+        let bot = format!("└{}┘", "─".repeat(inner_width));
+
+        let pad = center_padding(box_width, width);
+
+        console.print(&format!("{pad}[brand.title]{top}[/]"));
+        console.print(&format!(
+            "{pad}[brand.title]│[/][bold #a78bfa]{mid_content}[/][brand.title]│[/]"
+        ));
+        console.print(&format!("{pad}[brand.title]{bot}[/]"));
         console.print("");
-        console.print("[brand.subtitle]Beautiful terminal output[/]");
-        console.print("[brand.muted]    powered by rich_rust[/]");
+
+        let subtitle = "Beautiful terminal output";
+        let pad_sub = center_padding(subtitle.len(), width);
+        console.print(&format!("{pad_sub}[brand.subtitle]{subtitle}[/]"));
+
+        let powered = "powered by rich_rust";
+        let pad_pow = center_padding(powered.len(), width);
+        console.print(&format!("{pad_pow}[brand.muted]{powered}[/]"));
     } else {
-        // Full-width layout with spaced letters
-        console.print("[brand.title]╭───────────────────────────────────────────╮[/]");
-        console
-            .print("[brand.title]│[/]                                           [brand.title]│[/]");
-        console.print(
-            "[brand.title]│[/]     [bold #a78bfa]✦  N E B U L A   D E P L O Y  ✦[/]     [brand.title]│[/]",
-        );
-        console
-            .print("[brand.title]│[/]                                           [brand.title]│[/]");
-        console.print("[brand.title]╰───────────────────────────────────────────╯[/]");
+        // Full-width layout with spaced letters - use box width based on content
+        let title_text = "✦  N E B U L A   D E P L O Y  ✦";
+        let inner_padding = 4; // padding on each side inside the box
+        let box_width = title_text.chars().count() + (inner_padding * 2) + 2; // content + padding + borders
+        let inner_width = box_width - 2;
+
+        let top = format!("╭{}╮", "─".repeat(inner_width));
+        let empty_line = format!("│{}│", " ".repeat(inner_width));
+        let bot = format!("╰{}╯", "─".repeat(inner_width));
+
+        // Centered title within the box
+        let title_inner_pad = " ".repeat(inner_padding);
+        let title_line_content = format!("{title_inner_pad}{title_text}{title_inner_pad}");
+
+        let pad = center_padding(box_width, width);
+
+        console.print(&format!("{pad}[brand.title]{top}[/]"));
+        console.print(&format!("{pad}[brand.title]{empty_line}[/]"));
+        console.print(&format!(
+            "{pad}[brand.title]│[/][bold #a78bfa]{title_line_content}[/][brand.title]│[/]"
+        ));
+        console.print(&format!("{pad}[brand.title]{empty_line}[/]"));
+        console.print(&format!("{pad}[brand.title]{bot}[/]"));
         console.print("");
-        console.print("[brand.subtitle]      Beautiful terminal output for Rust[/]");
-        console.print("[brand.muted]             powered by rich_rust[/]");
+
+        let subtitle = "Beautiful terminal output for Rust";
+        let pad_sub = center_padding(subtitle.len(), width);
+        console.print(&format!("{pad_sub}[brand.subtitle]{subtitle}[/]"));
+
+        let powered = "powered by rich_rust";
+        let pad_pow = center_padding(powered.len(), width);
+        console.print(&format!("{pad_pow}[brand.muted]{powered}[/]"));
     }
 }
 
