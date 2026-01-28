@@ -14,6 +14,8 @@ mod export_scene;
 mod hero;
 #[path = "demo_showcase/json_scene.rs"]
 mod json_scene;
+#[path = "demo_showcase/keys.rs"]
+mod keys;
 #[path = "demo_showcase/layout_scene.rs"]
 mod layout_scene;
 #[path = "demo_showcase/log_pane.rs"]

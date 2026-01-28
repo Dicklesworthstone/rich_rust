@@ -9,6 +9,7 @@
 
 use std::time::Duration;
 
+use crate::keys;
 use crate::state::{LogLevel, PipelineStage, SharedDemoState, StageStatus};
 use crate::timing::Timing;
 
@@ -102,6 +103,8 @@ pub fn stage_config(name: &str) -> StageConfig {
 pub enum StageResult {
     Success,
     Failed,
+    /// User requested to quit early via keyboard input.
+    Cancelled,
 }
 
 /// Simulate a single pipeline stage with progress updates.
@@ -158,6 +161,18 @@ pub fn simulate_stage(
     let step_duration = config.duration / steps;
 
     for step in 1..=steps {
+        // Check for user quit request (non-blocking)
+        if keys::should_quit() {
+            state.update(|demo| {
+                if stage_idx < demo.pipeline.len() {
+                    demo.pipeline[stage_idx].status = StageStatus::Pending;
+                    demo.pipeline[stage_idx].eta = None;
+                }
+                demo.push_log(LogLevel::Info, "Pipeline cancelled by user");
+            });
+            return StageResult::Cancelled;
+        }
+
         timing.sleep(step_duration);
 
         let progress = step as f64 / steps as f64;
@@ -237,11 +252,20 @@ pub fn run_pipeline(
     for idx in 0..stage_count {
         let result = simulate_stage(state, idx, timing, rng, force_success);
 
-        if result == StageResult::Failed {
-            state.update(|demo| {
-                demo.headline = format!("Pipeline failed at stage {}/{}", idx + 1, stage_count);
-            });
-            return false;
+        match result {
+            StageResult::Success => continue,
+            StageResult::Failed => {
+                state.update(|demo| {
+                    demo.headline = format!("Pipeline failed at stage {}/{}", idx + 1, stage_count);
+                });
+                return false;
+            }
+            StageResult::Cancelled => {
+                state.update(|demo| {
+                    demo.headline = "Pipeline cancelled".to_string();
+                });
+                return false;
+            }
         }
     }
 
