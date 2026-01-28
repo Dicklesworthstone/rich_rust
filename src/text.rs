@@ -488,6 +488,39 @@ impl Text {
         }
     }
 
+    /// Join an iterator of Text objects with this text as separator.
+    ///
+    /// Creates a new Text by concatenating all items with this text inserted
+    /// between each pair. Similar to `str::join()` but for styled Text.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let separator = Text::new(", ");
+    /// let items = vec![Text::new("a"), Text::new("b"), Text::new("c")];
+    /// let joined = separator.join(&items);
+    /// assert_eq!(joined.plain(), "a, b, c");
+    /// ```
+    #[must_use]
+    pub fn join<'a, I>(&self, items: I) -> Self
+    where
+        I: IntoIterator<Item = &'a Self>,
+    {
+        let mut result = Self::new("");
+        let mut first = true;
+
+        for item in items {
+            if first {
+                first = false;
+            } else {
+                result.append_text(self);
+            }
+            result.append_text(item);
+        }
+
+        result
+    }
+
     /// Split text at newlines.
     #[must_use]
     pub fn split_lines(&self) -> Vec<Self> {
@@ -1912,5 +1945,46 @@ mod tests {
         text.truncate(5, OverflowMethod::Crop, true);
         assert_eq!(text.cell_len(), 5);
         assert_eq!(text.plain(), "hi   ");
+    }
+
+    #[test]
+    fn test_join_basic() {
+        let separator = Text::new(", ");
+        let items = vec![Text::new("a"), Text::new("b"), Text::new("c")];
+        let joined = separator.join(&items);
+        assert_eq!(joined.plain(), "a, b, c");
+    }
+
+    #[test]
+    fn test_join_empty() {
+        let separator = Text::new(", ");
+        let items: Vec<Text> = vec![];
+        let joined = separator.join(&items);
+        assert_eq!(joined.plain(), "");
+    }
+
+    #[test]
+    fn test_join_single() {
+        let separator = Text::new(", ");
+        let items = vec![Text::new("only")];
+        let joined = separator.join(&items);
+        assert_eq!(joined.plain(), "only");
+    }
+
+    #[test]
+    fn test_join_preserves_styles() {
+        let mut separator = Text::new(" | ");
+        separator.stylize_all(Style::new().bold());
+
+        let mut item1 = Text::new("a");
+        item1.stylize_all(Style::new().italic());
+        let item2 = Text::new("b");
+
+        let items = vec![item1, item2];
+        let joined = separator.join(&items);
+
+        assert_eq!(joined.plain(), "a | b");
+        // Should have spans for "a" (italic), " | " (bold), and potentially "b"
+        assert!(joined.spans().len() >= 2);
     }
 }

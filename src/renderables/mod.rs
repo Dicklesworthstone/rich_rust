@@ -10,6 +10,7 @@
 //! - [`Columns`]: Multi-column text layout
 //! - [`Align`]: Text alignment utilities
 //! - [`Emoji`]: Single emoji renderable (Rich-style)
+//! - [`Group`]: Combine multiple renderables into one
 //!
 //! # Examples
 //!
@@ -100,6 +101,7 @@ pub trait Renderable {
 pub mod align;
 pub mod columns;
 pub mod emoji;
+pub mod group;
 pub mod layout;
 pub mod padding;
 pub mod panel;
@@ -114,6 +116,7 @@ pub mod tree;
 pub use align::{Align, AlignLines, AlignMethod, VerticalAlignMethod, align_text};
 pub use columns::Columns;
 pub use emoji::{Emoji, NoEmoji};
+pub use group::{Group, group};
 pub use layout::{Layout, LayoutSplitter, Region};
 pub use padding::{Padding, PaddingDimensions};
 pub use panel::Panel;
@@ -170,6 +173,12 @@ impl Renderable for str {
 impl Renderable for String {
     fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
         self.as_str().render(console, options)
+    }
+}
+
+impl<T: Renderable + ?Sized> Renderable for &T {
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        (*self).render(console, options)
     }
 }
 
