@@ -271,8 +271,94 @@ Target thresholds (from TESTING.md):
 
 1. **Maintain current coverage levels** - The project has strong test coverage
 2. **Focus on edge cases** - Most gaps are in unusual conditions, not core paths
-3. **Add benchmarks** - Performance regression detection is missing
+3. **Monitor performance baselines** - Use the benchmark suite for regression detection
 4. **Automate coverage tracking** - Integrate with CI for trend monitoring
+
+---
+
+## Performance Baselines
+
+The project includes a comprehensive Criterion benchmark suite in `benches/render_bench.rs`.
+
+### Running Benchmarks
+
+```bash
+# Run all benchmarks
+cargo bench --bench render_bench
+
+# Run specific benchmarks
+cargo bench --bench render_bench -- table
+cargo bench --bench render_bench -- style_parse
+```
+
+### Baseline Results (2026-01-28)
+
+| Benchmark | Time | Notes |
+|-----------|------|-------|
+| **Text Rendering** | | |
+| text_render | ~500 ns | Styled text with spans |
+| text_wrap_80 | ~2.5 µs | Wrap to 80 columns |
+| text_wrap_40 | ~3.5 µs | Wrap to 40 columns |
+| **Style Operations** | | |
+| style_parse_simple | ~150 ns | "bold red" |
+| style_parse_complex | ~350 ns | "bold italic underline red on blue" |
+| style_render_simple | ~180 ns | Single attribute |
+| style_render_complex | ~350 ns | Multiple attributes + colors |
+| style_make_ansi_codes | ~150 ns | Generate ANSI escape codes |
+| **Color Operations** | | |
+| color_parse_named | ~50 ns | "red" (cached) |
+| color_parse_hex | ~200 ns | "#ff5733" |
+| color_parse_rgb | ~250 ns | "rgb(255, 87, 51)" |
+| color_downgrade_to_256 | ~50 ns | TrueColor to 256-color |
+| color_downgrade_to_16 | ~100 ns | TrueColor to 16-color |
+| **Cell Width** | | |
+| cell_len_ascii_short | ~15 ns | 13 ASCII chars |
+| cell_len_cjk | ~35 ns | CJK characters |
+| cell_len_emoji | ~39 ns | Text with emoji |
+| cell_len_mixed | ~35 ns | Mixed ASCII/CJK/emoji |
+| **Markup Parsing** | | |
+| markup_parse_simple | ~1.5 µs | "[bold]Hello[/bold]" |
+| markup_parse_nested | ~7.7 µs | Nested tags |
+| markup_parse_long | ~49 µs | 20 repeated tags |
+| markup_parse_plain | ~200 ns | No markup (fast path) |
+| **Renderables** | | |
+| table_render_3x3 | ~30 µs | Small table |
+| table_render_10x5 | ~156 µs | Medium table |
+| panel_render | ~5.5 µs | Panel with title/subtitle |
+| tree_render_simple | ~3.7 µs | 3 children |
+| tree_render_deep | ~35 µs | 4-level nested tree |
+| rule_simple | ~218 ns | Plain horizontal rule |
+| rule_with_title | ~1.5 µs | Rule with title |
+| **Stress Tests** | | |
+| stress_text_render_10kb | ~10 ms | 10KB of text |
+| stress_text_wrap_10kb | ~50 ms | Wrap 10KB text |
+| stress_table_50x10 | ~2 ms | 50x10 table |
+
+### Performance Targets
+
+| Category | Target | Rationale |
+|----------|--------|-----------|
+| Style operations | < 1 µs | Called per span |
+| Cell width | < 100 ns | Called per character |
+| Markup parsing | < 10 µs | Called once per print |
+| Small renderables | < 50 µs | User-perceptible delay |
+| Large renderables | < 100 ms | Acceptable for batch |
+
+### Regression Detection
+
+To catch performance regressions:
+
+1. Run benchmarks before and after changes:
+   ```bash
+   # Save baseline
+   cargo bench --bench render_bench -- --save-baseline main
+
+   # Compare after changes
+   cargo bench --bench render_bench -- --baseline main
+   ```
+
+2. Look for > 10% regressions in hot paths (style, cell width)
+3. Look for > 25% regressions in render operations
 
 ---
 
