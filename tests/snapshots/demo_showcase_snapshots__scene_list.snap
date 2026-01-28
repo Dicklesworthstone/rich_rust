@@ -11,7 +11,8 @@ expression: normalized
 │ dashboard        │ Live split-screen dashboard (services + pipeline + logs). │
 │ deep_dive_markdo │ Runbook / release notes (feature: markdown).              │
 │ wn               │                                                           │
-│ deep_dive_syntax │ Config/code snippet view (feature: syntax).               │
+│ syntax           │ Syntax deep-dive: code highlighting, line numbers, and    │
+│                  │ themes.                                                   │
 │ json             │ JSON deep-dive: pretty-printing, theming, and API         │
 │                  │ payloads.                                                 │
 │ table            │ Table showcase: styles, alignment, badges, and ASCII      │

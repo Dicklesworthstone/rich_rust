@@ -66,12 +66,12 @@ fn smoke_deep_dive_markdown() {
 }
 
 #[test]
-fn smoke_deep_dive_syntax() {
-    let result = smoke_runner("deep_dive_syntax").run().expect("should run");
+fn smoke_syntax() {
+    let result = smoke_runner("syntax").run().expect("should run");
     assertions::assert_success(&result);
     assert!(
         result.stdout_contains("syntax") || result.stdout_contains("Syntax"),
-        "deep_dive_syntax scene should produce recognizable output:\n{}",
+        "syntax scene should produce recognizable output:\n{}",
         result.diagnostic_output()
     );
 }

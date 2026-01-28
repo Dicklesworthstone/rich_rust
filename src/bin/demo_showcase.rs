@@ -20,6 +20,8 @@ mod log_pane;
 mod panel_scene;
 #[path = "demo_showcase/scenes.rs"]
 mod scenes;
+#[path = "demo_showcase/syntax_scene.rs"]
+mod syntax_scene;
 #[path = "demo_showcase/state.rs"]
 mod state;
 #[path = "demo_showcase/table_scene.rs"]

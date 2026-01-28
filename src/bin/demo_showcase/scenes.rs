@@ -19,6 +19,7 @@ use crate::hero::HeroScene;
 use crate::json_scene::JsonScene;
 use crate::layout_scene::LayoutScene;
 use crate::panel_scene::PanelScene;
+use crate::syntax_scene::SyntaxScene;
 use crate::table_scene::TableScene;
 use crate::traceback_scene::TracebackScene;
 use crate::tracing_scene::TracingScene;
@@ -202,10 +203,7 @@ pub fn build_registry() -> SceneRegistry {
         "deep_dive_markdown",
         "Runbook / release notes (feature: markdown).",
     ));
-    registry.register(PlaceholderScene::new(
-        "deep_dive_syntax",
-        "Config/code snippet view (feature: syntax).",
-    ));
+    registry.register(SyntaxScene::new());
     registry.register(JsonScene::new());
     registry.register(TableScene::new());
     registry.register(PanelScene::new());
@@ -281,7 +279,7 @@ mod tests {
             "hero",
             "dashboard",
             "deep_dive_markdown",
-            "deep_dive_syntax",
+            "syntax",
             "json",
             "table",
             "panels",
