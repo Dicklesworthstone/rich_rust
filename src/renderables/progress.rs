@@ -934,7 +934,9 @@ pub struct TotalFileSizeColumn {
 impl TotalFileSizeColumn {
     #[must_use]
     pub fn new(size: u64) -> Self {
-        Self { inner: FileSizeColumn::new(size) }
+        Self {
+            inner: FileSizeColumn::new(size),
+        }
     }
 
     #[must_use]
@@ -1052,7 +1054,11 @@ impl DownloadColumn {
             let unit_str = parts[0];
             let total_value = parts[1];
             let current_parts: Vec<&str> = current_str.rsplitn(2, ' ').collect();
-            let current_value = if current_parts.len() == 2 { current_parts[1] } else { &current_str };
+            let current_value = if current_parts.len() == 2 {
+                current_parts[1]
+            } else {
+                &current_str
+            };
             format!("{current_value}/{total_value} {unit_str}")
         } else {
             format!("{current_str}/{total_str}")
@@ -1070,11 +1076,18 @@ impl DownloadColumn {
             let unit_str = parts[0];
             let total_value = parts[1];
             let current_parts: Vec<&str> = current_str.rsplitn(2, ' ').collect();
-            let current_value = if current_parts.len() == 2 { current_parts[1] } else { &current_str };
+            let current_value = if current_parts.len() == 2 {
+                current_parts[1]
+            } else {
+                &current_str
+            };
             vec![
                 Segment::new(current_value.to_string(), Some(self.current_style.clone())),
                 Segment::new("/", Some(self.separator_style.clone())),
-                Segment::new(format!("{total_value} {unit_str}"), Some(self.total_style.clone())),
+                Segment::new(
+                    format!("{total_value} {unit_str}"),
+                    Some(self.total_style.clone()),
+                ),
             ]
         } else {
             vec![
@@ -1145,7 +1158,9 @@ impl TransferSpeedColumn {
     pub fn update_from_transfer(&mut self, bytes: u64, duration: Duration) {
         let secs = duration.as_secs_f64();
         #[allow(clippy::cast_precision_loss)]
-        { self.speed = if secs > 0.0 { bytes as f64 / secs } else { 0.0 }; }
+        {
+            self.speed = if secs > 0.0 { bytes as f64 / secs } else { 0.0 };
+        }
     }
 
     #[must_use]
@@ -1436,5 +1451,99 @@ mod tests {
         bar.update_bytes(1_000_000);
         assert!(bar.is_finished());
         assert!((bar.progress() - 1.0).abs() < f64::EPSILON);
+    }
+
+    // =========================================================================
+    // Standalone Column Tests
+    // =========================================================================
+
+    #[test]
+    fn test_file_size_column_decimal() {
+        let column = FileSizeColumn::new(1_500_000);
+        assert_eq!(column.render_plain(), "1.5 MB");
+        assert_eq!(column.size(), 1_500_000);
+    }
+
+    #[test]
+    fn test_file_size_column_binary() {
+        let column = FileSizeColumn::new(1_048_576).unit(SizeUnit::Binary);
+        assert_eq!(column.render_plain(), "1.0 MiB");
+    }
+
+    #[test]
+    fn test_file_size_column_precision() {
+        let column = FileSizeColumn::new(1_234_567).precision(2);
+        assert_eq!(column.render_plain(), "1.23 MB");
+    }
+
+    #[test]
+    fn test_file_size_column_set_size() {
+        let mut column = FileSizeColumn::new(1000);
+        column.set_size(2_000_000);
+        assert_eq!(column.size(), 2_000_000);
+        assert_eq!(column.render_plain(), "2.0 MB");
+    }
+
+    #[test]
+    fn test_total_file_size_column() {
+        let column = TotalFileSizeColumn::new(10_000_000);
+        assert_eq!(column.render_plain(), "10.0 MB");
+    }
+
+    #[test]
+    fn test_download_column() {
+        let column = DownloadColumn::new(1_500_000, 10_000_000);
+        assert_eq!(column.render_plain(), "1.5/10.0 MB");
+        assert_eq!(column.current(), 1_500_000);
+        assert_eq!(column.total(), 10_000_000);
+    }
+
+    #[test]
+    fn test_download_column_binary() {
+        let column = DownloadColumn::new(1_048_576, 10_485_760).unit(SizeUnit::Binary);
+        assert_eq!(column.render_plain(), "1.0/10.0 MiB");
+    }
+
+    #[test]
+    fn test_download_column_update() {
+        let mut column = DownloadColumn::new(0, 1000);
+        column.set_current(500);
+        assert_eq!(column.current(), 500);
+        column.set_total(2000);
+        assert_eq!(column.total(), 2000);
+    }
+
+    #[test]
+    fn test_transfer_speed_column() {
+        let column = TransferSpeedColumn::new(1_500_000.0);
+        assert_eq!(column.render_plain(), "1.5 MB/s");
+        assert!((column.speed() - 1_500_000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_transfer_speed_column_binary() {
+        let column = TransferSpeedColumn::new(1_048_576.0).unit(SizeUnit::Binary);
+        assert_eq!(column.render_plain(), "1.0 MiB/s");
+    }
+
+    #[test]
+    fn test_transfer_speed_from_transfer() {
+        let column = TransferSpeedColumn::from_transfer(1_000_000, Duration::from_secs(1));
+        assert!((column.speed() - 1_000_000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_transfer_speed_update() {
+        let mut column = TransferSpeedColumn::new(0.0);
+        column.set_speed(5_000_000.0);
+        assert!((column.speed() - 5_000_000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_column_default_impls() {
+        assert_eq!(FileSizeColumn::default().size(), 0);
+        assert_eq!(TotalFileSizeColumn::default().render_plain(), "0 bytes");
+        assert_eq!(DownloadColumn::default().current(), 0);
+        assert!((TransferSpeedColumn::default().speed() - 0.0).abs() < f64::EPSILON);
     }
 }

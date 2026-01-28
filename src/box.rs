@@ -355,6 +355,51 @@ pub const SIMPLE_HEAVY: BoxChars = BoxChars::new(
     false,
 );
 
+/// Horizontals only - no vertical dividers between columns.
+///
+/// Creates a clean look with just horizontal lines at header/footer.
+pub const HORIZONTALS: BoxChars = BoxChars::new(
+    [' ', '\u{2500}', '\u{2500}', ' '], //  ──
+    [' ', ' ', ' ', ' '],               //    (no dividers)
+    [' ', '\u{2500}', '\u{2500}', ' '], //  ──
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' '],
+    [' ', '\u{2500}', '\u{2500}', ' '], //  ──
+    [' ', ' ', ' ', ' '],
+    [' ', '\u{2500}', '\u{2500}', ' '], //  ──
+    false,
+);
+
+/// Markdown-compatible table format.
+///
+/// Uses pipes and dashes that render correctly in Markdown viewers.
+pub const MARKDOWN: BoxChars = BoxChars::new(
+    [' ', ' ', ' ', ' '], // No top border
+    ['|', ' ', '|', '|'], // | | |
+    ['|', '-', '|', '|'], // |-|-|
+    ['|', '-', '|', '|'], // |-|-|
+    ['|', ' ', '|', '|'], // | | | (no separator for body rows)
+    ['|', '-', '|', '|'], // |-|-|
+    ['|', ' ', '|', '|'], // | | |
+    [' ', ' ', ' ', ' '], // No bottom border
+    true,                 // ASCII-safe
+);
+
+/// Minimal with heavy (thick) header separator.
+///
+/// Like MINIMAL but with a heavy line under the header.
+pub const MINIMAL_HEAVY_HEAD: BoxChars = BoxChars::new(
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', '\u{2502}', ' '],        //   │
+    [' ', '\u{2501}', '\u{2547}', ' '], //  ━╇ (heavy line with mixed cross)
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', '\u{2502}', ' '], //   │
+    [' ', ' ', ' ', ' '],
+    false,
+);
+
 /// Get a box style by name.
 #[must_use]
 pub fn get_box(name: &str) -> Option<&'static BoxChars> {
@@ -368,8 +413,11 @@ pub fn get_box(name: &str) -> Option<&'static BoxChars> {
         "heavy" => Some(&HEAVY),
         "heavy_head" => Some(&HEAVY_HEAD),
         "minimal" => Some(&MINIMAL),
+        "minimal_heavy_head" => Some(&MINIMAL_HEAVY_HEAD),
         "simple" => Some(&SIMPLE),
         "simple_heavy" => Some(&SIMPLE_HEAVY),
+        "horizontals" => Some(&HORIZONTALS),
+        "markdown" => Some(&MARKDOWN),
         _ => None,
     }
 }
@@ -597,8 +645,47 @@ mod tests {
         assert!(get_box("heavy").is_some());
         assert!(get_box("heavy_head").is_some());
         assert!(get_box("minimal").is_some());
+        assert!(get_box("minimal_heavy_head").is_some());
         assert!(get_box("simple").is_some());
         assert!(get_box("simple_heavy").is_some());
+        assert!(get_box("horizontals").is_some());
+        assert!(get_box("markdown").is_some());
+    }
+
+    #[test]
+    fn test_horizontals_box() {
+        const { assert!(!HORIZONTALS.ascii) };
+        // No vertical dividers in cells
+        assert_eq!(HORIZONTALS.head[2], ' ');
+        // Has horizontal lines at top
+        assert_eq!(HORIZONTALS.top[1], '\u{2500}'); // ─
+        // Has horizontal lines at header row
+        assert_eq!(HORIZONTALS.head_row[1], '\u{2500}'); // ─
+    }
+
+    #[test]
+    fn test_markdown_box() {
+        const { assert!(MARKDOWN.ascii) };
+        // Uses pipes for cell dividers
+        assert_eq!(MARKDOWN.head[0], '|');
+        assert_eq!(MARKDOWN.head[2], '|');
+        // Uses dashes for separators
+        assert_eq!(MARKDOWN.head_row[1], '-');
+        // No top or bottom border
+        assert_eq!(MARKDOWN.top[0], ' ');
+        assert_eq!(MARKDOWN.bottom[0], ' ');
+    }
+
+    #[test]
+    fn test_minimal_heavy_head_box() {
+        const { assert!(!MINIMAL_HEAVY_HEAD.ascii) };
+        // No outer border
+        assert_eq!(MINIMAL_HEAVY_HEAD.top[0], ' ');
+        assert_eq!(MINIMAL_HEAVY_HEAD.bottom[0], ' ');
+        // Light vertical divider in cells
+        assert_eq!(MINIMAL_HEAVY_HEAD.head[2], '\u{2502}'); // │
+        // Heavy horizontal line in head_row
+        assert_eq!(MINIMAL_HEAVY_HEAD.head_row[1], '\u{2501}'); // ━
     }
 
     #[test]

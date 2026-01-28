@@ -121,7 +121,10 @@ pub use layout::{Layout, LayoutSplitter, Region};
 pub use padding::{Padding, PaddingDimensions};
 pub use panel::Panel;
 pub use pretty::{Inspect, InspectOptions, Pretty, PrettyOptions, inspect};
-pub use progress::{BarStyle, ProgressBar, Spinner};
+pub use progress::{
+    BarStyle, DownloadColumn, FileSizeColumn, ProgressBar, Spinner, TotalFileSizeColumn,
+    TransferSpeedColumn,
+};
 pub use rule::Rule;
 pub use table::{Cell, Column, Row, Table, VerticalAlign};
 pub use traceback::{Traceback, TracebackFrame, print_exception};

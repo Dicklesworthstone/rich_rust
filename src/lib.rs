@@ -162,7 +162,7 @@ pub mod theme;
 pub mod prelude {
     pub use crate::r#box::BoxChars;
     pub use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
-    pub use crate::console::{Console, ConsoleOptions};
+    pub use crate::console::{Console, ConsoleOptions, LogLevel, LogOptions};
     pub use crate::emoji::EmojiVariant;
     pub use crate::filesize::{
         SizeUnit, binary, binary_speed, binary_with_precision, decimal, decimal_speed,
@@ -177,9 +177,9 @@ pub mod prelude {
     pub use crate::renderables::{
         Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, DownloadColumn, Emoji,
         FileSizeColumn, Inspect, InspectOptions, Layout, LayoutSplitter, PaddingDimensions, Panel,
-        Pretty, PrettyOptions, ProgressBar, Region, Row, Rule, Spinner, Table,
-        TotalFileSizeColumn, Traceback, TracebackFrame, TransferSpeedColumn, Tree, TreeGuides,
-        TreeNode, VerticalAlign, VerticalAlignMethod, align_text, inspect, print_exception,
+        Pretty, PrettyOptions, ProgressBar, Region, Row, Rule, Spinner, Table, TotalFileSizeColumn,
+        Traceback, TracebackFrame, TransferSpeedColumn, Tree, TreeGuides, TreeNode, VerticalAlign,
+        VerticalAlignMethod, align_text, inspect, print_exception,
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};

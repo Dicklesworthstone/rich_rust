@@ -84,6 +84,7 @@ use std::sync::{
     Arc, Mutex, Weak,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::SystemTime;
 
 use crate::color::ColorSystem;
 use crate::emoji;
@@ -1125,8 +1126,46 @@ impl Console {
     }
 
     /// Print a log message with a level indicator.
+    ///
+    /// This is a simple version that just shows the level prefix and message.
+    /// For timestamps and file/line info, use [`log_with_options`](Self::log_with_options).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use rich_rust::console::{Console, LogLevel};
+    ///
+    /// let console = Console::new();
+    /// console.log("Starting server", LogLevel::Info);
+    /// console.log("Something went wrong", LogLevel::Error);
+    /// ```
     pub fn log(&self, message: &str, level: LogLevel) {
-        let (prefix, style) = match level {
+        self.log_with_options(message, level, &LogOptions::new());
+    }
+
+    /// Print a log message with a level indicator, timestamp, and optional file/line info.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use rich_rust::console::{Console, LogLevel, LogOptions};
+    ///
+    /// let console = Console::new();
+    ///
+    /// // With timestamp
+    /// let opts = LogOptions::new().with_timestamp(true);
+    /// console.log_with_options("Server started", LogLevel::Info, &opts);
+    /// // Output: [12:34:56] [INFO] Server started
+    ///
+    /// // With timestamp and file/line
+    /// let opts = LogOptions::new()
+    ///     .with_timestamp(true)
+    ///     .with_path("src/main.rs", 42);
+    /// console.log_with_options("Debug info", LogLevel::Debug, &opts);
+    /// // Output: [12:34:56] src/main.rs:42 [DEBUG] Debug info
+    /// ```
+    pub fn log_with_options(&self, message: &str, level: LogLevel, options: &LogOptions) {
+        let (level_prefix, level_style) = match level {
             LogLevel::Debug => ("[DEBUG]", Style::parse("cyan").unwrap_or_default()),
             LogLevel::Info => ("[INFO]", Style::parse("green").unwrap_or_default()),
             LogLevel::Warning => ("[WARNING]", Style::parse("yellow").unwrap_or_default()),
@@ -1134,12 +1173,52 @@ impl Console {
         };
 
         if let Ok(mut file) = self.file.lock() {
-            let _ = self.print_to(
-                &mut *file,
-                prefix,
-                &PrintOptions::new().with_markup(false).with_style(style),
-            );
-            let _ = write!(file, " ");
+            // Print timestamp if enabled
+            if options.show_timestamp {
+                let timestamp = Self::format_timestamp(options.timestamp_format.as_deref());
+                let ts_style = Style::parse("dim").unwrap_or_default();
+                let _ = self.print_to(
+                    &mut *file,
+                    &timestamp,
+                    &PrintOptions::new().with_markup(false).with_style(ts_style),
+                );
+                let _ = write!(file, " ");
+            }
+
+            // Print file/line info if provided
+            if options.file_path.is_some() || options.line_number.is_some() {
+                let path_style = Style::parse("magenta").unwrap_or_default();
+                let path_info = match (&options.file_path, options.line_number) {
+                    (Some(path), Some(line)) => format!("{path}:{line}"),
+                    (Some(path), None) => path.clone(),
+                    (None, Some(line)) => format!(":{line}"),
+                    (None, None) => String::new(),
+                };
+                if !path_info.is_empty() {
+                    let _ = self.print_to(
+                        &mut *file,
+                        &path_info,
+                        &PrintOptions::new()
+                            .with_markup(false)
+                            .with_style(path_style),
+                    );
+                    let _ = write!(file, " ");
+                }
+            }
+
+            // Print level prefix if enabled
+            if options.show_level {
+                let _ = self.print_to(
+                    &mut *file,
+                    level_prefix,
+                    &PrintOptions::new()
+                        .with_markup(false)
+                        .with_style(level_style),
+                );
+                let _ = write!(file, " ");
+            }
+
+            // Print the message
             let _ = self.print_to(
                 &mut *file,
                 message,
@@ -1147,6 +1226,85 @@ impl Console {
             );
         }
     }
+
+    /// Format the current time as a timestamp string.
+    fn format_timestamp(format: Option<&str>) -> String {
+        let now = SystemTime::now();
+        let duration = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = duration.as_secs();
+
+        // Calculate hours, minutes, seconds (simplified - ignores timezone)
+        let hours = (secs % 86400) / 3600;
+        let minutes = (secs % 3600) / 60;
+        let seconds = secs % 60;
+
+        if let Some(fmt) = format {
+            // Simple substitution for common format codes
+            let mut result = fmt.to_string();
+            result = result.replace("%H", &format!("{hours:02}"));
+            result = result.replace("%M", &format!("{minutes:02}"));
+            result = result.replace("%S", &format!("{seconds:02}"));
+
+            // Date components (simplified - days since epoch)
+            let days = secs / 86400;
+            // Approximate: 1970-01-01 + days
+            // This is a simplified calculation - not accounting for leap years properly
+            let (year, month, day) = days_to_ymd(days);
+            result = result.replace("%Y", &format!("{year:04}"));
+            result = result.replace("%m", &format!("{month:02}"));
+            result = result.replace("%d", &format!("{day:02}"));
+
+            result
+        } else {
+            // Default format: [HH:MM:SS]
+            format!("[{hours:02}:{minutes:02}:{seconds:02}]")
+        }
+    }
+}
+
+/// Convert days since Unix epoch to year, month, day.
+/// This is a simplified calculation for timestamp formatting.
+fn days_to_ymd(days: u64) -> (u32, u32, u32) {
+    // Simplified calculation - approximation only
+    let mut year = 1970u32;
+    let mut remaining = days as u32;
+
+    // Count years
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if remaining < days_in_year {
+            break;
+        }
+        remaining -= days_in_year;
+        year += 1;
+    }
+
+    // Count months
+    let days_in_months: [u32; 12] = if is_leap_year(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 1u32;
+    for &days_in_month in &days_in_months {
+        if remaining < days_in_month {
+            break;
+        }
+        remaining -= days_in_month;
+        month += 1;
+    }
+
+    let day = remaining + 1;
+
+    (year, month, day)
+}
+
+/// Check if a year is a leap year.
+const fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
 fn control_param(params: &[i32], index: usize, default: i32) -> i32 {
@@ -1334,6 +1492,116 @@ pub enum LogLevel {
     Info,
     Warning,
     Error,
+}
+
+/// Options for controlling log output format.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use rich_rust::console::{Console, LogLevel, LogOptions};
+///
+/// let console = Console::new();
+///
+/// // Log with timestamp
+/// let opts = LogOptions::new().with_timestamp(true);
+/// console.log_with_options("Something happened", LogLevel::Info, &opts);
+///
+/// // Log with file/line info
+/// let opts = LogOptions::new()
+///     .with_timestamp(true)
+///     .with_path("src/main.rs", 42);
+/// console.log_with_options("Debug info", LogLevel::Debug, &opts);
+/// ```
+#[derive(Debug, Clone)]
+pub struct LogOptions {
+    /// Whether to show a timestamp.
+    pub show_timestamp: bool,
+    /// Custom timestamp format (strftime-like format, simplified).
+    /// If None, uses default format: "[HH:MM:SS]".
+    pub timestamp_format: Option<String>,
+    /// File path (e.g., "src/main.rs").
+    pub file_path: Option<String>,
+    /// Line number within the file.
+    pub line_number: Option<u32>,
+    /// Whether to show the log level prefix.
+    pub show_level: bool,
+    /// Whether to highlight keywords in the message.
+    pub highlight: bool,
+}
+
+impl Default for LogOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LogOptions {
+    /// Create new log options with default values.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            show_timestamp: false,
+            timestamp_format: None,
+            file_path: None,
+            line_number: None,
+            show_level: true,
+            highlight: false,
+        }
+    }
+
+    /// Enable or disable timestamp display.
+    #[must_use]
+    pub fn with_timestamp(mut self, show: bool) -> Self {
+        self.show_timestamp = show;
+        self
+    }
+
+    /// Set a custom timestamp format.
+    ///
+    /// Simple format using: `%H` (hour), `%M` (minute), `%S` (second),
+    /// `%Y` (year), `%m` (month), `%d` (day).
+    #[must_use]
+    pub fn with_timestamp_format(mut self, format: impl Into<String>) -> Self {
+        self.timestamp_format = Some(format.into());
+        self
+    }
+
+    /// Set the file path and line number for caller info.
+    #[must_use]
+    pub fn with_path(mut self, file: impl Into<String>, line: u32) -> Self {
+        self.file_path = Some(file.into());
+        self.line_number = Some(line);
+        self
+    }
+
+    /// Set just the file path (without line number).
+    #[must_use]
+    pub fn with_file(mut self, file: impl Into<String>) -> Self {
+        self.file_path = Some(file.into());
+        self
+    }
+
+    /// Set just the line number.
+    #[must_use]
+    pub fn with_line(mut self, line: u32) -> Self {
+        self.line_number = Some(line);
+        self
+    }
+
+    /// Enable or disable level prefix display.
+    #[must_use]
+    pub fn with_level(mut self, show: bool) -> Self {
+        self.show_level = show;
+        self
+    }
+
+    /// Enable or disable keyword highlighting.
+    #[must_use]
+    pub fn with_highlight(mut self, highlight: bool) -> Self {
+        self.highlight = highlight;
+        self
+    }
 }
 
 /// RAII guard returned by [`Console::use_theme`].
@@ -2559,6 +2827,207 @@ mod tests {
         let output = buffer.0.lock().unwrap();
         let result = String::from_utf8_lossy(&output);
         assert!(result.contains("Error message"));
+    }
+
+    // ========== Log with Options Tests ==========
+
+    #[test]
+    fn test_log_with_timestamp() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let opts = LogOptions::new().with_timestamp(true);
+        console.log_with_options("Test message", LogLevel::Info, &opts);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        // Should contain timestamp format [HH:MM:SS]
+        assert!(result.contains("["));
+        assert!(result.contains("]"));
+        assert!(result.contains(":"));
+        assert!(result.contains("Test message"));
+    }
+
+    #[test]
+    fn test_log_with_file_path() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let opts = LogOptions::new().with_path("src/main.rs", 42);
+        console.log_with_options("Debug info", LogLevel::Debug, &opts);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("src/main.rs"));
+        assert!(result.contains("42"));
+        assert!(result.contains("Debug info"));
+    }
+
+    #[test]
+    fn test_log_with_timestamp_and_path() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let opts = LogOptions::new()
+            .with_timestamp(true)
+            .with_path("test.rs", 100);
+        console.log_with_options("Combined test", LogLevel::Warning, &opts);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(result.contains("[")); // timestamp bracket
+        assert!(result.contains("test.rs"));
+        assert!(result.contains("100"));
+        assert!(result.contains("Combined test"));
+    }
+
+    #[test]
+    fn test_log_without_level() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+        impl Write for SharedBuffer {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .width(80)
+            .file(Box::new(buffer.clone()))
+            .build();
+
+        let opts = LogOptions::new().with_level(false);
+        console.log_with_options("No level prefix", LogLevel::Info, &opts);
+
+        let output = buffer.0.lock().unwrap();
+        let result = String::from_utf8_lossy(&output);
+        assert!(!result.contains("[INFO]"));
+        assert!(result.contains("No level prefix"));
+    }
+
+    #[test]
+    fn test_log_options_default() {
+        let opts = LogOptions::default();
+        assert!(!opts.show_timestamp);
+        assert!(opts.timestamp_format.is_none());
+        assert!(opts.file_path.is_none());
+        assert!(opts.line_number.is_none());
+        assert!(opts.show_level);
+        assert!(!opts.highlight);
+    }
+
+    #[test]
+    fn test_log_options_builder() {
+        let opts = LogOptions::new()
+            .with_timestamp(true)
+            .with_timestamp_format("%Y-%m-%d %H:%M:%S")
+            .with_file("test.rs")
+            .with_line(123)
+            .with_level(false)
+            .with_highlight(true);
+
+        assert!(opts.show_timestamp);
+        assert_eq!(opts.timestamp_format, Some("%Y-%m-%d %H:%M:%S".to_string()));
+        assert_eq!(opts.file_path, Some("test.rs".to_string()));
+        assert_eq!(opts.line_number, Some(123));
+        assert!(!opts.show_level);
+        assert!(opts.highlight);
+    }
+
+    #[test]
+    fn test_format_timestamp_default() {
+        let ts = Console::format_timestamp(None);
+        // Default format: [HH:MM:SS]
+        assert!(ts.starts_with('['));
+        assert!(ts.ends_with(']'));
+        assert_eq!(ts.matches(':').count(), 2);
+    }
+
+    #[test]
+    fn test_format_timestamp_custom() {
+        let ts = Console::format_timestamp(Some("%H-%M-%S"));
+        // Custom format: HH-MM-SS
+        assert_eq!(ts.matches('-').count(), 2);
+        assert!(!ts.contains(':'));
+    }
+
+    #[test]
+    fn test_days_to_ymd() {
+        // Test epoch: 1970-01-01
+        let (y, m, d) = super::days_to_ymd(0);
+        assert_eq!((y, m, d), (1970, 1, 1));
+
+        // Test known date: 2000-01-01 is day 10957
+        let (y, m, d) = super::days_to_ymd(10957);
+        assert_eq!(y, 2000);
+        assert_eq!(m, 1);
+        assert_eq!(d, 1);
+    }
+
+    #[test]
+    fn test_is_leap_year() {
+        assert!(super::is_leap_year(2000)); // divisible by 400
+        assert!(!super::is_leap_year(1900)); // divisible by 100 but not 400
+        assert!(super::is_leap_year(2004)); // divisible by 4 but not 100
+        assert!(!super::is_leap_year(2001)); // not divisible by 4
     }
 
     // ========== Markup Integration Tests ==========

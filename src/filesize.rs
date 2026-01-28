@@ -67,6 +67,7 @@ pub fn format_size(size: i64, unit: SizeUnit, precision: usize) -> String {
     let negative = size < 0;
     let abs_size = size.unsigned_abs();
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     if abs_size < base as u64 {
         // Special case: show as bytes without decimal
         let prefix = if negative { "-" } else { "" };
