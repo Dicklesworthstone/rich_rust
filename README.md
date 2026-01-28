@@ -464,6 +464,8 @@ the `tracing` ecosystem.
 
 ### HTML/SVG Export
 
+Export terminal output to shareable files:
+
 ```rust
 use rich_rust::prelude::*;
 
@@ -471,8 +473,15 @@ let mut console = Console::new();
 console.begin_capture();
 console.print("[bold green]Hello[/]");
 
-let html = console.export_html(false);
-let svg = console.export_svg(true);
+let html = console.export_html(false);  // false = don't clear buffer
+let svg = console.export_svg(true);     // true = clear buffer after
+```
+
+**Note:** The SVG export uses `<foreignObject>` for text rendering. This produces clean, scalable output but requires a modern browser (Chrome, Firefox, Safari) for correct display. Some image viewers may not render text.
+
+For a quick demo of export capabilities, run:
+```bash
+cargo run --bin demo_showcase --features showcase -- --export
 ```
 
 ### Syntax Highlighting (requires `syntax` feature)
@@ -703,7 +712,33 @@ OPTIONS:
     -h, --help                  Print help and exit
 ```
 
-**Defaults (“auto”)**
+**Export Usage**
+
+Export captures the full demo output and writes two files:
+- `demo_showcase.html` — Standalone HTML with inline CSS. Opens in any browser.
+- `demo_showcase.svg` — Scalable vector graphic using `<foreignObject>` for text.
+
+```bash
+# Quick export to temp directory (prints path)
+cargo run --bin demo_showcase --features showcase -- --export
+
+# Export to specific directory
+cargo run --bin demo_showcase --features showcase -- --export-dir ./output
+
+# Recommended flags for clean export
+cargo run --bin demo_showcase --features showcase -- \
+    --export-dir ./output \
+    --no-interactive \
+    --color-system truecolor \
+    --width 100 \
+    --quick
+```
+
+**Viewing exported files:**
+- **HTML:** Open directly in any browser. Colors and styles are preserved.
+- **SVG:** Open in Chrome, Firefox, or Safari. The SVG uses `<foreignObject>` for text rendering, which requires a modern browser. Some image viewers and older browsers may not render text correctly.
+
+**Defaults ("auto")**
 
 - `interactive=auto` means: interactive only when stdout is a TTY and `TERM` is not `dumb`/`unknown`.
 - `live=auto` means: `live = interactive`.
