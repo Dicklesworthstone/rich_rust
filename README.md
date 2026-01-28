@@ -7,6 +7,7 @@
 <div align="center">
 
 [![CI](https://github.com/Dicklesworthstone/rich_rust/workflows/CI/badge.svg)](https://github.com/Dicklesworthstone/rich_rust/actions)
+[![codecov](https://codecov.io/gh/Dicklesworthstone/rich_rust/graph/badge.svg)](https://codecov.io/gh/Dicklesworthstone/rich_rust)
 [![Crates.io](https://img.shields.io/crates/v/rich_rust.svg)](https://crates.io/crates/rich_rust)
 [![Documentation](https://docs.rs/rich_rust/badge.svg)](https://docs.rs/rich_rust)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Dicklesworthstone/rich_rust/blob/master/LICENSE)

@@ -322,6 +322,29 @@ jobs:
           cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
           cargo llvm-cov report --html --output-dir coverage-html
 
+      - name: Generate per-module coverage summary
+        run: |
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cargo llvm-cov report --all-features 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check coverage threshold
+        id: coverage_check
+        run: |
+          COVERAGE=$(cargo llvm-cov report --all-features 2>/dev/null | grep -E "^TOTAL" | awk '{print $4}' | tr -d '%' || echo "0")
+          echo "coverage=${COVERAGE}" >> $GITHUB_OUTPUT
+          echo "Overall coverage: ${COVERAGE}%"
+
+          # Threshold check (informational, doesn't fail CI)
+          THRESHOLD=80
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "::warning::Coverage ${COVERAGE}% is below target ${THRESHOLD}%"
+          else
+            echo "✓ Coverage ${COVERAGE}% meets target ${THRESHOLD}%"
+          fi
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -336,3 +359,11 @@ jobs:
           name: coverage-report
           path: coverage-html
           retention-days: 30
+
+      - name: Upload lcov for historical tracking
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: lcov-info
+          path: lcov.info
+          retention-days: 90
