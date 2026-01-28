@@ -164,6 +164,10 @@ pub mod prelude {
     pub use crate::color::{Color, ColorSystem, ColorTriplet, ColorType};
     pub use crate::console::{Console, ConsoleOptions};
     pub use crate::emoji::EmojiVariant;
+    pub use crate::filesize::{
+        SizeUnit, binary, binary_speed, binary_with_precision, decimal, decimal_speed,
+        decimal_with_precision, format_size, format_speed,
+    };
     pub use crate::interactive::{Pager, Prompt, PromptError, Status};
     pub use crate::live::{Live, LiveOptions, VerticalOverflowMethod};
     pub use crate::logging::RichLogger;
@@ -171,18 +175,14 @@ pub mod prelude {
     pub use crate::logging::RichTracingLayer;
     pub use crate::measure::Measurement;
     pub use crate::renderables::{
-        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, Emoji, Inspect,
-        InspectOptions, Layout, LayoutSplitter, PaddingDimensions, Panel, Pretty, PrettyOptions,
-        ProgressBar, Region, Row, Rule, Spinner, Table, Traceback, TracebackFrame, Tree,
-        TreeGuides, TreeNode, VerticalAlign, VerticalAlignMethod, align_text, inspect,
-        print_exception,
+        Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, DownloadColumn, Emoji,
+        FileSizeColumn, Inspect, InspectOptions, Layout, LayoutSplitter, PaddingDimensions, Panel,
+        Pretty, PrettyOptions, ProgressBar, Region, Row, Rule, Spinner, Table,
+        TotalFileSizeColumn, Traceback, TracebackFrame, TransferSpeedColumn, Tree, TreeGuides,
+        TreeNode, VerticalAlign, VerticalAlignMethod, align_text, inspect, print_exception,
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};
-    pub use crate::filesize::{
-        SizeUnit, binary, binary_speed, binary_with_precision, decimal, decimal_speed,
-        decimal_with_precision, format_size, format_speed,
-    };
     pub use crate::text::{JustifyMethod, OverflowMethod, Span, Text};
     pub use crate::theme::{Theme, ThemeError, ThemeStackError};
 
