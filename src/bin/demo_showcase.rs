@@ -4,6 +4,8 @@ use std::path::PathBuf;
 mod console_builder;
 #[path = "demo_showcase/log_pane.rs"]
 mod log_pane;
+#[path = "demo_showcase/scenes.rs"]
+mod scenes;
 #[path = "demo_showcase/state.rs"]
 mod state;
 #[path = "demo_showcase/theme.rs"]
@@ -33,64 +35,164 @@ fn main() {
     }
 
     if cfg.list_scenes {
-        print_scenes();
+        let demo_console = console_builder::build_demo_console(&cfg);
+        scenes::print_scene_list(&demo_console.console);
         return;
     }
 
-    if let Some(scene) = cfg.scene.as_deref() {
-        // Scene execution is implemented in the scene runner beads.
-        println!("(demo_showcase) TODO: run scene `{scene}`");
+    if let Some(scene_name) = cfg.scene.as_deref() {
+        let demo_console = console_builder::build_demo_console(&cfg);
+        let registry = scenes::build_registry();
+        if let Some(scene) = registry.get(scene_name) {
+            if let Err(err) = scene.run(&demo_console.console, &cfg) {
+                eprintln!("Scene '{scene_name}' failed: {err}");
+                std::process::exit(1);
+            }
+        } else {
+            eprintln!("Unknown scene: {scene_name}");
+            std::process::exit(2);
+        }
         return;
     }
 
-    let timing = timing::Timing::new(cfg.speed, cfg.quick);
-    let mut rng = timing::DemoRng::new(cfg.seed);
-    let run_id = 1000 + rng.gen_range(0..9000);
-
-    // Touch these helpers early so they stay exercised in non-test builds.
-    let _scaled = timing.scale(std::time::Duration::from_millis(150));
-    timing.sleep(std::time::Duration::from_millis(1));
-
-    let state = if timing.quick() {
-        state::SharedDemoState::new(run_id, cfg.seed)
+    // Full demo run: execute all scenes in storyboard order
+    // If export mode is enabled, capture output and write files
+    if cfg.is_export() {
+        run_export(&cfg);
     } else {
-        state::SharedDemoState::demo_seeded(run_id, cfg.seed)
-    };
+        run_full_demo(&cfg);
+    }
+}
 
-    state.update(|demo| {
-        demo.headline = "Ready to deploy".to_string();
-    });
+/// Run the full demo, executing all scenes in order.
+fn run_full_demo(cfg: &Config) {
+    let demo_console = console_builder::build_demo_console(cfg);
+    let console = &demo_console.console;
+    let registry = scenes::build_registry();
 
-    let snapshot = state.snapshot();
-    let last_log = snapshot
-        .logs
-        .last()
-        .map(|line| {
-            format!(
-                "{}+{}ms {}",
-                line.level.as_str(),
-                line.t.as_millis(),
-                line.message
-            )
-        })
-        .unwrap_or_else(|| "none".to_string());
-    let eta_count = snapshot
-        .pipeline
-        .iter()
-        .filter(|stage| stage.eta.is_some())
-        .count();
-    println!(
-        "(demo_showcase) TODO: run full demo (run_id={} seed={} elapsed={}ms headline={:?} services={} stages={} (eta={}) logs={} last_log={:?})\n\nTip: run with `--help` or `--list-scenes`.",
-        snapshot.run_id,
-        snapshot.seed,
-        snapshot.elapsed.as_millis(),
-        snapshot.headline,
-        snapshot.services.len(),
-        snapshot.pipeline.len(),
-        eta_count,
-        snapshot.logs.len(),
-        last_log,
+    // Print opening
+    console.print("");
+    typography::scene_header(console, "Nebula Deploy", Some("rich_rust showcase"));
+    typography::hint(console, "Running all scenes in storyboard order...");
+    console.print("");
+
+    let mut failed_scenes: Vec<(&str, String)> = Vec::new();
+    let mut scene_count = 0;
+
+    for scene in registry.all() {
+        scene_count += 1;
+
+        // Section framing between scenes
+        typography::section_header(console, scene.name(), false);
+
+        // Run the scene
+        if let Err(err) = scene.run(&demo_console.console, cfg) {
+            // Record failure but continue to next scene
+            failed_scenes.push((scene.name(), err.to_string()));
+            console.print(&format!(
+                "[status.err]Scene '{}' failed:[/] {}",
+                scene.name(),
+                err
+            ));
+        }
+
+        // Small spacing between scenes
+        console.print("");
+    }
+
+    // Print summary
+    typography::print_divider(console);
+    console.print("");
+
+    if failed_scenes.is_empty() {
+        console.print(&format!(
+            "[status.ok]All {} scenes completed successfully.[/]",
+            scene_count
+        ));
+    } else {
+        console.print(&format!(
+            "[status.warn]{} of {} scenes completed with errors:[/]",
+            failed_scenes.len(),
+            scene_count
+        ));
+        for (name, _err) in &failed_scenes {
+            console.print(&format!("  [dim]-[/] {name}"));
+        }
+    }
+
+    console.print("");
+    typography::hint(
+        console,
+        "Run with --scene <name> to run individual scenes, or --list-scenes to see all options.",
     );
+
+    // Exit with error code if any scene failed
+    if !failed_scenes.is_empty() {
+        std::process::exit(1);
+    }
+}
+
+/// Run the demo in export mode, capturing output to HTML and SVG files.
+fn run_export(cfg: &Config) {
+    use std::fs;
+    use std::io::Write;
+
+    let export_dir = cfg
+        .export_dir()
+        .expect("export_dir should be Some in export mode");
+
+    // Create export directory
+    if let Err(err) = fs::create_dir_all(&export_dir) {
+        eprintln!("Failed to create export directory: {err}");
+        std::process::exit(1);
+    }
+
+    // Build console for capture (force non-live mode)
+    let demo_console = console_builder::build_demo_console(cfg);
+    let console = &demo_console.console;
+
+    // Enable capture mode
+    console.begin_capture();
+
+    // Run all scenes (without the interactive hint at the end)
+    let registry = scenes::build_registry();
+
+    console.print("");
+    typography::scene_header(console, "Nebula Deploy", Some("rich_rust showcase"));
+    console.print("");
+
+    for scene in registry.all() {
+        typography::section_header(console, scene.name(), false);
+        if let Err(err) = scene.run(console, cfg) {
+            console.print(&format!(
+                "[status.err]Scene '{}' failed:[/] {}",
+                scene.name(),
+                err
+            ));
+        }
+        console.print("");
+    }
+
+    typography::print_divider(console);
+    console.print("");
+
+    // Export HTML (don't clear buffer yet - we need it for SVG too)
+    let html_path = export_dir.join("demo_showcase.html");
+    let html_content = console.export_html(false);
+    match fs::File::create(&html_path).and_then(|mut f| f.write_all(html_content.as_bytes())) {
+        Ok(()) => eprintln!("Exported HTML: {}", html_path.display()),
+        Err(err) => eprintln!("Failed to write HTML: {err}"),
+    }
+
+    // Export SVG (clear buffer after this)
+    let svg_path = export_dir.join("demo_showcase.svg");
+    let svg_content = console.export_svg(true);
+    match fs::File::create(&svg_path).and_then(|mut f| f.write_all(svg_content.as_bytes())) {
+        Ok(()) => eprintln!("Exported SVG: {}", svg_path.display()),
+        Err(err) => eprintln!("Failed to write SVG: {err}"),
+    }
+
+    eprintln!("\nExport complete: {}", export_dir.display());
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -156,6 +258,24 @@ impl Config {
         Self {
             speed: 1.0,
             ..Self::default()
+        }
+    }
+
+    /// Check if export mode is enabled.
+    fn is_export(&self) -> bool {
+        !matches!(self.export, ExportMode::Off)
+    }
+
+    /// Get the export directory, creating a temp dir if needed.
+    fn export_dir(&self) -> Option<PathBuf> {
+        match &self.export {
+            ExportMode::Off => None,
+            ExportMode::TempDir => {
+                // Create a temp directory for export
+                let temp = std::env::temp_dir().join("demo_showcase_export");
+                Some(temp)
+            }
+            ExportMode::Dir(path) => Some(path.clone()),
         }
     }
 }
@@ -280,78 +400,28 @@ fn parse_u64_flag(flag: &str, raw: &str) -> Result<u64, String> {
         .map_err(|_| format!("Invalid {flag} value `{raw}` (expected a non-negative integer)."))
 }
 
-#[derive(Debug, Clone, Copy)]
-struct SceneSpec {
-    name: &'static str,
-    summary: &'static str,
-}
-
-const SCENES: &[SceneSpec] = &[
-    SceneSpec {
-        name: "hero",
-        summary: "Introduce Nebula Deploy and the visual “brand”.",
-    },
-    SceneSpec {
-        name: "dashboard",
-        summary: "Live split-screen dashboard (services + pipeline + logs).",
-    },
-    SceneSpec {
-        name: "deep_dive_markdown",
-        summary: "Runbook / release notes (feature: markdown).",
-    },
-    SceneSpec {
-        name: "deep_dive_syntax",
-        summary: "Config/code snippet view (feature: syntax).",
-    },
-    SceneSpec {
-        name: "deep_dive_json",
-        summary: "API payload view (feature: json).",
-    },
-    SceneSpec {
-        name: "debug_tools",
-        summary: "Pretty/Inspect + Traceback + RichLogger (+ tracing).",
-    },
-    SceneSpec {
-        name: "export",
-        summary: "Export HTML/SVG bundle.",
-    },
-    SceneSpec {
-        name: "outro",
-        summary: "Summary + next steps.",
-    },
-];
-
 fn is_known_scene(name: &str) -> bool {
-    SCENES.iter().any(|scene| scene.name == name)
+    scenes::build_registry().contains(name)
 }
 
 fn available_scenes_help() -> String {
-    let mut out = String::from("Available scenes:\n");
-    let width = SCENES
-        .iter()
-        .map(|scene| scene.name.len())
-        .max()
-        .unwrap_or(0);
+    let registry = scenes::build_registry();
+    let scenes: Vec<_> = registry.all().collect();
 
-    for scene in SCENES {
+    let mut out = String::from("Available scenes:\n");
+    let width = scenes.iter().map(|s| s.name().len()).max().unwrap_or(0);
+
+    for scene in scenes {
         out.push_str(&format!(
             "  {:width$} - {}\n",
-            scene.name,
-            scene.summary,
+            scene.name(),
+            scene.summary(),
             width = width
         ));
     }
 
     out.push_str("\nRun with `--list-scenes` to print this list and exit.");
     out
-}
-
-fn print_scenes() {
-    // Ensure theme definitions stay parseable even before the full scene runner is wired.
-    let _theme = theme::demo_theme();
-
-    print!("{}", available_scenes_help());
-    println!();
 }
 
 const HELP_TEXT: &str = r#"demo_showcase — Nebula Deploy (rich_rust showcase)

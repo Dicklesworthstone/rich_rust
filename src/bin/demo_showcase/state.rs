@@ -1,3 +1,8 @@
+//! Demo state and simulation data for demo_showcase.
+
+// State types prepared for dashboard/live scene implementations
+#![allow(dead_code)]
+
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -301,6 +306,14 @@ impl SharedDemoState {
         }
     }
 
+    /// Update the demo state atomically.
+    ///
+    /// # Poison Recovery
+    /// If a previous holder panicked while holding the lock, we recover by
+    /// extracting the inner value. This is acceptable for demo_showcase because:
+    /// - The state is ephemeral (demo session only)
+    /// - A corrupted state just means visual glitches, not data loss
+    /// - We prefer graceful degradation over cascading panics
     pub fn update<F>(&self, f: F)
     where
         F: FnOnce(&mut DemoState),
@@ -312,6 +325,10 @@ impl SharedDemoState {
         f(&mut guard);
     }
 
+    /// Take a snapshot of the current demo state.
+    ///
+    /// # Poison Recovery
+    /// Same rationale as `update` - we recover from poison rather than panic.
     #[must_use]
     pub fn snapshot(&self) -> DemoStateSnapshot {
         let guard = self

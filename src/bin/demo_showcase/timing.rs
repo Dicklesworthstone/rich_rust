@@ -1,3 +1,8 @@
+//! Timing utilities and deterministic RNG for demo_showcase.
+
+// Timing helpers prepared for animated scene implementations
+#![allow(dead_code)]
+
 use std::ops::Range;
 use std::time::Duration;
 
@@ -89,13 +94,19 @@ impl DemoRng {
         z ^ (z >> 31)
     }
 
+    /// Generate a random u64 in the half-open range `[start, end)`.
+    ///
+    /// # Panics
+    /// Panics if `range.start >= range.end` (empty or inverted range).
     #[must_use]
     pub fn gen_range(&mut self, range: Range<u64>) -> u64 {
-        debug_assert!(range.start < range.end);
+        assert!(
+            range.start < range.end,
+            "gen_range requires non-empty range: {}..{}",
+            range.start,
+            range.end
+        );
         let span = range.end - range.start;
-        if span == 0 {
-            return range.start;
-        }
         range.start + (self.next_u64() % span)
     }
 }
