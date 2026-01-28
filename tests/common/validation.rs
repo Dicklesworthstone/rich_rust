@@ -201,12 +201,7 @@ impl FixtureValidator {
     }
 
     /// Check a fixture with a name.
-    pub fn check_named_determinism<F>(
-        &self,
-        name: &str,
-        runs: usize,
-        f: F,
-    ) -> ValidationReport
+    pub fn check_named_determinism<F>(&self, name: &str, runs: usize, f: F) -> ValidationReport
     where
         F: Fn() -> String,
     {
@@ -508,8 +503,10 @@ pub fn validate_panel_structure(output: &str) -> Vec<ValidationIssue> {
 pub fn validate_tree_structure(output: &str) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
-    let has_tree_chars =
-        output.contains('├') || output.contains('└') || output.contains('│') || output.contains('|');
+    let has_tree_chars = output.contains('├')
+        || output.contains('└')
+        || output.contains('│')
+        || output.contains('|');
 
     if !has_tree_chars {
         issues.push(ValidationIssue {

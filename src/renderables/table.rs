@@ -857,9 +857,10 @@ impl Table {
         }
 
         // Shrink proportionally
+        // Use saturating_mul to prevent overflow on extremely large values
         for (i, shrink) in shrinkable.iter().enumerate() {
             if *shrink > 0 {
-                let reduction = *shrink * excess / total_shrinkable;
+                let reduction = shrink.saturating_mul(excess) / total_shrinkable;
                 result[i] = result[i].saturating_sub(reduction);
             }
         }

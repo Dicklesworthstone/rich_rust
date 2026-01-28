@@ -562,10 +562,7 @@ mod tests {
         assert_eq!(normalize_line_endings("hello\nworld"), "hello\nworld");
         assert_eq!(normalize_line_endings("hello\r\nworld"), "hello\nworld");
         assert_eq!(normalize_line_endings("hello\rworld"), "hello\nworld");
-        assert_eq!(
-            normalize_line_endings("a\r\nb\rc\n"),
-            "a\nb\nc\n"
-        );
+        assert_eq!(normalize_line_endings("a\r\nb\rc\n"), "a\nb\nc\n");
     }
 
     #[test]
@@ -595,10 +592,7 @@ mod tests {
         let original = std::env::var("TEST_PLATFORM_VAR").ok();
 
         with_env_var("TEST_PLATFORM_VAR", "test_value", || {
-            assert_eq!(
-                std::env::var("TEST_PLATFORM_VAR").unwrap(),
-                "test_value"
-            );
+            assert_eq!(std::env::var("TEST_PLATFORM_VAR").unwrap(), "test_value");
         });
 
         // Should be restored

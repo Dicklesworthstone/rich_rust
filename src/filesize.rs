@@ -177,6 +177,19 @@ pub fn binary_with_precision(size: u64, precision: usize) -> String {
 /// ```
 #[must_use]
 pub fn format_speed(bytes_per_second: f64, unit: SizeUnit, precision: usize) -> String {
+    // Handle NaN and Infinity gracefully
+    if bytes_per_second.is_nan() {
+        return "NaN".to_string();
+    }
+    if bytes_per_second.is_infinite() {
+        let prefix = if bytes_per_second.is_sign_negative() {
+            "-"
+        } else {
+            ""
+        };
+        return format!("{prefix}∞");
+    }
+
     let (base, units): (f64, &[&str]) = match unit {
         SizeUnit::Binary => (1024.0, BINARY_UNITS),
         SizeUnit::Decimal => (1000.0, DECIMAL_UNITS),
@@ -347,5 +360,16 @@ mod tests {
         // Exabytes
         assert_eq!(decimal(1_000_000_000_000_000_000), "1.0 EB");
         assert_eq!(binary(1_152_921_504_606_846_976), "1.0 EiB");
+    }
+
+    #[test]
+    fn test_speed_nan_handling() {
+        assert_eq!(format_speed(f64::NAN, SizeUnit::Decimal, 1), "NaN");
+    }
+
+    #[test]
+    fn test_speed_infinity_handling() {
+        assert_eq!(format_speed(f64::INFINITY, SizeUnit::Decimal, 1), "∞");
+        assert_eq!(format_speed(f64::NEG_INFINITY, SizeUnit::Decimal, 1), "-∞");
     }
 }

@@ -662,10 +662,7 @@ mod tests {
     #[test]
     fn test_layout_unsplit() {
         let mut layout = Layout::new();
-        layout.split_column(vec![
-            Layout::new().name("a"),
-            Layout::new().name("b"),
-        ]);
+        layout.split_column(vec![Layout::new().name("a"), Layout::new().name("b")]);
         layout.unsplit();
 
         assert!(layout.children.is_empty());
@@ -795,10 +792,7 @@ mod tests {
 
     #[test]
     fn test_ratio_resolve_equal() {
-        let children: Vec<Layout> = vec![
-            Layout::new().ratio(1),
-            Layout::new().ratio(1),
-        ];
+        let children: Vec<Layout> = vec![Layout::new().ratio(1), Layout::new().ratio(1)];
         let refs: Vec<&Layout> = children.iter().collect();
         let sizes = ratio_resolve(10, &refs);
 
@@ -809,10 +803,7 @@ mod tests {
 
     #[test]
     fn test_ratio_resolve_unequal() {
-        let children: Vec<Layout> = vec![
-            Layout::new().ratio(1),
-            Layout::new().ratio(2),
-        ];
+        let children: Vec<Layout> = vec![Layout::new().ratio(1), Layout::new().ratio(2)];
         let refs: Vec<&Layout> = children.iter().collect();
         let sizes = ratio_resolve(9, &refs);
 
@@ -825,7 +816,7 @@ mod tests {
     #[test]
     fn test_ratio_resolve_with_fixed_size() {
         let children: Vec<Layout> = vec![
-            Layout::new().size(5), // Fixed 5
+            Layout::new().size(5),  // Fixed 5
             Layout::new().ratio(1), // Flexible
         ];
         let refs: Vec<&Layout> = children.iter().collect();
@@ -1007,9 +998,7 @@ mod tests {
 
     #[test]
     fn test_layout_with_panel() {
-        let layout = Layout::new().renderable(
-            Panel::from_text("Panel content").title("Test"),
-        );
+        let layout = Layout::new().renderable(Panel::from_text("Panel content").title("Test"));
 
         let console = Console::builder()
             .width(30)
@@ -1026,10 +1015,7 @@ mod tests {
 
     #[test]
     fn test_divide_row() {
-        let children: Vec<Layout> = vec![
-            Layout::new().ratio(1),
-            Layout::new().ratio(1),
-        ];
+        let children: Vec<Layout> = vec![Layout::new().ratio(1), Layout::new().ratio(1)];
         let refs: Vec<&Layout> = children.iter().collect();
         let region = Region::new(0, 0, 10, 5);
 
@@ -1049,10 +1035,7 @@ mod tests {
 
     #[test]
     fn test_divide_column() {
-        let children: Vec<Layout> = vec![
-            Layout::new().ratio(1),
-            Layout::new().ratio(1),
-        ];
+        let children: Vec<Layout> = vec![Layout::new().ratio(1), Layout::new().ratio(1)];
         let refs: Vec<&Layout> = children.iter().collect();
         let region = Region::new(0, 0, 10, 6);
 

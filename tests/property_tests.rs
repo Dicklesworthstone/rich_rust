@@ -282,6 +282,63 @@ proptest! {
             }
         }
     }
+
+    /// Combine is associative: (a.combine(b)).combine(c) == a.combine(b.combine(c)).
+    #[test]
+    fn prop_style_combine_associative(
+        a in random_style(),
+        b in random_style(),
+        c in random_style(),
+    ) {
+        let left = a.combine(&b).combine(&c);
+        let right = a.combine(&b.combine(&c));
+
+        // Properties should match between associative orderings
+        prop_assert_eq!(left.color, right.color);
+        prop_assert_eq!(left.bgcolor, right.bgcolor);
+        prop_assert_eq!(left.link, right.link);
+    }
+
+    /// Attribute toggles are idempotent: bold().bold() == bold().
+    #[test]
+    fn prop_style_attribute_idempotent(_n in 0..1i32) {
+        // Bold
+        let bold_once = Style::new().bold();
+        let bold_twice = Style::new().bold().bold();
+        prop_assert_eq!(bold_once.attributes, bold_twice.attributes);
+
+        // Italic
+        let italic_once = Style::new().italic();
+        let italic_twice = Style::new().italic().italic();
+        prop_assert_eq!(italic_once.attributes, italic_twice.attributes);
+
+        // Underline
+        let underline_once = Style::new().underline();
+        let underline_twice = Style::new().underline().underline();
+        prop_assert_eq!(underline_once.attributes, underline_twice.attributes);
+
+        // Strike
+        let strike_once = Style::new().strike();
+        let strike_twice = Style::new().strike().strike();
+        prop_assert_eq!(strike_once.attributes, strike_twice.attributes);
+    }
+
+    /// Link is preserved through combine when set.
+    #[test]
+    fn prop_style_link_preservation(url in "[a-z]{5,15}") {
+        let linked = Style::new().link(&url);
+        let null = Style::null();
+
+        // Link should survive combine with null
+        let combined = linked.combine(&null);
+        prop_assert_eq!(combined.link, Some(url.clone()));
+
+        // When both have links, later overrides
+        let other_url = format!("{url}_other");
+        let other_linked = Style::new().link(&other_url);
+        let combined2 = linked.combine(&other_linked);
+        prop_assert_eq!(combined2.link, Some(other_url));
+    }
 }
 
 // ============================================================================

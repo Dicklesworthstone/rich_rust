@@ -434,8 +434,8 @@ mod tests {
 
     #[test]
     fn test_theme_styles() {
-        let theme = Theme::from_style_definitions([("a", "bold"), ("b", "italic")], false)
-            .expect("theme");
+        let theme =
+            Theme::from_style_definitions([("a", "bold"), ("b", "italic")], false).expect("theme");
         let styles = theme.styles();
         assert_eq!(styles.len(), 2);
         assert!(styles.contains_key("a"));
@@ -542,13 +542,15 @@ mod tests {
 
     #[test]
     fn test_config_sorted_keys() {
-        let theme =
-            Theme::from_style_definitions([("zebra", "bold"), ("alpha", "italic")], false)
-                .expect("theme");
+        let theme = Theme::from_style_definitions([("zebra", "bold"), ("alpha", "italic")], false)
+            .expect("theme");
         let config = theme.config();
         let alpha_pos = config.find("alpha").expect("alpha");
         let zebra_pos = config.find("zebra").expect("zebra");
-        assert!(alpha_pos < zebra_pos, "Keys should be sorted alphabetically");
+        assert!(
+            alpha_pos < zebra_pos,
+            "Keys should be sorted alphabetically"
+        );
     }
 
     #[test]
@@ -582,10 +584,7 @@ mod tests {
         fs::write(&temp_path, "[styles]\ncustom = bold underline\n").expect("write temp file");
 
         let theme = Theme::read(&temp_path, false).expect("theme");
-        assert_eq!(
-            theme.get("custom").unwrap().to_string(),
-            "bold underline"
-        );
+        assert_eq!(theme.get("custom").unwrap().to_string(), "bold underline");
 
         // Cleanup
         let _ = fs::remove_file(&temp_path);
@@ -694,8 +693,8 @@ mod tests {
         let base = Theme::from_style_definitions([("base_style", "bold")], false).expect("base");
         let mut stack = ThemeStack::new(base);
 
-        let overlay = Theme::from_style_definitions([("overlay_style", "italic")], false)
-            .expect("overlay");
+        let overlay =
+            Theme::from_style_definitions([("overlay_style", "italic")], false).expect("overlay");
         stack.push_theme(overlay, true);
 
         // Both should be accessible
@@ -708,8 +707,8 @@ mod tests {
         let base = Theme::from_style_definitions([("base_style", "bold")], false).expect("base");
         let mut stack = ThemeStack::new(base);
 
-        let overlay = Theme::from_style_definitions([("overlay_style", "italic")], false)
-            .expect("overlay");
+        let overlay =
+            Theme::from_style_definitions([("overlay_style", "italic")], false).expect("overlay");
         stack.push_theme(overlay, false);
 
         // Only overlay should be accessible
@@ -722,7 +721,8 @@ mod tests {
         let base = Theme::from_style_definitions([("shared", "bold")], false).expect("base");
         let mut stack = ThemeStack::new(base);
 
-        let overlay = Theme::from_style_definitions([("shared", "italic")], false).expect("overlay");
+        let overlay =
+            Theme::from_style_definitions([("shared", "italic")], false).expect("overlay");
         stack.push_theme(overlay, true);
 
         // Overlay should override

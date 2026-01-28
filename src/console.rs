@@ -1268,8 +1268,9 @@ impl Console {
 /// This is a simplified calculation for timestamp formatting.
 fn days_to_ymd(days: u64) -> (u32, u32, u32) {
     // Simplified calculation - approximation only
+    // Clamp days to u32::MAX to prevent overflow (covers dates up to ~11.7 million years)
     let mut year = 1970u32;
-    let mut remaining = days as u32;
+    let mut remaining = u32::try_from(days).unwrap_or(u32::MAX);
 
     // Count years
     loop {
@@ -1325,22 +1326,40 @@ fn erase_in_line_mode(params: &[i32]) -> i32 {
 }
 
 fn control_title(segment: &Segment<'_>, control: &crate::segment::ControlCode) -> Option<String> {
-    if !segment.text.is_empty() {
-        return Some(segment.text.to_string());
-    }
+    let raw_title = if !segment.text.is_empty() {
+        segment.text.to_string()
+    } else if control.params.is_empty() {
+        return None;
+    } else {
+        let mut title = String::with_capacity(control.params.len());
+        for param in &control.params {
+            if let Ok(byte) = u8::try_from(*param) {
+                title.push(byte as char);
+            }
+        }
+        title
+    };
 
-    if control.params.is_empty() {
+    if raw_title.is_empty() {
         return None;
     }
 
-    let mut title = String::with_capacity(control.params.len());
-    for param in &control.params {
-        if let Ok(byte) = u8::try_from(*param) {
-            title.push(byte as char);
-        }
-    }
+    // Sanitize title to prevent terminal injection:
+    // Remove control characters that could break or escape the OSC sequence
+    let sanitized: String = raw_title
+        .chars()
+        .filter(|c| {
+            // Allow printable characters only, excluding control chars
+            // BEL (\x07) terminates OSC, ESC (\x1b) starts new sequences
+            !c.is_control()
+        })
+        .collect();
 
-    if title.is_empty() { None } else { Some(title) }
+    if sanitized.is_empty() {
+        None
+    } else {
+        Some(sanitized)
+    }
 }
 
 fn export_segments_to_html(segments: &[Segment<'_>]) -> String {

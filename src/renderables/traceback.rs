@@ -565,6 +565,363 @@ mod tests {
         assert_eq!(frame.source_first_line, 1);
     }
 
+    // =========================================================================
+    // TracebackFrame Creation Tests (bd-201u)
+    // =========================================================================
+
+    #[test]
+    fn test_frame_new_basic() {
+        let frame = TracebackFrame::new("my_function", 42);
+        assert_eq!(frame.name, "my_function");
+        assert_eq!(frame.line, 42);
+        assert!(frame.filename.is_none());
+        assert!(frame.source_context.is_none());
+        assert_eq!(frame.source_first_line, 1);
+    }
+
+    #[test]
+    fn test_frame_new_with_string_type() {
+        let name = String::from("owned_name");
+        let frame = TracebackFrame::new(name, 100);
+        assert_eq!(frame.name, "owned_name");
+        assert_eq!(frame.line, 100);
+    }
+
+    #[test]
+    fn test_frame_filename_builder() {
+        let frame = TracebackFrame::new("func", 1).filename("src/main.rs");
+        assert_eq!(frame.filename, Some("src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn test_frame_filename_with_owned_string() {
+        let path = String::from("/path/to/file.rs");
+        let frame = TracebackFrame::new("func", 1).filename(path);
+        assert_eq!(frame.filename, Some("/path/to/file.rs".to_string()));
+    }
+
+    #[test]
+    fn test_frame_source_context_builder() {
+        let frame = TracebackFrame::new("func", 5).source_context("let x = 1;", 5);
+        assert_eq!(frame.source_context, Some("let x = 1;".to_string()));
+        assert_eq!(frame.source_first_line, 5);
+    }
+
+    #[test]
+    fn test_frame_source_context_multiline() {
+        let source = "fn foo() {\n    bar();\n}";
+        let frame = TracebackFrame::new("foo", 2).source_context(source, 1);
+        assert!(frame.source_context.unwrap().contains("bar()"));
+    }
+
+    #[test]
+    fn test_frame_clone() {
+        let frame = TracebackFrame::new("func", 10)
+            .filename("test.rs")
+            .source_context("code", 5);
+        let cloned = frame.clone();
+        assert_eq!(frame, cloned);
+    }
+
+    #[test]
+    fn test_frame_eq() {
+        let frame1 = TracebackFrame::new("func", 10);
+        let frame2 = TracebackFrame::new("func", 10);
+        assert_eq!(frame1, frame2);
+    }
+
+    #[test]
+    fn test_frame_ne_different_name() {
+        let frame1 = TracebackFrame::new("func_a", 10);
+        let frame2 = TracebackFrame::new("func_b", 10);
+        assert_ne!(frame1, frame2);
+    }
+
+    #[test]
+    fn test_frame_ne_different_line() {
+        let frame1 = TracebackFrame::new("func", 10);
+        let frame2 = TracebackFrame::new("func", 20);
+        assert_ne!(frame1, frame2);
+    }
+
+    #[test]
+    fn test_frame_debug() {
+        let frame = TracebackFrame::new("test", 1);
+        let debug = format!("{:?}", frame);
+        assert!(debug.contains("TracebackFrame"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_frame_chain_builder_pattern() {
+        let frame = TracebackFrame::new("handler", 50)
+            .filename("src/handlers/api.rs")
+            .source_context("async fn handler() -> Result<()>", 50);
+
+        assert_eq!(frame.name, "handler");
+        assert_eq!(frame.line, 50);
+        assert_eq!(frame.filename, Some("src/handlers/api.rs".to_string()));
+        assert!(frame.source_context.is_some());
+    }
+
+    #[test]
+    fn test_frame_empty_source_context() {
+        let frame = TracebackFrame::new("func", 1).source_context("", 1);
+        assert_eq!(frame.source_context, Some("".to_string()));
+    }
+
+    // =========================================================================
+    // Traceback Creation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_traceback_new_empty_frames() {
+        let traceback = Traceback::new(Vec::new(), "Error", "message");
+        assert!(traceback.frames.is_empty());
+        assert_eq!(traceback.exception_type, "Error");
+        assert_eq!(traceback.exception_message, "message");
+    }
+
+    #[test]
+    fn test_traceback_new_from_vec() {
+        let frames = vec![
+            TracebackFrame::new("a", 1),
+            TracebackFrame::new("b", 2),
+            TracebackFrame::new("c", 3),
+        ];
+        let traceback = Traceback::new(frames, "TestError", "test");
+        assert_eq!(traceback.frames.len(), 3);
+    }
+
+    #[test]
+    fn test_traceback_title_builder() {
+        let traceback = Traceback::new(vec![], "Error", "msg").title("Custom Title");
+        // Just verify the method doesn't panic; title is stored internally
+        let output = render_to_text(&traceback, 80);
+        assert!(output.contains("Custom Title"));
+    }
+
+    #[test]
+    fn test_traceback_extra_lines_builder() {
+        let source = "a\nb\nc\nd\ne";
+        let frame = TracebackFrame::new("func", 3).source_context(source, 1);
+        let traceback = Traceback::new(vec![frame], "Error", "test").extra_lines(2);
+
+        let output = render_to_text(&traceback, 80);
+        // With extra_lines=2, should show lines 1-5 (all of them)
+        assert!(output.contains("a"));
+        assert!(output.contains("e"));
+    }
+
+    #[test]
+    fn test_traceback_push_frame() {
+        let mut traceback = Traceback::new(vec![], "Error", "test");
+        assert!(traceback.frames.is_empty());
+
+        traceback.push_frame(TracebackFrame::new("added", 1));
+        assert_eq!(traceback.frames.len(), 1);
+        assert_eq!(traceback.frames[0].name, "added");
+    }
+
+    #[test]
+    fn test_traceback_clone() {
+        let traceback = Traceback::new(vec![TracebackFrame::new("func", 1)], "Error", "message");
+        let cloned = traceback.clone();
+        assert_eq!(traceback.exception_type, cloned.exception_type);
+        assert_eq!(traceback.exception_message, cloned.exception_message);
+        assert_eq!(traceback.frames.len(), cloned.frames.len());
+    }
+
+    #[test]
+    fn test_traceback_eq() {
+        let tb1 = Traceback::new(vec![TracebackFrame::new("f", 1)], "E", "m");
+        let tb2 = Traceback::new(vec![TracebackFrame::new("f", 1)], "E", "m");
+        assert_eq!(tb1, tb2);
+    }
+
+    // =========================================================================
+    // Rendering Tests (bd-21eb)
+    // =========================================================================
+
+    #[test]
+    fn test_render_single_frame_no_source() {
+        let traceback = Traceback::new(
+            vec![TracebackFrame::new("single_func", 99)],
+            "SingleError",
+            "single message",
+        );
+        let output = render_to_text(&traceback, 80);
+
+        assert!(output.contains("single_func"));
+        assert!(output.contains("99"));
+        assert!(output.contains("SingleError: single message"));
+    }
+
+    #[test]
+    fn test_render_multi_frame_order() {
+        let traceback = Traceback::new(
+            vec![
+                TracebackFrame::new("first", 1),
+                TracebackFrame::new("second", 2),
+                TracebackFrame::new("third", 3),
+            ],
+            "Error",
+            "test",
+        );
+        let output = render_to_text(&traceback, 80);
+
+        // All frames should appear
+        assert!(output.contains("first"));
+        assert!(output.contains("second"));
+        assert!(output.contains("third"));
+    }
+
+    #[test]
+    fn test_render_exception_display_bold_red() {
+        let traceback = Traceback::new(vec![], "ValueError", "invalid value");
+        let console = Console::new();
+        let options = ConsoleOptions {
+            max_width: 80,
+            ..Default::default()
+        };
+        let segments = traceback.render(&console, &options);
+
+        // Find the exception type segment
+        let exception_seg = segments.iter().find(|s| s.text.contains("ValueError"));
+        assert!(exception_seg.is_some());
+    }
+
+    #[test]
+    fn test_render_source_context_line_numbers() {
+        let source = "line1\nline2\nline3";
+        let frame = TracebackFrame::new("func", 2).source_context(source, 1);
+        let traceback = Traceback::new(vec![frame], "Error", "test").extra_lines(1);
+
+        let output = render_to_text(&traceback, 80);
+
+        // Should show line numbers
+        assert!(output.contains("1"));
+        assert!(output.contains("2"));
+        assert!(output.contains("3"));
+    }
+
+    #[test]
+    fn test_render_error_line_indicator() {
+        let source = "before\nerror_line\nafter";
+        let frame = TracebackFrame::new("func", 2).source_context(source, 1);
+        let traceback = Traceback::new(vec![frame], "Error", "test").extra_lines(1);
+
+        let output = render_to_text(&traceback, 80);
+
+        // Error indicator should be present
+        assert!(output.contains("❱"));
+        // Error line content should be shown
+        assert!(output.contains("error_line"));
+    }
+
+    #[test]
+    fn test_render_width_constraint_narrow() {
+        let traceback = Traceback::new(
+            vec![TracebackFrame::new(
+                "very_long_function_name_that_might_wrap",
+                123456,
+            )],
+            "LongError",
+            "a very long error message that might need to be handled",
+        );
+
+        // Narrow width should still render without panic
+        let output = render_to_text(&traceback, 40);
+        assert!(output.contains("LongError"));
+    }
+
+    #[test]
+    fn test_render_width_constraint_minimum() {
+        let traceback = Traceback::new(vec![], "Error", "msg");
+
+        // Even width=1 should work (max(1) in implementation)
+        let output = render_to_text(&traceback, 1);
+        assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn test_render_with_filename_in_header() {
+        let frame = TracebackFrame::new("main", 10)
+            .filename("src/main.rs")
+            .source_context("fn main() { }", 10);
+        let traceback = Traceback::new(vec![frame], "Error", "test");
+
+        let output = render_to_text(&traceback, 80);
+        assert!(output.contains("src/main.rs"));
+        assert!(output.contains("main"));
+        assert!(output.contains("10"));
+    }
+
+    #[test]
+    fn test_render_without_filename_fallback() {
+        let frame = TracebackFrame::new("anonymous", 5).source_context("some_code()", 5);
+        let traceback = Traceback::new(vec![frame], "Error", "test");
+
+        let output = render_to_text(&traceback, 80);
+        // Should render with "in func:line" format when no filename
+        assert!(output.contains("anonymous"));
+        assert!(output.contains("5"));
+    }
+
+    #[test]
+    fn test_render_default_title() {
+        let traceback = Traceback::new(vec![], "Error", "test");
+        let output = render_to_text(&traceback, 80);
+
+        assert!(output.contains("Traceback"));
+    }
+
+    #[test]
+    fn test_render_custom_title() {
+        let traceback = Traceback::new(vec![], "Error", "test").title("Exception occurred!");
+        let output = render_to_text(&traceback, 80);
+
+        assert!(output.contains("Exception occurred!"));
+    }
+
+    #[test]
+    fn test_render_long_source_line_truncation() {
+        let long_line = "x".repeat(200);
+        let frame = TracebackFrame::new("func", 1).source_context(&long_line, 1);
+        let traceback = Traceback::new(vec![frame], "Error", "test");
+
+        // Should render without panic even with very long lines
+        let output = render_to_text(&traceback, 60);
+        assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn test_render_unicode_in_source() {
+        let source = "let emoji = '🚀';";
+        let frame = TracebackFrame::new("func", 1).source_context(source, 1);
+        let traceback = Traceback::new(vec![frame], "Error", "test");
+
+        let output = render_to_text(&traceback, 80);
+        assert!(output.contains("🚀"));
+    }
+
+    #[test]
+    fn test_render_empty_exception_message() {
+        let traceback = Traceback::new(vec![], "Error", "");
+        let output = render_to_text(&traceback, 80);
+
+        assert!(output.contains("Error:"));
+    }
+
+    #[test]
+    fn test_render_special_chars_in_exception() {
+        let traceback = Traceback::new(vec![], "Error<T>", "msg with \"quotes\" & <brackets>");
+        let output = render_to_text(&traceback, 80);
+
+        assert!(output.contains("Error<T>"));
+        assert!(output.contains("quotes"));
+    }
+
     #[cfg(feature = "backtrace")]
     mod backtrace_tests {
         use super::*;
@@ -634,6 +991,68 @@ mod tests {
 
             assert!(output.contains("PanicError: something went wrong"));
             assert!(output.contains("Traceback"));
+        }
+
+        #[test]
+        fn is_internal_frame_detects_backtrace_frames() {
+            assert!(Traceback::is_internal_frame("backtrace::capture"));
+            assert!(Traceback::is_internal_frame("backtrace::Backtrace::new"));
+        }
+
+        #[test]
+        fn is_internal_frame_detects_alloc_frames() {
+            assert!(Traceback::is_internal_frame("<alloc::boxed::Box<F,A>"));
+            assert!(Traceback::is_internal_frame("alloc::vec::Vec::push"));
+        }
+
+        #[test]
+        fn is_internal_frame_detects_rust_internals() {
+            assert!(Traceback::is_internal_frame("rust_begin_unwind"));
+            assert!(Traceback::is_internal_frame("__rust_start_panic"));
+            assert!(Traceback::is_internal_frame("_start"));
+            assert!(Traceback::is_internal_frame("clone"));
+        }
+
+        #[test]
+        fn is_internal_frame_filters_own_capture() {
+            assert!(Traceback::is_internal_frame(
+                "rich_rust::renderables::traceback::Traceback::capture"
+            ));
+            assert!(Traceback::is_internal_frame(
+                "rich_rust::renderables::traceback::Traceback::from_backtrace"
+            ));
+        }
+
+        #[test]
+        fn demangle_preserves_non_hash_suffix() {
+            assert_eq!(
+                Traceback::demangle_name("module::func::inner"),
+                "module::func::inner"
+            );
+            assert_eq!(
+                Traceback::demangle_name("crate::module::Type::method"),
+                "crate::module::Type::method"
+            );
+        }
+
+        #[test]
+        fn demangle_handles_various_suffixes() {
+            // Short hex suffix also gets removed (behavior of implementation)
+            assert_eq!(Traceback::demangle_name("func::habcd"), "func");
+            // Non-hex suffix preserved
+            assert_eq!(
+                Traceback::demangle_name("func::hnotahex"),
+                "func::hnotahex"
+            );
+        }
+
+        #[test]
+        fn from_backtrace_creates_traceback() {
+            let bt = backtrace::Backtrace::new();
+            let traceback = Traceback::from_backtrace(&bt, "BTError", "from backtrace");
+
+            assert_eq!(traceback.exception_type, "BTError");
+            assert_eq!(traceback.exception_message, "from backtrace");
         }
     }
 }

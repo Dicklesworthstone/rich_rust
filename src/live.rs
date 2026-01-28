@@ -272,7 +272,9 @@ impl LiveInner {
     }
 
     fn options_mut(&self) -> std::sync::MutexGuard<'_, LiveOptions> {
-        self.options.lock().expect("Live options mutex poisoned")
+        self.options
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn current_renderable(
@@ -671,7 +673,10 @@ mod tests {
         };
         let live = Live::with_options(console, options);
         let stored = live.inner.options();
-        assert!(stored.transient, "transient should be true when screen is true");
+        assert!(
+            stored.transient,
+            "transient should be true when screen is true"
+        );
     }
 
     #[test]
@@ -855,7 +860,10 @@ mod tests {
         live.stop().expect("stop");
 
         let text = buffer.text();
-        assert!(text.contains("Second"), "should contain updated content: {text}");
+        assert!(
+            text.contains("Second"),
+            "should contain updated content: {text}"
+        );
     }
 
     #[test]
@@ -934,14 +942,18 @@ mod tests {
             vertical_overflow: VerticalOverflowMethod::Crop,
             ..LiveOptions::default()
         };
-        let live = Live::with_options(console, options).renderable(Text::new("line1\nline2\nline3"));
+        let live =
+            Live::with_options(console, options).renderable(Text::new("line1\nline2\nline3"));
         live.start(true).expect("start");
         let _ = live.refresh();
         live.stop().expect("stop");
 
         let text = buffer.text();
         // With crop, should not have ellipsis
-        assert!(!text.contains("..."), "crop should not add ellipsis: {text}");
+        assert!(
+            !text.contains("..."),
+            "crop should not add ellipsis: {text}"
+        );
     }
 
     #[test]
@@ -962,7 +974,8 @@ mod tests {
             vertical_overflow: VerticalOverflowMethod::Visible,
             ..LiveOptions::default()
         };
-        let live = Live::with_options(console, options).renderable(Text::new("visible1\nvisible2\nvisible3"));
+        let live = Live::with_options(console, options)
+            .renderable(Text::new("visible1\nvisible2\nvisible3"));
         live.start(true).expect("start");
         let _ = live.refresh();
         live.stop().expect("stop");
@@ -970,7 +983,10 @@ mod tests {
         // All lines should be visible
         let text = buffer.text();
         // No truncation or ellipsis
-        assert!(!text.contains("..."), "visible should not add ellipsis: {text}");
+        assert!(
+            !text.contains("..."),
+            "visible should not add ellipsis: {text}"
+        );
     }
 
     // =========================================================================

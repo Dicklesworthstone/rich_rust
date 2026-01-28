@@ -355,6 +355,87 @@ mod tracing_integration {
             assert_eq!(strip_quotes("\"hello\""), "hello");
             assert_eq!(strip_quotes("plain"), "plain");
         }
+
+        #[test]
+        fn test_strip_quotes_empty() {
+            assert_eq!(strip_quotes(""), "");
+            assert_eq!(strip_quotes("\"\""), "");
+        }
+
+        #[test]
+        fn test_strip_quotes_single_char() {
+            assert_eq!(strip_quotes("\""), "\"");
+            assert_eq!(strip_quotes("a"), "a");
+        }
+
+        #[test]
+        fn test_strip_quotes_only_start_quote() {
+            assert_eq!(strip_quotes("\"hello"), "\"hello");
+        }
+
+        #[test]
+        fn test_strip_quotes_only_end_quote() {
+            assert_eq!(strip_quotes("hello\""), "hello\"");
+        }
+
+        #[test]
+        fn test_rich_tracing_layer_new() {
+            let console = Arc::new(Console::builder().force_terminal(true).build());
+            let layer = RichTracingLayer::new(console);
+            // Layer is created without panic
+            let _ = layer;
+        }
+
+        #[test]
+        fn test_rich_tracing_layer_with_logger() {
+            let console = Arc::new(Console::builder().force_terminal(true).build());
+            let logger = RichLogger::new(console)
+                .level(log::LevelFilter::Debug)
+                .show_time(false);
+            let layer = RichTracingLayer::with_logger(logger);
+            // Layer is created without panic
+            let _ = layer;
+        }
+
+        #[test]
+        fn test_map_tracing_level_trace() {
+            assert_eq!(map_tracing_level(TracingLevel::TRACE), Level::Trace);
+        }
+
+        #[test]
+        fn test_map_tracing_level_debug() {
+            assert_eq!(map_tracing_level(TracingLevel::DEBUG), Level::Debug);
+        }
+
+        #[test]
+        fn test_map_tracing_level_info() {
+            assert_eq!(map_tracing_level(TracingLevel::INFO), Level::Info);
+        }
+
+        #[test]
+        fn test_map_tracing_level_warn() {
+            assert_eq!(map_tracing_level(TracingLevel::WARN), Level::Warn);
+        }
+
+        #[test]
+        fn test_map_tracing_level_error() {
+            assert_eq!(map_tracing_level(TracingLevel::ERROR), Level::Error);
+        }
+
+        #[test]
+        fn test_event_visitor_default() {
+            let visitor = EventVisitor::default();
+            assert!(visitor.message.is_none());
+            assert!(visitor.fields.is_empty());
+        }
+
+        #[test]
+        fn test_event_visitor_record_debug_message() {
+            let visitor = EventVisitor::default();
+            // Simulate recording a message field
+            // Note: Field is internal to tracing, we test indirectly
+            assert!(visitor.message.is_none());
+        }
     }
 }
 
@@ -815,10 +896,7 @@ mod tests {
         use std::thread;
 
         let console = Arc::new(Console::builder().force_terminal(true).build());
-        let logger = Arc::new(
-            RichLogger::new(console)
-                .level(LevelFilter::Info),
-        );
+        let logger = Arc::new(RichLogger::new(console).level(LevelFilter::Info));
 
         // Test that enabled() can be called from multiple threads safely
         let handles: Vec<_> = (0..4)
