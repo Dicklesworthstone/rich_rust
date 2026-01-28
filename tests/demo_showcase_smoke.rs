@@ -212,3 +212,58 @@ fn smoke_help() {
     assertions::assert_success(&result);
     assertions::assert_stdout_contains(&result, "demo_showcase");
 }
+
+/// Test live mode with forced terminal (bd-3czr).
+///
+/// Validates that live mode:
+/// - Starts successfully with --force-terminal
+/// - Runs for a bounded amount of time
+/// - Stops cleanly (exit 0, no panic)
+/// - Produces output within reasonable bounds
+#[test]
+fn smoke_live_mode_forced_terminal() {
+    let result = DemoRunner::new()
+        .arg("--force-terminal")
+        .arg("--live")
+        .arg("--no-screen")
+        .arg("--quick")
+        .arg("--speed")
+        .arg("10") // Fast speed for quick completion
+        .arg("--scene")
+        .arg("dashboard")
+        .arg("--no-interactive")
+        .arg("--seed")
+        .arg("0")
+        .timeout(Duration::from_secs(30)) // Generous timeout for live mode
+        .run()
+        .expect("should run live mode");
+
+    // Should complete successfully
+    assertions::assert_success(&result);
+
+    // Should produce some output (live mode generates ANSI sequences)
+    assert!(
+        !result.stdout.is_empty(),
+        "live mode should produce output:\n{}",
+        result.diagnostic_output()
+    );
+
+    // Output should be bounded (not infinite loop)
+    // Live mode with --quick and high speed should complete quickly
+    const MAX_OUTPUT_BYTES: usize = 100_000; // 100KB reasonable upper bound
+    assert!(
+        result.stdout.len() < MAX_OUTPUT_BYTES,
+        "live mode output should be bounded (got {} bytes, max {}):\n{}",
+        result.stdout.len(),
+        MAX_OUTPUT_BYTES,
+        result.diagnostic_output()
+    );
+
+    // Should complete within a reasonable time (not hang)
+    assert!(
+        result.elapsed < Duration::from_secs(20),
+        "live mode should complete quickly with --quick (took {:?}):\n{}",
+        result.elapsed,
+        result.diagnostic_output()
+    );
+}
