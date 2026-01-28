@@ -145,6 +145,7 @@ pub mod cells;
 pub mod color;
 pub mod console;
 pub mod emoji;
+pub mod filesize;
 pub mod interactive;
 pub mod live;
 pub mod logging;
@@ -178,6 +179,10 @@ pub mod prelude {
     };
     pub use crate::segment::Segment;
     pub use crate::style::{Attributes, Style};
+    pub use crate::filesize::{
+        SizeUnit, binary, binary_speed, binary_with_precision, decimal, decimal_speed,
+        decimal_with_precision, format_size, format_speed,
+    };
     pub use crate::text::{JustifyMethod, OverflowMethod, Span, Text};
     pub use crate::theme::{Theme, ThemeError, ThemeStackError};
 
