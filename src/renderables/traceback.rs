@@ -20,6 +20,7 @@
 use crate::console::{Console, ConsoleOptions};
 use crate::renderables::Renderable;
 use crate::segment::Segment;
+use crate::style::Style;
 use crate::text::Text;
 
 use super::panel::Panel;
@@ -312,19 +313,38 @@ impl Renderable for Traceback {
     fn render<'a>(&'a self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
         let width = options.max_width.max(1);
 
+        // Define styles for traceback components
+        let file_style = Style::parse("cyan").ok();
+        let lineno_style = Style::parse("yellow").ok();
+        let func_style = Style::parse("green").ok();
+        let dim_style = Style::parse("dim").ok();
+        let error_line_style = Style::parse("bold").ok();
+        let exception_type_style = Style::parse("bold red").ok();
+        let exception_msg_style = Style::parse("red").ok();
+
         let mut content_lines: Vec<Vec<Segment<'static>>> = Vec::new();
         for frame in &self.frames {
             // Try to get source: first from provided context, then from filesystem
             let source_result = self.get_frame_source(frame);
 
             if let Some((source, first_line)) = source_result {
-                // Render frame header with location info
-                let location = if let Some(filename) = frame.filename.as_deref() {
-                    format!("{filename}:{} in {}", frame.line, frame.name)
+                // Render frame header with location info using styled segments
+                if let Some(filename) = frame.filename.as_deref() {
+                    content_lines.push(vec![
+                        Segment::new(filename.to_string(), file_style.clone()),
+                        Segment::new(":", dim_style.clone()),
+                        Segment::new(frame.line.to_string(), lineno_style.clone()),
+                        Segment::new(" in ", dim_style.clone()),
+                        Segment::new(frame.name.clone(), func_style.clone()),
+                    ]);
                 } else {
-                    format!("in {}:{}", frame.name, frame.line)
-                };
-                content_lines.push(vec![Segment::new(location, None)]);
+                    content_lines.push(vec![
+                        Segment::new("in ", dim_style.clone()),
+                        Segment::new(frame.name.clone(), func_style.clone()),
+                        Segment::new(":", dim_style.clone()),
+                        Segment::new(frame.line.to_string(), lineno_style.clone()),
+                    ]);
+                }
                 content_lines.push(vec![Segment::new(String::new(), None)]);
 
                 // Render source context with line numbers
@@ -342,9 +362,30 @@ impl Renderable for Traceback {
                         let source_idx = line_no.saturating_sub(first_line);
                         if source_idx < source_lines.len() {
                             let code = source_lines[source_idx].trim_start();
-                            let indicator = if line_no == frame.line { "❱" } else { " " };
-                            let line = format!("{indicator} {line_no:<line_number_width$}{code}");
-                            content_lines.push(vec![Segment::new(line, None)]);
+                            let is_error_line = line_no == frame.line;
+                            let indicator = if is_error_line { "❱" } else { " " };
+                            let line_style = if is_error_line {
+                                error_line_style.clone()
+                            } else {
+                                None
+                            };
+
+                            content_lines.push(vec![
+                                Segment::new(
+                                    indicator.to_string(),
+                                    if is_error_line {
+                                        Some(Style::parse("bold red").unwrap_or_default())
+                                    } else {
+                                        dim_style.clone()
+                                    },
+                                ),
+                                Segment::new(" ", None),
+                                Segment::new(
+                                    format!("{line_no:<line_number_width$}"),
+                                    lineno_style.clone(),
+                                ),
+                                Segment::new(code.to_string(), line_style),
+                            ]);
                         }
                     }
                 }
@@ -353,20 +394,29 @@ impl Renderable for Traceback {
             }
 
             // Fallback: no source available, just show frame info
-            content_lines.push(vec![Segment::new(
-                format!("in {}:{}", frame.name, frame.line),
-                None,
-            )]);
+            content_lines.push(vec![
+                Segment::new("in ", dim_style.clone()),
+                Segment::new(frame.name.clone(), func_style.clone()),
+                Segment::new(":", dim_style.clone()),
+                Segment::new(frame.line.to_string(), lineno_style.clone()),
+            ]);
         }
 
         let panel = Panel::new(content_lines)
             .title(self.title.clone())
+            .border_style(Style::parse("red").unwrap_or_default())
             .width(width);
         let mut segments: Vec<Segment<'static>> = panel.render(width);
 
+        // Exception info with styling
         segments.push(Segment::new(
-            format!("{}: {}", self.exception_type, self.exception_message),
-            None,
+            self.exception_type.clone(),
+            exception_type_style.clone(),
+        ));
+        segments.push(Segment::new(": ".to_string(), None));
+        segments.push(Segment::new(
+            self.exception_message.clone(),
+            exception_msg_style.clone(),
         ));
         segments.push(Segment::line());
 
