@@ -837,4 +837,38 @@ mod tests {
         assert_eq!(cfg.safe_box, Some(false));
         assert_eq!(cfg.links, Some(true));
     }
+
+    // ========== Log level tests (bd-2rxj) ==========
+
+    #[test]
+    fn log_level_parses_all_variants() {
+        let cases = [
+            ("off", LogLevel::Off),
+            ("none", LogLevel::Off),
+            ("error", LogLevel::Error),
+            ("warn", LogLevel::Warn),
+            ("warning", LogLevel::Warn),
+            ("info", LogLevel::Info),
+            ("debug", LogLevel::Debug),
+            ("trace", LogLevel::Trace),
+        ];
+
+        for (input, expected) in cases {
+            let cfg = parse(&["demo_showcase", "--log-level", input])
+                .unwrap_or_else(|e| panic!("Failed to parse log-level {input}: {e}"));
+            assert_eq!(cfg.log_level, expected, "log-level {input}");
+        }
+    }
+
+    #[test]
+    fn log_level_rejects_invalid() {
+        let err = parse(&["demo_showcase", "--log-level", "wat"]).expect_err("error");
+        assert!(err.contains("Invalid --log-level"));
+    }
+
+    #[test]
+    fn log_level_defaults_to_off() {
+        let cfg = parse(&["demo_showcase"]).expect("parse");
+        assert_eq!(cfg.log_level, LogLevel::Off);
+    }
 }

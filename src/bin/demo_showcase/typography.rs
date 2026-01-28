@@ -570,6 +570,173 @@ pub fn update_dashboard_layout(
     }
 }
 
+// ============================================================================
+// Narrow Dashboard Layout (< 80 cols)
+// ============================================================================
+//
+// The narrow layout stacks panels vertically instead of side-by-side:
+//
+// ┌──────────────────────────┐
+// │         header           │
+// ├──────────────────────────┤
+// │       pipeline           │
+// ├──────────────────────────┤
+// │       services           │
+// ├──────────────────────────┤
+// │       quick_facts        │
+// ├──────────────────────────┤
+// │         logs             │
+// └──────────────────────────┘
+//
+// The step_info panel is omitted in narrow mode to save vertical space.
+
+/// Minimum terminal width for narrow layout mode.
+pub const DASHBOARD_MIN_WIDTH_NARROW: usize = 40;
+
+/// Build the narrow dashboard layout with named nodes (stacked vertically).
+///
+/// This is a fallback layout for narrow terminals (< 80 columns). It stacks
+/// all panels vertically instead of using a two-column layout. The step_info
+/// panel is omitted to save space.
+#[must_use]
+pub fn build_dashboard_layout_narrow(snapshot: &DemoStateSnapshot, log_limit: usize) -> Layout {
+    // Build individual components
+    let header_block = build_header_block_narrow(snapshot);
+    let services_table = build_services_table_narrow(&snapshot.services);
+    let pipeline_block = build_pipeline_block(&snapshot.pipeline);
+    let facts_block = build_quick_facts_block(snapshot);
+    let log_block = build_log_block(&snapshot.logs, log_limit);
+
+    // Assemble the layout tree (all stacked vertically)
+    let mut root = Layout::new().name("root");
+
+    root.split_column(vec![
+        // Header row (fixed height)
+        Layout::new()
+            .name("header")
+            .size(2) // Shorter header in narrow mode
+            .renderable(header_block),
+        // Pipeline progress
+        Layout::new()
+            .name("pipeline")
+            .ratio(2)
+            .renderable(pipeline_block),
+        // Services (compact)
+        Layout::new()
+            .name("services")
+            .ratio(2)
+            .renderable(services_table),
+        // Quick facts
+        Layout::new()
+            .name("quick_facts")
+            .ratio(1)
+            .renderable(facts_block),
+        // Log pane (fixed height at bottom)
+        Layout::new()
+            .name("logs")
+            .size(DASHBOARD_LOG_HEIGHT)
+            .renderable(log_block),
+    ]);
+
+    root
+}
+
+/// Build a compact header for narrow terminals.
+#[must_use]
+pub fn build_header_block_narrow(snapshot: &DemoStateSnapshot) -> TextBlock {
+    let elapsed_secs = snapshot.elapsed.as_secs();
+
+    // Shorter format for narrow terminals
+    let markup = format!(
+        "[brand.title]{}[/] [dim]{}s[/]",
+        snapshot.headline, elapsed_secs
+    );
+
+    TextBlock::new(markup)
+}
+
+/// Build a compact services table for narrow terminals.
+///
+/// Omits the version column and abbreviates column headers.
+#[must_use]
+pub fn build_services_table_narrow(services: &[ServiceInfo]) -> Table {
+    let mut table = Table::new().title("Svc").box_style(&ROUNDED);
+
+    table.add_column(Column::new("Name").style(Style::parse("bold").unwrap_or_default()));
+    table.add_column(Column::new("HP")); // Health
+    table.add_column(Column::new("ms").justify(rich_rust::text::JustifyMethod::Right)); // Latency
+
+    for svc in services {
+        let health_markup = match svc.health {
+            ServiceHealth::Ok => "[status.ok]OK[/]".to_string(),
+            ServiceHealth::Warn => "[status.warn]!![/]".to_string(),
+            ServiceHealth::Err => "[status.err]XX[/]".to_string(),
+        };
+
+        let latency = if svc.latency.as_millis() > 0 {
+            format!("{}", svc.latency.as_millis())
+        } else {
+            "—".to_string()
+        };
+
+        // Truncate service name if too long
+        let name = if svc.name.len() > 12 {
+            format!("{}…", &svc.name[..11])
+        } else {
+            svc.name.clone()
+        };
+
+        table.add_row_cells([name.as_str(), health_markup.as_str(), latency.as_str()]);
+    }
+
+    table
+}
+
+/// Build dashboard layout based on terminal width.
+///
+/// Automatically chooses wide or narrow layout based on the given width.
+#[must_use]
+pub fn build_dashboard_layout(
+    snapshot: &DemoStateSnapshot,
+    log_limit: usize,
+    width: usize,
+) -> Layout {
+    if width >= DASHBOARD_MIN_WIDTH_WIDE {
+        build_dashboard_layout_wide(snapshot, log_limit)
+    } else {
+        build_dashboard_layout_narrow(snapshot, log_limit)
+    }
+}
+
+/// Update an existing narrow dashboard layout with new snapshot data.
+pub fn update_dashboard_layout_narrow(
+    layout: &mut Layout,
+    snapshot: &DemoStateSnapshot,
+    log_limit: usize,
+) {
+    if let Some(header) = layout.get_mut("header") {
+        header.update(build_header_block_narrow(snapshot));
+    }
+
+    if let Some(services) = layout.get_mut("services") {
+        services.update(build_services_table_narrow(&snapshot.services));
+    }
+
+    if let Some(pipeline) = layout.get_mut("pipeline") {
+        pipeline.update(build_pipeline_block(&snapshot.pipeline));
+    }
+
+    // step_info is not present in narrow layout
+
+    if let Some(quick_facts) = layout.get_mut("quick_facts") {
+        quick_facts.update(build_quick_facts_block(snapshot));
+    }
+
+    if let Some(logs) = layout.get_mut("logs") {
+        logs.update(build_log_block(&snapshot.logs, log_limit));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -768,5 +935,112 @@ mod tests {
             "log pane needs reasonable height"
         );
         assert!(DASHBOARD_HEADER_HEIGHT >= 1, "header needs at least 1 line");
+    }
+
+    // ========== Narrow Layout Tests ==========
+
+    #[test]
+    fn test_build_dashboard_layout_narrow_creates_layout() {
+        let snapshot = make_test_snapshot();
+        let layout = build_dashboard_layout_narrow(&snapshot, 10);
+
+        // Verify key named nodes exist (note: no step_info in narrow mode)
+        assert!(layout.get("root").is_some(), "root node should exist");
+        assert!(layout.get("header").is_some(), "header node should exist");
+        assert!(
+            layout.get("pipeline").is_some(),
+            "pipeline node should exist"
+        );
+        assert!(
+            layout.get("services").is_some(),
+            "services node should exist"
+        );
+        assert!(
+            layout.get("quick_facts").is_some(),
+            "quick_facts node should exist"
+        );
+        assert!(layout.get("logs").is_some(), "logs node should exist");
+
+        // step_info is intentionally omitted in narrow mode
+        assert!(
+            layout.get("step_info").is_none(),
+            "step_info should not exist in narrow mode"
+        );
+    }
+
+    #[test]
+    fn test_build_header_block_narrow_creates_block() {
+        let snapshot = make_test_snapshot();
+        let block = build_header_block_narrow(&snapshot);
+        let _ = block;
+    }
+
+    #[test]
+    fn test_build_services_table_narrow_creates_table() {
+        let snapshot = make_test_snapshot();
+        let table = build_services_table_narrow(&snapshot.services);
+        let _ = table;
+    }
+
+    #[test]
+    fn test_build_services_table_narrow_handles_empty() {
+        let services: Vec<ServiceInfo> = vec![];
+        let table = build_services_table_narrow(&services);
+        let _ = table;
+    }
+
+    #[test]
+    fn test_build_dashboard_layout_selects_wide_for_large_width() {
+        let snapshot = make_test_snapshot();
+        let layout = build_dashboard_layout(&snapshot, 10, 100);
+
+        // Wide layout should have step_info
+        assert!(
+            layout.get("step_info").is_some(),
+            "wide layout should have step_info"
+        );
+    }
+
+    #[test]
+    fn test_build_dashboard_layout_selects_narrow_for_small_width() {
+        let snapshot = make_test_snapshot();
+        let layout = build_dashboard_layout(&snapshot, 10, 60);
+
+        // Narrow layout should NOT have step_info
+        assert!(
+            layout.get("step_info").is_none(),
+            "narrow layout should not have step_info"
+        );
+    }
+
+    #[test]
+    fn test_narrow_constants_are_reasonable() {
+        assert!(
+            DASHBOARD_MIN_WIDTH_NARROW >= 30,
+            "narrow mode needs reasonable min width"
+        );
+        assert!(
+            DASHBOARD_MIN_WIDTH_NARROW < DASHBOARD_MIN_WIDTH_WIDE,
+            "narrow threshold should be less than wide"
+        );
+    }
+
+    #[test]
+    fn test_update_dashboard_layout_narrow_updates_nodes() {
+        let snapshot = make_test_snapshot();
+        let mut layout = build_dashboard_layout_narrow(&snapshot, 10);
+
+        // Create a modified snapshot
+        let mut state = DemoState::demo_seeded(2, 99);
+        state.headline = "Updated Deploy".to_string();
+        let updated_snapshot = DemoStateSnapshot::from(&state);
+
+        // Update should not panic
+        update_dashboard_layout_narrow(&mut layout, &updated_snapshot, 10);
+
+        // Layout structure should still be intact
+        assert!(layout.get("header").is_some());
+        assert!(layout.get("services").is_some());
+        assert!(layout.get("pipeline").is_some());
     }
 }
