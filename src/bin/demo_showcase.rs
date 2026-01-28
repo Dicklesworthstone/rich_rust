@@ -42,8 +42,15 @@ fn main() {
         return;
     }
 
+    // Build console early so logger can use it
+    let demo_console = console_builder::build_demo_console(&cfg);
+
+    // Initialize RichLogger if log level is not Off
+    if cfg.log_level != LogLevel::Off {
+        init_logger(&demo_console.console, cfg.log_level);
+    }
+
     if let Some(scene_name) = cfg.scene.as_deref() {
-        let demo_console = console_builder::build_demo_console(&cfg);
         let registry = scenes::build_registry();
         if let Some(scene) = registry.get(scene_name) {
             if let Err(err) = scene.run(&demo_console.console, &cfg) {
@@ -60,15 +67,28 @@ fn main() {
     // Full demo run: execute all scenes in storyboard order
     // If export mode is enabled, capture output and write files
     if cfg.is_export() {
-        run_export(&cfg);
+        run_export_with_console(&cfg, &demo_console);
     } else {
-        run_full_demo(&cfg);
+        run_full_demo_with_console(&cfg, &demo_console);
+    }
+}
+
+/// Initialize RichLogger with the given console and log level.
+fn init_logger(console: &std::sync::Arc<rich_rust::console::Console>, level: LogLevel) {
+    use rich_rust::logging::RichLogger;
+
+    let logger = RichLogger::new(console.clone())
+        .level(level.to_level_filter())
+        .markup(true)
+        .show_path(false); // Cleaner output for demo
+
+    if let Err(err) = logger.init() {
+        eprintln!("Warning: Failed to initialize logger: {err}");
     }
 }
 
 /// Run the full demo, executing all scenes in order.
-fn run_full_demo(cfg: &Config) {
-    let demo_console = console_builder::build_demo_console(cfg);
+fn run_full_demo_with_console(cfg: &Config, demo_console: &console_builder::DemoConsole) {
     let console = &demo_console.console;
     let registry = scenes::build_registry();
 
@@ -83,6 +103,7 @@ fn run_full_demo(cfg: &Config) {
 
     for scene in registry.all() {
         scene_count += 1;
+        log::debug!("Starting scene: {}", scene.name());
 
         // Section framing between scenes
         typography::section_header(console, scene.name(), false);
@@ -135,7 +156,7 @@ fn run_full_demo(cfg: &Config) {
 }
 
 /// Run the demo in export mode, capturing output to HTML and SVG files.
-fn run_export(cfg: &Config) {
+fn run_export_with_console(cfg: &Config, demo_console: &console_builder::DemoConsole) {
     use std::fs;
     use std::io::Write;
 
@@ -149,8 +170,6 @@ fn run_export(cfg: &Config) {
         std::process::exit(1);
     }
 
-    // Build console for capture (force non-live mode)
-    let demo_console = console_builder::build_demo_console(cfg);
     let console = &demo_console.console;
 
     // Enable capture mode
@@ -230,6 +249,44 @@ enum ExportMode {
     Dir(PathBuf),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum LogLevel {
+    #[default]
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "off" | "none" => Ok(Self::Off),
+            "error" => Ok(Self::Error),
+            "warn" | "warning" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            "trace" => Ok(Self::Trace),
+            _ => Err(format!(
+                "Invalid --log-level value `{value}` (expected: off|error|warn|info|debug|trace)."
+            )),
+        }
+    }
+
+    fn to_level_filter(self) -> log::LevelFilter {
+        match self {
+            Self::Off => log::LevelFilter::Off,
+            Self::Error => log::LevelFilter::Error,
+            Self::Warn => log::LevelFilter::Warn,
+            Self::Info => log::LevelFilter::Info,
+            Self::Debug => log::LevelFilter::Debug,
+            Self::Trace => log::LevelFilter::Trace,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct Config {
     help: bool,
@@ -251,6 +308,8 @@ struct Config {
     emoji: Option<bool>,
     safe_box: Option<bool>,
     links: Option<bool>,
+
+    log_level: LogLevel,
 
     export: ExportMode,
 }
@@ -364,6 +423,11 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Config, String> 
                 cfg.export = ExportMode::Dir(PathBuf::from(raw));
             }
 
+            "--log-level" => {
+                let raw = next_value(&mut iter, "--log-level")?;
+                cfg.log_level = LogLevel::parse(&raw)?;
+            }
+
             "--" => {
                 return Err(
                     "Unexpected positional arguments (this CLI has no positional args)."
@@ -458,6 +522,8 @@ OPTIONS:
 
     --export                    Write an HTML/SVG bundle to a temp dir
     --export-dir <path>         Write an HTML/SVG bundle to a directory
+
+    --log-level <level>         Enable RichLogger (off|error|warn|info|debug|trace)
 
     -h, --help                  Print help and exit
 
