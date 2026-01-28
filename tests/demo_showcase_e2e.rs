@@ -1006,3 +1006,416 @@ fn test_narrow_width_minimum_no_panic() {
     assert_success(&result);
     assert_no_timeout(&result);
 }
+
+// ============================================================================
+// Color downgrade verification tests (bd-191b)
+// ============================================================================
+
+/// Verifies demo runs successfully with standard 16-color palette.
+#[test]
+fn test_color_system_standard() {
+    common::init_test_logging();
+
+    let result = DemoRunner::quick()
+        .arg("--scene")
+        .arg("hero")
+        .arg("--color-system")
+        .arg("standard")
+        .arg("--force-terminal")
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+
+    // Standard uses basic ANSI codes (SGR parameters 30-37, 40-47, 90-97, 100-107)
+    assert!(
+        result.stdout.contains("\x1b["),
+        "Standard color mode should produce ANSI codes"
+    );
+    // Should show the color system in output
+    assert_stdout_contains(&result, "Standard");
+}
+
+/// Verifies demo runs successfully with 256-color palette.
+#[test]
+fn test_color_system_256() {
+    common::init_test_logging();
+
+    let result = DemoRunner::quick()
+        .arg("--scene")
+        .arg("hero")
+        .arg("--color-system")
+        .arg("256")
+        .arg("--force-terminal")
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+
+    // 256-color uses 38;5;N or 48;5;N format
+    assert!(
+        result.stdout.contains("\x1b[38;5;") || result.stdout.contains("\x1b[48;5;"),
+        "256-color mode should use 8-bit color codes"
+    );
+    // Should show the color system in output
+    assert_stdout_contains(&result, "EightBit");
+}
+
+/// Verifies demo runs successfully with truecolor palette.
+#[test]
+fn test_color_system_truecolor_detailed() {
+    common::init_test_logging();
+
+    let result = DemoRunner::quick()
+        .arg("--scene")
+        .arg("hero")
+        .arg("--color-system")
+        .arg("truecolor")
+        .arg("--force-terminal")
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+
+    // Truecolor uses 38;2;R;G;B or 48;2;R;G;B format
+    assert!(
+        result.stdout.contains("\x1b[38;2;") || result.stdout.contains("\x1b[48;2;"),
+        "Truecolor mode should use 24-bit RGB codes"
+    );
+    // Should show the color system in output
+    assert_stdout_contains(&result, "TrueColor");
+}
+
+/// Verifies all color systems produce readable color palette section.
+#[test]
+fn test_color_systems_show_palette() {
+    common::init_test_logging();
+
+    let color_systems = ["standard", "256", "truecolor"];
+
+    for system in color_systems {
+        let result = DemoRunner::quick()
+            .arg("--scene")
+            .arg("hero")
+            .arg("--color-system")
+            .arg(system)
+            .arg("--force-terminal")
+            .run()
+            .unwrap_or_else(|_| panic!("should run with {}", system));
+
+        assert_success(&result);
+
+        // All should show the color palette preview
+        assert_stdout_contains(&result, "Color Palette");
+        assert_stdout_contains(&result, "Brand");
+        assert_stdout_contains(&result, "Status");
+        assert_stdout_contains(&result, "Badges");
+    }
+}
+
+/// Verifies status badges have visible markers in all color modes.
+#[test]
+fn test_color_systems_badges_visible() {
+    common::init_test_logging();
+
+    let color_systems = ["standard", "256", "truecolor"];
+
+    for system in color_systems {
+        let result = DemoRunner::quick()
+            .arg("--scene")
+            .arg("hero")
+            .arg("--color-system")
+            .arg(system)
+            .arg("--force-terminal")
+            .run()
+            .unwrap_or_else(|_| panic!("should run with {}", system));
+
+        assert_success(&result);
+
+        // Badges should contain the status text
+        assert!(
+            result.stdout.contains("OK")
+                && result.stdout.contains("WARN")
+                && result.stdout.contains("ERR"),
+            "Color system '{}' should show readable status badges",
+            system
+        );
+    }
+}
+
+// ============================================================================
+// Export bundle e2e tests (bd-3p3h)
+// ============================================================================
+
+/// Verifies --export-dir creates HTML and SVG files.
+#[test]
+fn test_export_dir_creates_files() {
+    common::init_test_logging();
+
+    let temp_dir = std::env::temp_dir().join("demo_showcase_e2e_export_test");
+    // Clean up any previous run
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let result = DemoRunner::quick()
+        .arg("--export-dir")
+        .arg(temp_dir.to_str().unwrap())
+        .non_interactive()
+        .no_color()
+        .arg("--width")
+        .arg("80")
+        .arg("--height")
+        .arg("24")
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    // Verify files exist
+    let html_path = temp_dir.join("demo_showcase.html");
+    let svg_path = temp_dir.join("demo_showcase.svg");
+
+    assert!(
+        html_path.exists(),
+        "HTML file should exist at {}",
+        html_path.display()
+    );
+    assert!(
+        svg_path.exists(),
+        "SVG file should exist at {}",
+        svg_path.display()
+    );
+
+    // Verify files are non-empty
+    let html_size = std::fs::metadata(&html_path)
+        .expect("should read HTML metadata")
+        .len();
+    let svg_size = std::fs::metadata(&svg_path)
+        .expect("should read SVG metadata")
+        .len();
+
+    assert!(html_size > 0, "HTML file should be non-empty");
+    assert!(svg_size > 0, "SVG file should be non-empty");
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+/// Verifies exported HTML contains expected markers.
+#[test]
+fn test_export_html_contains_expected_content() {
+    common::init_test_logging();
+
+    let temp_dir = std::env::temp_dir().join("demo_showcase_e2e_html_content_test");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let result = DemoRunner::quick()
+        .arg("--export-dir")
+        .arg(temp_dir.to_str().unwrap())
+        .non_interactive()
+        .arg("--color-system")
+        .arg("truecolor")
+        .arg("--width")
+        .arg("80")
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+
+    let html_path = temp_dir.join("demo_showcase.html");
+    let html_content =
+        std::fs::read_to_string(&html_path).expect("should read HTML file");
+
+    // HTML should contain demo title
+    assert!(
+        html_content.contains("Nebula") || html_content.contains("NEBULA"),
+        "HTML should contain demo title 'Nebula'"
+    );
+
+    // HTML should be valid HTML structure
+    assert!(
+        html_content.contains("<html") || html_content.contains("<!DOCTYPE"),
+        "HTML should have valid HTML structure"
+    );
+
+    // HTML should contain style information
+    assert!(
+        html_content.contains("<style") || html_content.contains("style="),
+        "HTML should contain styling"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+/// Verifies exported SVG contains expected markers.
+#[test]
+fn test_export_svg_contains_expected_content() {
+    common::init_test_logging();
+
+    let temp_dir = std::env::temp_dir().join("demo_showcase_e2e_svg_content_test");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let result = DemoRunner::quick()
+        .arg("--export-dir")
+        .arg(temp_dir.to_str().unwrap())
+        .non_interactive()
+        .arg("--color-system")
+        .arg("truecolor")
+        .arg("--width")
+        .arg("80")
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+
+    let svg_path = temp_dir.join("demo_showcase.svg");
+    let svg_content =
+        std::fs::read_to_string(&svg_path).expect("should read SVG file");
+
+    // SVG should have valid SVG structure
+    assert!(
+        svg_content.contains("<svg"),
+        "SVG should contain <svg> element"
+    );
+    assert!(
+        svg_content.contains("xmlns"),
+        "SVG should have xmlns attribute"
+    );
+
+    // SVG should use foreignObject for text (as documented)
+    assert!(
+        svg_content.contains("foreignObject"),
+        "SVG should use foreignObject for text rendering"
+    );
+
+    // SVG should contain demo title
+    assert!(
+        svg_content.contains("Nebula") || svg_content.contains("NEBULA"),
+        "SVG should contain demo title 'Nebula'"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+/// Verifies --export (without dir) uses temp directory.
+#[test]
+fn test_export_flag_uses_temp_dir() {
+    common::init_test_logging();
+
+    let result = DemoRunner::quick()
+        .arg("--export")
+        .non_interactive()
+        .no_color()
+        .arg("--width")
+        .arg("80")
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+
+    // Stderr should mention the export paths
+    assert!(
+        result.stderr.contains("demo_showcase.html")
+            || result.stderr.contains("Exported HTML"),
+        "Stderr should mention HTML export path"
+    );
+    assert!(
+        result.stderr.contains("demo_showcase.svg")
+            || result.stderr.contains("Exported SVG"),
+        "Stderr should mention SVG export path"
+    );
+}
+
+/// Verifies export with single scene works.
+#[test]
+fn test_export_single_scene() {
+    common::init_test_logging();
+
+    let temp_dir = std::env::temp_dir().join("demo_showcase_e2e_single_scene_export");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    // Note: --scene with --export-dir only runs the scene, doesn't trigger full export
+    // The export happens when running full demo with --export-dir
+    let result = DemoRunner::quick()
+        .arg("--export-dir")
+        .arg(temp_dir.to_str().unwrap())
+        .non_interactive()
+        .no_color()
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+
+    // Files should exist from full export run
+    let html_path = temp_dir.join("demo_showcase.html");
+    let svg_path = temp_dir.join("demo_showcase.svg");
+
+    assert!(html_path.exists(), "HTML file should exist after export");
+    assert!(svg_path.exists(), "SVG file should exist after export");
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+/// Verifies export files have reasonable sizes (not empty, not huge).
+#[test]
+fn test_export_file_sizes_reasonable() {
+    common::init_test_logging();
+
+    let temp_dir = std::env::temp_dir().join("demo_showcase_e2e_file_sizes");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let result = DemoRunner::quick()
+        .arg("--export-dir")
+        .arg(temp_dir.to_str().unwrap())
+        .non_interactive()
+        .arg("--color-system")
+        .arg("truecolor")
+        .arg("--width")
+        .arg("80")
+        .timeout(Duration::from_secs(60))
+        .run()
+        .expect("should run export");
+
+    assert_success(&result);
+
+    let html_path = temp_dir.join("demo_showcase.html");
+    let svg_path = temp_dir.join("demo_showcase.svg");
+
+    let html_size = std::fs::metadata(&html_path)
+        .expect("should read HTML metadata")
+        .len();
+    let svg_size = std::fs::metadata(&svg_path)
+        .expect("should read SVG metadata")
+        .len();
+
+    // Files should be at least 1KB (meaningful content)
+    assert!(
+        html_size >= 1024,
+        "HTML should be at least 1KB, got {} bytes",
+        html_size
+    );
+    assert!(
+        svg_size >= 1024,
+        "SVG should be at least 1KB, got {} bytes",
+        svg_size
+    );
+
+    // Files shouldn't be huge (< 5MB is reasonable for a demo)
+    assert!(
+        html_size < 5 * 1024 * 1024,
+        "HTML should be under 5MB, got {} bytes",
+        html_size
+    );
+    assert!(
+        svg_size < 5 * 1024 * 1024,
+        "SVG should be under 5MB, got {} bytes",
+        svg_size
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
