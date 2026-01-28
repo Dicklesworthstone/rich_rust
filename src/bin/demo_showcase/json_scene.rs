@@ -56,7 +56,8 @@ impl Scene for JsonScene {
 /// Run the JSON demo when the feature is enabled.
 #[cfg(feature = "json")]
 fn run_json_demo(console: &Arc<Console>) {
-    console.print("[dim]Json renderable provides pretty-printed, syntax-highlighted JSON output.[/]");
+    console
+        .print("[dim]Json renderable provides pretty-printed, syntax-highlighted JSON output.[/]");
     console.print("");
 
     // Demo 1: API Request payload
@@ -73,7 +74,9 @@ fn run_json_demo(console: &Arc<Console>) {
     render_theme_demo(console);
 
     console.print("");
-    console.print("[hint]Json automatically highlights keys, strings, numbers, booleans, and null values.[/]");
+    console.print(
+        "[hint]Json automatically highlights keys, strings, numbers, booleans, and null values.[/]",
+    );
 }
 
 /// Render a deployment API request payload.

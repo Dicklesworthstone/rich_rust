@@ -39,17 +39,18 @@ impl Scene for MarkdownScene {
         "Markdown deep-dive: release notes, headings, lists, and code blocks."
     }
 
-    fn run(&self, console: &Arc<Console>, _cfg: &Config) -> Result<(), SceneError> {
+    fn run(&self, console: &Arc<Console>, cfg: &Config) -> Result<(), SceneError> {
         console.print("[section.title]Markdown: Documentation Rendering[/]");
         console.print("");
 
         #[cfg(feature = "markdown")]
         {
-            run_markdown_demo(console);
+            run_markdown_demo(console, cfg);
         }
 
         #[cfg(not(feature = "markdown"))]
         {
+            let _ = cfg;
             run_markdown_disabled_notice(console);
         }
 
@@ -59,17 +60,18 @@ impl Scene for MarkdownScene {
 
 /// Run the markdown demo when the feature is enabled.
 #[cfg(feature = "markdown")]
-fn run_markdown_demo(console: &Arc<Console>) {
-    console.print("[dim]Markdown renderable converts CommonMark + GFM to styled terminal output.[/]");
+fn run_markdown_demo(console: &Arc<Console>, cfg: &Config) {
+    console
+        .print("[dim]Markdown renderable converts CommonMark + GFM to styled terminal output.[/]");
     console.print("");
 
-    // Demo 1: Release notes
+    // Demo 1: Release notes (always inline)
     render_release_notes(console);
 
     console.print("");
 
-    // Demo 2: Runbook excerpt
-    render_runbook(console);
+    // Demo 2: Runbook excerpt (use pager when interactive for long content)
+    render_runbook(console, cfg);
 
     console.print("");
     console.print("[hint]Markdown supports headings, lists, code blocks, blockquotes, and inline formatting.[/]");

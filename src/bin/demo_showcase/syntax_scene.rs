@@ -128,7 +128,11 @@ max_surge = 1"#;
             for (i, line) in toml_code.lines().enumerate() {
                 let line_num = format!("{:>2} │ ", i + 1);
                 let line_segments = vec![
-                    Segment::new(&line_num, Some(rich_rust::style::Style::parse("dim").unwrap_or_default())).into_owned(),
+                    Segment::new(
+                        &line_num,
+                        Some(rich_rust::style::Style::parse("dim").unwrap_or_default()),
+                    )
+                    .into_owned(),
                     Segment::plain(line).into_owned(),
                     Segment::plain("\n").into_owned(),
                 ];

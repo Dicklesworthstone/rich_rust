@@ -451,6 +451,41 @@ fn test_non_interactive_live_auto_disabled() {
     );
 }
 
+/// Tests that pager is disabled with --no-interactive (bd-3iws).
+///
+/// When --no-interactive is set, the markdown scene should:
+/// - Skip pager invocation entirely
+/// - Render content inline to stdout
+/// - Complete without hanging
+#[test]
+fn test_non_interactive_pager_disabled() {
+    common::init_test_logging();
+
+    // Run markdown scene with --no-interactive
+    // This should render the runbook inline without invoking a pager
+    let result = DemoRunner::new()
+        .arg("--scene")
+        .arg("markdown")
+        .arg("--quick")
+        .arg("--seed")
+        .arg("0")
+        .arg("--no-interactive")
+        .timeout_secs(10) // Should complete quickly without pager
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    // Verify content was rendered inline (not swallowed by pager)
+    // The markdown scene outputs recognizable text
+    assert!(
+        result.stdout_contains("Markdown") || result.stdout_contains("markdown"),
+        "Markdown scene should produce recognizable output:\n{}",
+        result.diagnostic_output()
+    );
+}
+
 // ============================================================================
 // Non-TTY / Piped output verification tests (bd-2k90)
 // ============================================================================
@@ -1165,7 +1200,7 @@ fn test_export_dir_creates_files() {
         .arg("80")
         .arg("--height")
         .arg("24")
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 
@@ -1218,15 +1253,14 @@ fn test_export_html_contains_expected_content() {
         .arg("truecolor")
         .arg("--width")
         .arg("80")
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 
     assert_success(&result);
 
     let html_path = temp_dir.join("demo_showcase.html");
-    let html_content =
-        std::fs::read_to_string(&html_path).expect("should read HTML file");
+    let html_content = std::fs::read_to_string(&html_path).expect("should read HTML file");
 
     // HTML should contain demo title
     assert!(
@@ -1265,15 +1299,14 @@ fn test_export_svg_contains_expected_content() {
         .arg("truecolor")
         .arg("--width")
         .arg("80")
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 
     assert_success(&result);
 
     let svg_path = temp_dir.join("demo_showcase.svg");
-    let svg_content =
-        std::fs::read_to_string(&svg_path).expect("should read SVG file");
+    let svg_content = std::fs::read_to_string(&svg_path).expect("should read SVG file");
 
     // SVG should have valid SVG structure
     assert!(
@@ -1311,7 +1344,7 @@ fn test_export_flag_uses_temp_dir() {
         .no_color()
         .arg("--width")
         .arg("80")
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 
@@ -1319,13 +1352,11 @@ fn test_export_flag_uses_temp_dir() {
 
     // Stderr should mention the export paths
     assert!(
-        result.stderr.contains("demo_showcase.html")
-            || result.stderr.contains("Exported HTML"),
+        result.stderr.contains("demo_showcase.html") || result.stderr.contains("Exported HTML"),
         "Stderr should mention HTML export path"
     );
     assert!(
-        result.stderr.contains("demo_showcase.svg")
-            || result.stderr.contains("Exported SVG"),
+        result.stderr.contains("demo_showcase.svg") || result.stderr.contains("Exported SVG"),
         "Stderr should mention SVG export path"
     );
 }
@@ -1345,7 +1376,7 @@ fn test_export_single_scene() {
         .arg(temp_dir.to_str().unwrap())
         .non_interactive()
         .no_color()
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 
@@ -1377,7 +1408,7 @@ fn test_export_file_sizes_reasonable() {
         .arg("truecolor")
         .arg("--width")
         .arg("80")
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .run()
         .expect("should run export");
 

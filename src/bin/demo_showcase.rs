@@ -14,18 +14,20 @@ mod hero;
 mod json_scene;
 #[path = "demo_showcase/layout_scene.rs"]
 mod layout_scene;
-#[path = "demo_showcase/markdown_scene.rs"]
-mod markdown_scene;
 #[path = "demo_showcase/log_pane.rs"]
 mod log_pane;
+#[path = "demo_showcase/markdown_scene.rs"]
+mod markdown_scene;
+#[path = "demo_showcase/pager.rs"]
+mod pager;
 #[path = "demo_showcase/panel_scene.rs"]
 mod panel_scene;
 #[path = "demo_showcase/scenes.rs"]
 mod scenes;
-#[path = "demo_showcase/syntax_scene.rs"]
-mod syntax_scene;
 #[path = "demo_showcase/state.rs"]
 mod state;
+#[path = "demo_showcase/syntax_scene.rs"]
+mod syntax_scene;
 #[path = "demo_showcase/table_scene.rs"]
 mod table_scene;
 #[path = "demo_showcase/theme.rs"]
@@ -349,6 +351,15 @@ impl Config {
     /// Check if export mode is enabled.
     fn is_export(&self) -> bool {
         !matches!(self.export, ExportMode::Off)
+    }
+
+    /// Check if interactive features (prompts, pager) are allowed.
+    ///
+    /// Returns `false` if `--no-interactive` was specified, otherwise `true`.
+    /// Note: This only checks the CLI flag; actual interactivity also depends
+    /// on whether the console is a TTY (checked separately by `Pager`).
+    fn is_interactive_allowed(&self) -> bool {
+        self.interactive.unwrap_or(true)
     }
 
     /// Get the export directory, creating a temp dir if needed.
