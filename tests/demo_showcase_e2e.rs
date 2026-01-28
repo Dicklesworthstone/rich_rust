@@ -68,6 +68,7 @@ fn test_list_scenes_shows_all_scenes() {
     assert_stdout_contains(&result, "deep_dive_syntax");
     assert_stdout_contains(&result, "deep_dive_json");
     assert_stdout_contains(&result, "table");
+    assert_stdout_contains(&result, "panels");
     assert_stdout_contains(&result, "debug_tools");
     assert_stdout_contains(&result, "traceback");
     assert_stdout_contains(&result, "export");
@@ -457,7 +458,7 @@ fn test_piped_all_scenes_complete() {
     common::init_test_logging();
 
     // List of all implemented scenes (non-placeholder)
-    let scenes = ["hero", "debug_tools", "traceback", "table"];
+    let scenes = ["hero", "debug_tools", "traceback", "table", "panels"];
 
     for scene in scenes {
         let result = DemoRunner::new()
@@ -556,7 +557,7 @@ fn test_piped_no_blocking_pager() {
 fn test_piped_per_scene_output_bounded() {
     common::init_test_logging();
 
-    let scenes = ["hero", "debug_tools", "traceback", "table"];
+    let scenes = ["hero", "debug_tools", "traceback", "table", "panels"];
     const MAX_SCENE_OUTPUT: usize = 50 * 1024; // 50 KB per scene
 
     for scene in scenes {

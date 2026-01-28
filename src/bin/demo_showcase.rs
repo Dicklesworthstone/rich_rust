@@ -8,6 +8,8 @@ mod debug_tools;
 mod hero;
 #[path = "demo_showcase/log_pane.rs"]
 mod log_pane;
+#[path = "demo_showcase/panel_scene.rs"]
+mod panel_scene;
 #[path = "demo_showcase/scenes.rs"]
 mod scenes;
 #[path = "demo_showcase/state.rs"]
@@ -20,6 +22,8 @@ mod theme;
 mod timing;
 #[path = "demo_showcase/traceback_scene.rs"]
 mod traceback_scene;
+#[path = "demo_showcase/tree_scene.rs"]
+mod tree_scene;
 #[path = "demo_showcase/typography.rs"]
 mod typography;
 
