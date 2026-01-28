@@ -58,17 +58,32 @@ impl Scene for HeroScene {
 
 /// Render the big branded title with tagline.
 fn render_brand_title(console: &Console) {
-    // Main title in brand style
-    console.print("[brand.title]╭───────────────────────────────────────────╮[/]");
-    console.print("[brand.title]│[/]                                           [brand.title]│[/]");
-    console.print(
-        "[brand.title]│[/]     [bold #a78bfa]✦  N E B U L A   D E P L O Y  ✦[/]     [brand.title]│[/]",
-    );
-    console.print("[brand.title]│[/]                                           [brand.title]│[/]");
-    console.print("[brand.title]╰───────────────────────────────────────────╯[/]");
-    console.print("");
-    console.print("[brand.subtitle]      Beautiful terminal output for Rust[/]");
-    console.print("[brand.muted]             powered by rich_rust[/]");
+    let width = console.width();
+
+    // Use compact layout for narrow terminals
+    if width < 50 {
+        // Narrow layout: simple centered text
+        console.print("[brand.title]┌────────────────────────┐[/]");
+        console.print("[brand.title]│[/] [bold #a78bfa]✦ NEBULA DEPLOY ✦[/] [brand.title]│[/]");
+        console.print("[brand.title]└────────────────────────┘[/]");
+        console.print("");
+        console.print("[brand.subtitle]Beautiful terminal output[/]");
+        console.print("[brand.muted]    powered by rich_rust[/]");
+    } else {
+        // Full-width layout with spaced letters
+        console.print("[brand.title]╭───────────────────────────────────────────╮[/]");
+        console
+            .print("[brand.title]│[/]                                           [brand.title]│[/]");
+        console.print(
+            "[brand.title]│[/]     [bold #a78bfa]✦  N E B U L A   D E P L O Y  ✦[/]     [brand.title]│[/]",
+        );
+        console
+            .print("[brand.title]│[/]                                           [brand.title]│[/]");
+        console.print("[brand.title]╰───────────────────────────────────────────╯[/]");
+        console.print("");
+        console.print("[brand.subtitle]      Beautiful terminal output for Rust[/]");
+        console.print("[brand.muted]             powered by rich_rust[/]");
+    }
 }
 
 /// Render the capabilities detection panel.
@@ -145,25 +160,25 @@ fn render_palette_preview(console: &Console) {
     table.add_column(Column::new("Preview"));
 
     // Brand colors
-    table.add_row_cells([
+    table.add_row_markup([
         "Brand",
         "[#a78bfa]████[/] [#c4b5fd]████[/] [#38bdf8]████[/]",
     ]);
 
     // Status colors
-    table.add_row_cells([
+    table.add_row_markup([
         "Status",
         "[green]████[/] [yellow]████[/] [red]████[/] [cyan]████[/]",
     ]);
 
     // Badges
-    table.add_row_cells([
+    table.add_row_markup([
         "Badges",
         "[bold white on green] OK [/] [bold black on yellow] WARN [/] [bold white on red] ERR [/]",
     ]);
 
     // Dim/muted
-    table.add_row_cells(["Muted", "[dim #94a3b8]████[/] [dim #64748b]████[/]"]);
+    table.add_row_markup(["Muted", "[dim #94a3b8]████[/] [dim #64748b]████[/]"]);
 
     console.print_renderable(&table);
 }
