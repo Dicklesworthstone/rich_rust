@@ -413,6 +413,366 @@ fn trim_newline(line: &str) -> &str {
     line.trim_end_matches(&['\n', '\r'][..])
 }
 
+/// A choice for the Select prompt.
+#[derive(Debug, Clone)]
+pub struct Choice {
+    /// The value returned when this choice is selected.
+    pub value: String,
+    /// Optional display label (if different from value).
+    pub label: Option<String>,
+}
+
+impl Choice {
+    /// Create a choice where value and label are the same.
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            label: None,
+        }
+    }
+
+    /// Create a choice with a separate display label.
+    #[must_use]
+    pub fn with_label(value: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            label: Some(label.into()),
+        }
+    }
+
+    /// Get the display text for this choice.
+    #[must_use]
+    pub fn display(&self) -> &str {
+        self.label.as_deref().unwrap_or(&self.value)
+    }
+}
+
+impl<S: Into<String>> From<S> for Choice {
+    fn from(value: S) -> Self {
+        Self::new(value)
+    }
+}
+
+/// Select prompt for choosing from a list of options.
+///
+/// Displays numbered choices and allows selection by number or by typing
+/// the choice value directly.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use rich_rust::interactive::Select;
+///
+/// let color = Select::new("Pick a color")
+///     .choices(["red", "green", "blue"])
+///     .default("blue")
+///     .ask(&console)?;
+/// ```
+#[derive(Debug, Clone)]
+pub struct Select {
+    label: String,
+    choices: Vec<Choice>,
+    default: Option<String>,
+    show_default: bool,
+    markup: bool,
+}
+
+impl Select {
+    /// Create a new select prompt.
+    #[must_use]
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            choices: Vec::new(),
+            default: None,
+            show_default: true,
+            markup: true,
+        }
+    }
+
+    /// Add choices to select from.
+    #[must_use]
+    pub fn choices<I, C>(mut self, choices: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: Into<Choice>,
+    {
+        self.choices.extend(choices.into_iter().map(Into::into));
+        self
+    }
+
+    /// Add a single choice.
+    #[must_use]
+    pub fn choice(mut self, choice: impl Into<Choice>) -> Self {
+        self.choices.push(choice.into());
+        self
+    }
+
+    /// Set the default choice (used when user enters empty input or in non-interactive mode).
+    #[must_use]
+    pub fn default(mut self, default: impl Into<String>) -> Self {
+        self.default = Some(default.into());
+        self
+    }
+
+    /// Show/hide the default value in the prompt.
+    #[must_use]
+    pub const fn show_default(mut self, show_default: bool) -> Self {
+        self.show_default = show_default;
+        self
+    }
+
+    /// Enable/disable markup parsing for the prompt label.
+    #[must_use]
+    pub const fn markup(mut self, markup: bool) -> Self {
+        self.markup = markup;
+        self
+    }
+
+    /// Ask for selection using stdin.
+    pub fn ask(&self, console: &Console) -> Result<String, PromptError> {
+        let stdin = io::stdin();
+        let mut reader = stdin.lock();
+        self.ask_from(console, &mut reader)
+    }
+
+    /// Ask for selection from a provided reader (useful for tests).
+    pub fn ask_from<R: io::BufRead>(
+        &self,
+        console: &Console,
+        reader: &mut R,
+    ) -> Result<String, PromptError> {
+        if self.choices.is_empty() {
+            return Err(PromptError::Validation("No choices provided".to_string()));
+        }
+
+        if !console.is_terminal() {
+            return self.default.clone().ok_or(PromptError::NotInteractive);
+        }
+
+        let mut line = String::new();
+        loop {
+            self.print_choices(console);
+            self.print_prompt(console);
+
+            line.clear();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                return Err(PromptError::Eof);
+            }
+
+            let input = trim_newline(&line).trim();
+
+            // Empty input uses default
+            if input.is_empty() {
+                if let Some(default) = &self.default {
+                    if self.find_choice(default).is_some() {
+                        return Ok(default.clone());
+                    }
+                }
+                self.print_error(console, "Please select an option.");
+                continue;
+            }
+
+            // Try as number first
+            if let Ok(num) = input.parse::<usize>() {
+                if num >= 1 && num <= self.choices.len() {
+                    return Ok(self.choices[num - 1].value.clone());
+                }
+            }
+
+            // Try as exact match (case insensitive)
+            if let Some(choice) = self.find_choice(input) {
+                return Ok(choice.value.clone());
+            }
+
+            self.print_error(console, &format!("Invalid choice: {input}"));
+        }
+    }
+
+    fn find_choice(&self, input: &str) -> Option<&Choice> {
+        let input_lower = input.to_lowercase();
+        self.choices
+            .iter()
+            .find(|c| c.value.to_lowercase() == input_lower || c.display().to_lowercase() == input_lower)
+    }
+
+    fn print_choices(&self, console: &Console) {
+        for (i, choice) in self.choices.iter().enumerate() {
+            let num = i + 1;
+            let display = choice.display();
+            let is_default = self.default.as_deref() == Some(&choice.value);
+
+            let line = if is_default && self.show_default {
+                format!("  [bold cyan]{num}.[/] {display} [dim](default)[/]")
+            } else {
+                format!("  [cyan]{num}.[/] {display}")
+            };
+
+            console.print_with_options(
+                &line,
+                &PrintOptions::new().with_markup(self.markup),
+            );
+        }
+    }
+
+    fn print_prompt(&self, console: &Console) {
+        let mut prompt = self.label.clone();
+        if self.show_default {
+            if let Some(default) = &self.default {
+                let default_display = self
+                    .find_choice(default)
+                    .map(Choice::display)
+                    .unwrap_or(default.as_str());
+                let escaped = if self.markup {
+                    markup::escape(default_display)
+                } else {
+                    default_display.to_string()
+                };
+                prompt.push_str(" [");
+                prompt.push_str(&escaped);
+                prompt.push(']');
+            }
+        }
+        prompt.push_str(": ");
+
+        console.print_with_options(
+            &prompt,
+            &PrintOptions::new()
+                .with_markup(self.markup)
+                .with_no_newline(true),
+        );
+    }
+
+    fn print_error(&self, console: &Console, message: &str) {
+        let style = Style::parse("bold red").unwrap_or_default();
+        console.print_with_options(
+            message,
+            &PrintOptions::new().with_markup(false).with_style(style),
+        );
+    }
+}
+
+/// Confirm prompt (yes/no question).
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use rich_rust::interactive::Confirm;
+///
+/// let proceed = Confirm::new("Continue?")
+///     .default(true)
+///     .ask(&console)?;
+/// ```
+#[derive(Debug, Clone)]
+pub struct Confirm {
+    label: String,
+    default: Option<bool>,
+    markup: bool,
+}
+
+impl Confirm {
+    /// Create a new confirmation prompt.
+    #[must_use]
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            default: None,
+            markup: true,
+        }
+    }
+
+    /// Set the default value.
+    #[must_use]
+    pub const fn default(mut self, default: bool) -> Self {
+        self.default = Some(default);
+        self
+    }
+
+    /// Enable/disable markup parsing for the prompt label.
+    #[must_use]
+    pub const fn markup(mut self, markup: bool) -> Self {
+        self.markup = markup;
+        self
+    }
+
+    /// Ask for confirmation using stdin.
+    pub fn ask(&self, console: &Console) -> Result<bool, PromptError> {
+        let stdin = io::stdin();
+        let mut reader = stdin.lock();
+        self.ask_from(console, &mut reader)
+    }
+
+    /// Ask for confirmation from a provided reader (useful for tests).
+    pub fn ask_from<R: io::BufRead>(
+        &self,
+        console: &Console,
+        reader: &mut R,
+    ) -> Result<bool, PromptError> {
+        if !console.is_terminal() {
+            return self.default.ok_or(PromptError::NotInteractive);
+        }
+
+        let mut line = String::new();
+        loop {
+            self.print_prompt(console);
+
+            line.clear();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                return Err(PromptError::Eof);
+            }
+
+            let input = trim_newline(&line).trim().to_lowercase();
+
+            if input.is_empty() {
+                if let Some(default) = self.default {
+                    return Ok(default);
+                }
+                self.print_error(console, "Please enter y or n.");
+                continue;
+            }
+
+            match input.as_str() {
+                "y" | "yes" | "true" | "1" => return Ok(true),
+                "n" | "no" | "false" | "0" => return Ok(false),
+                _ => {
+                    self.print_error(console, "Please enter y or n.");
+                }
+            }
+        }
+    }
+
+    fn print_prompt(&self, console: &Console) {
+        let mut prompt = self.label.clone();
+
+        let choices = match self.default {
+            Some(true) => "[Y/n]",
+            Some(false) => "[y/N]",
+            None => "[y/n]",
+        };
+        prompt.push(' ');
+        prompt.push_str(choices);
+        prompt.push_str(": ");
+
+        console.print_with_options(
+            &prompt,
+            &PrintOptions::new()
+                .with_markup(self.markup)
+                .with_no_newline(true),
+        );
+    }
+
+    fn print_error(&self, console: &Console, message: &str) {
+        let style = Style::parse("bold red").unwrap_or_default();
+        console.print_with_options(
+            message,
+            &PrintOptions::new().with_markup(false).with_style(style),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -515,5 +875,190 @@ mod tests {
         let out = buffer.0.lock().unwrap();
         let text = String::from_utf8_lossy(&out);
         assert!(text.contains("hello\nworld\n"));
+    }
+
+    #[test]
+    fn test_select_by_number() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick a color").choices(["red", "green", "blue"]);
+
+        let input = b"2\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "green");
+    }
+
+    #[test]
+    fn test_select_by_value() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick a color").choices(["red", "green", "blue"]);
+
+        let input = b"blue\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "blue");
+    }
+
+    #[test]
+    fn test_select_case_insensitive() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick").choices(["Red", "Green"]);
+
+        let input = b"red\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "Red");
+    }
+
+    #[test]
+    fn test_select_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick").choices(["a", "b", "c"]).default("b");
+
+        let input = b"\n"; // Empty input
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "b");
+    }
+
+    #[test]
+    fn test_select_non_interactive_uses_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(false)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick").choices(["a", "b"]).default("b");
+        let answer = select.ask(&console).expect("select");
+        assert_eq!(answer, "b");
+    }
+
+    #[test]
+    fn test_select_with_labels() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick")
+            .choice(Choice::with_label("us-east-1", "US East (N. Virginia)"))
+            .choice(Choice::with_label("eu-west-1", "EU (Ireland)"));
+
+        let input = b"1\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "us-east-1");
+    }
+
+    #[test]
+    fn test_confirm_yes() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let confirm = Confirm::new("Continue?");
+
+        let input = b"y\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = confirm.ask_from(&console, &mut reader).expect("confirm");
+        assert!(answer);
+    }
+
+    #[test]
+    fn test_confirm_no() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let confirm = Confirm::new("Continue?");
+
+        let input = b"n\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = confirm.ask_from(&console, &mut reader).expect("confirm");
+        assert!(!answer);
+    }
+
+    #[test]
+    fn test_confirm_default_yes() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let confirm = Confirm::new("Continue?").default(true);
+
+        let input = b"\n"; // Empty input
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = confirm.ask_from(&console, &mut reader).expect("confirm");
+        assert!(answer);
+    }
+
+    #[test]
+    fn test_confirm_non_interactive_uses_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(false)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let confirm = Confirm::new("Continue?").default(false);
+        let answer = confirm.ask(&console).expect("confirm");
+        assert!(!answer);
+    }
+
+    #[test]
+    fn test_choice_display() {
+        let simple = Choice::new("value");
+        assert_eq!(simple.display(), "value");
+
+        let labeled = Choice::with_label("value", "Display Label");
+        assert_eq!(labeled.display(), "Display Label");
     }
 }
