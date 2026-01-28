@@ -5,6 +5,194 @@
 //!
 //! Note: `rich_rust`'s core remains output-focused; these helpers are best-effort
 //! and fall back gracefully when the console is not interactive.
+//!
+//! # Design RFC: Input Length Limiting Strategy (bd-191n)
+//!
+//! ## Problem Statement
+//!
+//! The current `Prompt::ask_from` implementation uses `BufRead::read_line()` with no
+//! upper bound on input length. A malicious or accidental input stream could allocate
+//! unbounded memory, leading to OOM or denial-of-service. This RFC defines how we
+//! limit input length across all interactive prompt types.
+//!
+//! ## Decision 1: Default Limit Value
+//!
+//! **Chosen: 64 KiB (65,536 bytes).**
+//!
+//! Rationale:
+//! - Large enough for any reasonable single-line interactive input (names, passwords,
+//!   paths, URLs, freeform text responses).
+//! - Small enough to prevent accidental memory exhaustion from piped/redirected input.
+//! - Matches typical terminal line-buffer sizes and is consistent with common POSIX
+//!   defaults (e.g., `LINE_MAX` is often 2048, but we are generous for rich text use).
+//! - Alternatives considered: 256 bytes (too small for paths), 4 KiB (too small for
+//!   pasted content), 1 MiB (too permissive, defeats the purpose).
+//!
+//! The default is exposed as a public constant:
+//! ```rust,ignore
+//! pub const DEFAULT_MAX_INPUT_LENGTH: usize = 64 * 1024; // 64 KiB
+//! ```
+//!
+//! ## Decision 2: Error Handling
+//!
+//! **Chosen: New `PromptError::InputTooLong` variant.**
+//!
+//! ```rust,ignore
+//! pub enum PromptError {
+//!     NotInteractive,
+//!     Eof,
+//!     Validation(String),
+//!     Io(io::Error),
+//!     InputTooLong { limit: usize, received: usize },
+//! }
+//! ```
+//!
+//! The variant carries both the configured limit and the number of bytes received
+//! before the limit was exceeded, enabling callers to produce informative error
+//! messages. `Display` renders as:
+//! `"input too long: received at least {received} bytes, limit is {limit} bytes"`.
+//!
+//! ## Decision 3: Configuration API
+//!
+//! **Chosen: Per-prompt `max_length()` builder method.**
+//!
+//! ```rust,ignore
+//! let name = Prompt::new("Name")
+//!     .max_length(256)        // Override default for this prompt
+//!     .ask(&console)?;
+//!
+//! let essay = Prompt::new("Description")
+//!     .max_length(1024 * 1024)  // Allow up to 1 MiB for this prompt
+//!     .ask(&console)?;
+//!
+//! let default_limit = Prompt::new("City")
+//!     .ask(&console)?;          // Uses DEFAULT_MAX_INPUT_LENGTH (64 KiB)
+//! ```
+//!
+//! The `Prompt` struct gains a new field:
+//! ```rust,ignore
+//! pub struct Prompt {
+//!     // ... existing fields ...
+//!     max_length: usize,  // defaults to DEFAULT_MAX_INPUT_LENGTH
+//! }
+//! ```
+//!
+//! `Select` and `Confirm` prompts also gain `max_length` with the same default.
+//! Their inputs are inherently shorter (a number or "y"/"n"), but the limit
+//! applies uniformly for defense-in-depth.
+//!
+//! No global `Console`-level override is needed: per-prompt is sufficient, and a
+//! global setting would add complexity without clear benefit. If a future use case
+//! demands it, a `ConsoleBuilder::default_max_input()` can be added non-breakingly.
+//!
+//! ## Decision 4: Limit Enforcement Point
+//!
+//! **Chosen: During read (Option A from the bead description), with streaming check.**
+//!
+//! A new helper function enforces the limit *before* the full input is buffered:
+//!
+//! ```rust,ignore
+//! fn read_line_limited<R: BufRead>(
+//!     reader: &mut R,
+//!     max_bytes: usize,
+//! ) -> Result<String, PromptError> {
+//!     let mut buf = Vec::new();
+//!     let mut total = 0usize;
+//!     loop {
+//!         let available = reader.fill_buf().map_err(PromptError::Io)?;
+//!         if available.is_empty() {
+//!             // EOF reached
+//!             if total == 0 {
+//!                 return Err(PromptError::Eof);
+//!             }
+//!             break;
+//!         }
+//!         if let Some(newline_pos) = available.iter().position(|&b| b == b'\n') {
+//!             let line_len = newline_pos + 1; // include the newline
+//!             if total + line_len > max_bytes {
+//!                 return Err(PromptError::InputTooLong {
+//!                     limit: max_bytes,
+//!                     received: total + line_len,
+//!                 });
+//!             }
+//!             buf.extend_from_slice(&available[..line_len]);
+//!             reader.consume(line_len);
+//!             break;
+//!         }
+//!         // No newline yet; check running total
+//!         if total + available.len() > max_bytes {
+//!             return Err(PromptError::InputTooLong {
+//!                 limit: max_bytes,
+//!                 received: total + available.len(),
+//!             });
+//!         }
+//!         buf.extend_from_slice(available);
+//!         total += available.len();
+//!         let len = available.len();
+//!         reader.consume(len);
+//!     }
+//!     String::from_utf8(buf)
+//!         .map(|s| s.trim_end_matches(&['\n', '\r'][..]).to_string())
+//!         .map_err(|e| PromptError::Validation(format!("invalid UTF-8: {e}")))
+//! }
+//! ```
+//!
+//! Key advantages over post-read checking:
+//! - Memory is never allocated beyond the limit.
+//! - Fail-fast: stops reading as soon as the limit is exceeded.
+//! - Works correctly with piped input where `read_line()` might buffer megabytes.
+//!
+//! ## Decision 5: Behavior on Limit Exceeded
+//!
+//! **Chosen: Error immediately (fail-fast).**
+//!
+//! - Returning `Err(PromptError::InputTooLong { .. })` immediately on exceeding
+//!   the limit is the safest and most predictable behavior.
+//! - Silent truncation risks data loss and confused users.
+//! - Truncation with warning adds UX complexity without clear benefit.
+//! - Callers can catch the error and retry with a message, e.g.:
+//!   ```rust,ignore
+//!   loop {
+//!       match Prompt::new("Name").max_length(256).ask(&console) {
+//!           Ok(name) => break name,
+//!           Err(PromptError::InputTooLong { limit, .. }) => {
+//!               console.print(&format!("[red]Input must be under {limit} bytes.[/]"));
+//!           }
+//!           Err(e) => return Err(e),
+//!       }
+//!   }
+//!   ```
+//!
+//! ## Security Considerations
+//!
+//! - **Memory exhaustion:** The primary threat. Without a limit, `read_line()` will
+//!   allocate until OOM on a stream of bytes with no newline. The 64 KiB default
+//!   bounds worst-case allocation per prompt invocation.
+//! - **Denial of service:** In server-like contexts where prompts read from network
+//!   streams, the limit prevents a slow-loris style attack filling memory.
+//! - **UTF-8 validation:** `read_line_limited` converts from `Vec<u8>` to `String`,
+//!   returning a `Validation` error on invalid UTF-8 rather than panicking.
+//! - **No truncation:** We never silently lose data. The caller always knows when
+//!   input was rejected.
+//!
+//! ## Migration Path
+//!
+//! This is additive and non-breaking:
+//! 1. Add `DEFAULT_MAX_INPUT_LENGTH` constant.
+//! 2. Add `InputTooLong` variant to `PromptError`.
+//! 3. Add `max_length` field to `Prompt`, `Select`, `Confirm` (defaults to 64 KiB).
+//! 4. Add `read_line_limited()` helper function.
+//! 5. Replace `reader.read_line()` calls in `ask_from()` with `read_line_limited()`.
+//!
+//! Existing code that doesn't set `max_length` gains the 64 KiB safety net.
+//! Code that needs larger inputs can opt in with `.max_length(n)`.
+//!
+//! ## Implementation Beads (Downstream)
+//!
+//! - **bd-2e33**: Add `PromptError::InputTooLong` variant
+//! - **bd-uqdk**: Implement `read_line_limited` helper function
+//! - **bd-1jm0**: Add `max_length` to `Prompt` builder
+//! - **bd-fal7**: Wire `read_line_limited` into `Prompt::ask_from`
 
 use std::io;
 use std::io::Write as _;
@@ -18,6 +206,14 @@ use crate::live::{Live, LiveOptions};
 use crate::markup;
 use crate::style::Style;
 use crate::text::Text;
+
+/// Default maximum input length for interactive prompts (64 KiB).
+///
+/// This is the default value for `Prompt::max_length`, `Select::max_length`, and
+/// `Confirm::max_length`. Override per-prompt with `.max_length(n)`.
+///
+/// See the module-level RFC documentation for the rationale behind this value.
+pub const DEFAULT_MAX_INPUT_LENGTH: usize = 64 * 1024;
 
 /// A spinner + message context helper, inspired by Python Rich's `Console.status(...)`.
 ///
@@ -109,6 +305,13 @@ pub enum PromptError {
     Validation(String),
     /// I/O error while reading input.
     Io(io::Error),
+    /// Input exceeded the maximum allowed length.
+    InputTooLong {
+        /// Maximum allowed input length in bytes.
+        limit: usize,
+        /// Actual input length received (may be approximate if terminated early).
+        received: usize,
+    },
 }
 
 impl std::fmt::Display for PromptError {
@@ -118,6 +321,29 @@ impl std::fmt::Display for PromptError {
             Self::Eof => write!(f, "prompt input reached EOF"),
             Self::Validation(message) => write!(f, "{message}"),
             Self::Io(err) => write!(f, "{err}"),
+            Self::InputTooLong { limit, received } => {
+                write!(
+                    f,
+                    "input too long: received at least {received} bytes, limit is {limit} bytes"
+                )
+            }
+        }
+    }
+}
+
+impl PromptError {
+    /// Returns `true` if this error indicates input was too long.
+    #[must_use]
+    pub const fn is_input_too_long(&self) -> bool {
+        matches!(self, Self::InputTooLong { .. })
+    }
+
+    /// Returns the length limit if this is an `InputTooLong` error.
+    #[must_use]
+    pub const fn input_limit(&self) -> Option<usize> {
+        match self {
+            Self::InputTooLong { limit, .. } => Some(*limit),
+            _ => None,
         }
     }
 }
@@ -1464,5 +1690,84 @@ mod tests {
         let prompt = Prompt::new("Name");
         let result = prompt.ask(&console);
         assert!(matches!(result, Err(PromptError::NotInteractive)));
+    }
+
+    // ========================================================================
+    // InputTooLong variant tests (bd-2e33)
+    // ========================================================================
+
+    #[test]
+    fn test_prompt_error_input_too_long_display() {
+        let err = PromptError::InputTooLong {
+            limit: 256,
+            received: 1024,
+        };
+        assert_eq!(
+            err.to_string(),
+            "input too long: received at least 1024 bytes, limit is 256 bytes"
+        );
+    }
+
+    #[test]
+    fn test_prompt_error_input_too_long_source_is_none() {
+        let err = PromptError::InputTooLong {
+            limit: 100,
+            received: 200,
+        };
+        assert!(StdError::source(&err).is_none());
+    }
+
+    #[test]
+    fn test_prompt_error_is_input_too_long() {
+        let too_long = PromptError::InputTooLong {
+            limit: 100,
+            received: 200,
+        };
+        assert!(too_long.is_input_too_long());
+
+        let eof = PromptError::Eof;
+        assert!(!eof.is_input_too_long());
+
+        let not_interactive = PromptError::NotInteractive;
+        assert!(!not_interactive.is_input_too_long());
+
+        let validation = PromptError::Validation("test".to_string());
+        assert!(!validation.is_input_too_long());
+
+        let io_err = PromptError::Io(io::Error::new(io::ErrorKind::Other, "test"));
+        assert!(!io_err.is_input_too_long());
+    }
+
+    #[test]
+    fn test_prompt_error_input_limit() {
+        let too_long = PromptError::InputTooLong {
+            limit: 100,
+            received: 200,
+        };
+        assert_eq!(too_long.input_limit(), Some(100));
+
+        let eof = PromptError::Eof;
+        assert_eq!(eof.input_limit(), None);
+
+        let not_interactive = PromptError::NotInteractive;
+        assert_eq!(not_interactive.input_limit(), None);
+    }
+
+    #[test]
+    fn test_prompt_error_input_too_long_debug() {
+        let err = PromptError::InputTooLong {
+            limit: 64 * 1024,
+            received: 128 * 1024,
+        };
+        let debug_str = format!("{err:?}");
+        assert!(debug_str.contains("InputTooLong"));
+        assert!(debug_str.contains("65536"));
+        assert!(debug_str.contains("131072"));
+    }
+
+    #[test]
+    fn test_default_max_input_length_constant() {
+        assert_eq!(super::DEFAULT_MAX_INPUT_LENGTH, 64 * 1024);
+        assert_eq!(super::DEFAULT_MAX_INPUT_LENGTH, 65536);
     }
 }
