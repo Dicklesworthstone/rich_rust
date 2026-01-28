@@ -178,3 +178,101 @@ fn snapshot_scene_list() {
     let normalized = normalize_for_snapshot(&result.stdout);
     insta::assert_snapshot!("scene_list", normalized);
 }
+
+// ============================================================================
+// Content Scene Snapshots (JSON, Markdown, Syntax)
+// ============================================================================
+
+/// Snapshot for JSON scene with feature enabled.
+///
+/// This test captures the JSON deep-dive output including:
+/// - API request/response payloads
+/// - Custom theme demonstration
+/// - Pretty-printed JSON with syntax highlighting
+#[test]
+#[cfg(feature = "showcase")]
+fn snapshot_json_scene() {
+    common::init_test_logging();
+
+    let result = DemoRunner::new()
+        .arg("--scene")
+        .arg("json")
+        .arg("--quick")
+        .arg("--seed")
+        .arg("42")
+        .arg("--color-system")
+        .arg("none")
+        .arg("--no-interactive")
+        .timeout_secs(15)
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    let normalized = normalize_for_snapshot(&result.stdout);
+    insta::assert_snapshot!("json_scene", normalized);
+}
+
+/// Snapshot for Markdown scene with feature enabled.
+///
+/// This test captures the Markdown deep-dive output including:
+/// - Release notes with headings, lists, code fences
+/// - Runbook excerpt with deployment instructions
+/// - CommonMark + GFM rendering
+#[test]
+#[cfg(feature = "showcase")]
+fn snapshot_markdown_scene() {
+    common::init_test_logging();
+
+    let result = DemoRunner::new()
+        .arg("--scene")
+        .arg("markdown")
+        .arg("--quick")
+        .arg("--seed")
+        .arg("42")
+        .arg("--color-system")
+        .arg("none")
+        .arg("--no-interactive")
+        .timeout_secs(15)
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    let normalized = normalize_for_snapshot(&result.stdout);
+    insta::assert_snapshot!("markdown_scene", normalized);
+}
+
+/// Snapshot for Syntax scene with feature enabled.
+///
+/// This test captures the Syntax deep-dive output including:
+/// - TOML config with line numbers
+/// - YAML CI/CD pipeline
+/// - Rust code snippet
+/// - Theme comparison demo
+#[test]
+#[cfg(feature = "showcase")]
+fn snapshot_syntax_scene() {
+    common::init_test_logging();
+
+    let result = DemoRunner::new()
+        .arg("--scene")
+        .arg("syntax")
+        .arg("--quick")
+        .arg("--seed")
+        .arg("42")
+        .arg("--color-system")
+        .arg("none")
+        .arg("--no-interactive")
+        .timeout_secs(15)
+        .run()
+        .expect("should run");
+
+    assert_success(&result);
+    assert_no_timeout(&result);
+
+    let normalized = normalize_for_snapshot(&result.stdout);
+    insta::assert_snapshot!("syntax_scene", normalized);
+}
