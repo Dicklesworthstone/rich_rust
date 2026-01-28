@@ -1,6 +1,6 @@
 //! # Synchronization Utilities
 //!
-//! This module provides consistent mutex and RwLock handling throughout rich_rust.
+//! This module provides consistent mutex and `RwLock` handling throughout `rich_rust`.
 //!
 //! ## Design RFC: Mutex Poison Handling (bd-33rg)
 //!
@@ -11,7 +11,7 @@
 //!
 //! ### Problem Statement
 //!
-//! The rich_rust codebase previously used inconsistent patterns:
+//! The `rich_rust` codebase previously used inconsistent patterns:
 //!
 //! 1. `if let Ok(...) = mutex.lock()` - Silently ignores poison (production code)
 //! 2. `.lock().unwrap()` - Panics on poison (test code)
@@ -43,8 +43,8 @@
 //! |----------|----------|-------------|
 //! | Production code | [`lock_recover`] | All mutex access in non-test code |
 //! | Need context | [`lock_recover_debug`] | When debugging poison sources |
-//! | RwLock read | [`read_recover`] | All RwLock read access |
-//! | RwLock write | [`write_recover`] | All RwLock write access |
+//! | `RwLock` read | [`read_recover`] | All `RwLock` read access |
+//! | `RwLock` write | [`write_recover`] | All `RwLock` write access |
 //! | Test code | `.lock().unwrap()` | Tests should fail fast on poison |
 //!
 //! ### Examples
@@ -63,7 +63,7 @@
 //! ### Security Considerations
 //!
 //! Poison recovery means we may access data that was being modified when a
-//! thread panicked. For rich_rust, this is acceptable because:
+//! thread panicked. For `rich_rust`, this is acceptable because:
 //!
 //! 1. We don't handle sensitive data (passwords, keys, etc.)
 //! 2. The worst case is visual corruption, not data loss
@@ -121,7 +121,7 @@ pub fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 ///
 /// * `mutex` - The mutex to lock
 /// * `context` - A string describing where this lock is being acquired
-///   (e.g., "Console::print", "Style::parse cache")
+///   (e.g., "`Console::print`", "`Style::parse` cache")
 ///
 /// # Example
 ///
@@ -142,11 +142,11 @@ pub fn lock_recover_debug<'a, T>(mutex: &'a Mutex<T>, context: &str) -> MutexGua
     })
 }
 
-/// Acquire a read lock on an RwLock, recovering from poison if necessary.
+/// Acquire a read lock on an `RwLock`, recovering from poison if necessary.
 ///
 /// # Behavior
 ///
-/// - If the RwLock is not poisoned, returns the read guard normally
+/// - If the `RwLock` is not poisoned, returns the read guard normally
 /// - If poisoned (a thread panicked while holding a write lock),
 ///   recovers the data and returns the guard anyway
 ///
@@ -167,11 +167,11 @@ pub fn read_recover<T>(rwlock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Acquire a write lock on an RwLock, recovering from poison if necessary.
+/// Acquire a write lock on an `RwLock`, recovering from poison if necessary.
 ///
 /// # Behavior
 ///
-/// - If the RwLock is not poisoned, returns the write guard normally
+/// - If the `RwLock` is not poisoned, returns the write guard normally
 /// - If poisoned, recovers the data and returns the guard anyway
 ///
 /// # Example

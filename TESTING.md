@@ -49,6 +49,60 @@ fn fuzz_style_parser_no_panic() { ... }
 fn fuzz_markup_parser_handles_arbitrary_input() { ... }
 ```
 
+### Naming Standards Enforcement
+
+**Required Prefixes:**
+
+| Test Type | Required Prefix | File Location |
+|-----------|-----------------|---------------|
+| Unit tests | `test_` | `src/*.rs` (in `mod tests`) |
+| E2E tests | `e2e_` | `tests/e2e_*.rs` |
+| Property tests | `prop_` | `tests/property_tests.rs` |
+| Fuzz tests | `fuzz_` | `tests/fuzz_*.rs` |
+| Regression tests | `regression_` | `tests/regression_tests.rs` |
+| Conformance tests | `test_` or `conformance_` | `tests/conformance_*.rs` |
+
+**Validation Script:**
+
+Run this to check naming compliance:
+
+```bash
+# Check for test functions missing standard prefixes
+rg "#\[test\]" -A 1 tests/*.rs | rg "fn [a-z]" | \
+  rg -v "fn (test_|e2e_|prop_|fuzz_|regression_|conformance_)" | \
+  rg -v "fn (new|contents|write|flush|len|clear)" && \
+  echo "Found non-compliant test names!" || \
+  echo "All test names comply with standards"
+```
+
+**Common Anti-Patterns:**
+
+| Anti-Pattern | Correct Pattern | Example |
+|--------------|-----------------|---------|
+| `fn check_something()` | `fn test_something()` | `test_color_parsing` |
+| `fn verify_output()` | `fn e2e_output_verification()` | `e2e_table_renders_borders` |
+| `fn it_should_work()` | `fn test_feature_works()` | `test_style_parse_bold` |
+| `fn test1()` | `fn test_feature_scenario()` | `test_color_hex_uppercase` |
+
+**Descriptive Scenarios:**
+
+Good test names describe:
+1. **What** is being tested (function/feature)
+2. **When** or under what conditions
+3. **Expected outcome** (for edge cases)
+
+```rust
+// Good examples:
+fn test_style_parse_with_invalid_color_returns_none() { ... }
+fn e2e_table_with_unicode_content_preserves_alignment() { ... }
+fn regression_markup_empty_tag_no_panic() { ... }
+
+// Poor examples:
+fn test_style1() { ... }
+fn test_it_works() { ... }
+fn check_table() { ... }
+```
+
 ---
 
 ## Test File Organization
