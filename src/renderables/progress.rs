@@ -5,6 +5,7 @@
 
 use crate::cells;
 use crate::console::{Console, ConsoleOptions};
+use crate::filesize::{binary, binary_speed, decimal, decimal_speed};
 use crate::renderables::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
@@ -235,6 +236,16 @@ pub struct ProgressBar {
     finished_message: Option<String>,
     /// Whether the task is complete.
     is_finished: bool,
+    /// Total bytes for file transfer (optional).
+    total_bytes: Option<u64>,
+    /// Bytes transferred so far.
+    transferred_bytes: u64,
+    /// Show file size (current/total).
+    show_file_size: bool,
+    /// Show transfer speed (bytes/sec).
+    show_transfer_speed: bool,
+    /// Use binary (1024-based) units for file sizes, or decimal (1000-based).
+    use_binary_units: bool,
 }
 
 impl Default for ProgressBar {
@@ -257,6 +268,11 @@ impl Default for ProgressBar {
             show_brackets: true,
             finished_message: None,
             is_finished: false,
+            total_bytes: None,
+            transferred_bytes: 0,
+            show_file_size: false,
+            show_transfer_speed: false,
+            use_binary_units: false,
         }
     }
 }
@@ -464,6 +480,152 @@ impl ProgressBar {
         Some((self.current as f64) / elapsed_secs)
     }
 
+    // -------------------------------------------------------------------------
+    // File Size / Transfer Progress Methods
+    // -------------------------------------------------------------------------
+
+    /// Create a progress bar for file transfers with a known total size.
+    ///
+    /// This automatically enables file size display and transfer speed.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use rich_rust::renderables::ProgressBar;
+    ///
+    /// let mut bar = ProgressBar::for_download(1_000_000); // 1 MB download
+    /// bar.update_bytes(500_000); // 500 KB transferred
+    /// ```
+    #[must_use]
+    pub fn for_download(total_bytes: u64) -> Self {
+        Self {
+            total_bytes: Some(total_bytes),
+            total: Some(total_bytes),
+            show_file_size: true,
+            show_transfer_speed: true,
+            show_percentage: true,
+            show_eta: true,
+            start_time: Some(Instant::now()),
+            ..Self::default()
+        }
+    }
+
+    /// Set the total bytes for file transfer progress.
+    #[must_use]
+    pub fn total_bytes(mut self, bytes: u64) -> Self {
+        self.total_bytes = Some(bytes);
+        self.total = Some(bytes);
+        self
+    }
+
+    /// Set whether to show file size (current/total bytes).
+    #[must_use]
+    pub fn show_file_size(mut self, show: bool) -> Self {
+        self.show_file_size = show;
+        self
+    }
+
+    /// Set whether to show transfer speed (bytes/sec).
+    #[must_use]
+    pub fn show_transfer_speed(mut self, show: bool) -> Self {
+        self.show_transfer_speed = show;
+        if show && self.start_time.is_none() {
+            self.start_time = Some(Instant::now());
+        }
+        self
+    }
+
+    /// Set whether to use binary (1024-based: KiB, MiB) or decimal (1000-based: KB, MB) units.
+    ///
+    /// By default, decimal units are used.
+    #[must_use]
+    pub fn use_binary_units(mut self, use_binary: bool) -> Self {
+        self.use_binary_units = use_binary;
+        self
+    }
+
+    /// Update the transferred bytes and recalculate progress.
+    pub fn update_bytes(&mut self, bytes: u64) {
+        self.transferred_bytes = bytes;
+        self.current = bytes;
+        if let Some(total) = self.total_bytes
+            && total > 0
+        {
+            #[allow(clippy::cast_precision_loss)]
+            {
+                self.completed = (bytes as f64) / (total as f64);
+            }
+            self.completed = self.completed.clamp(0.0, 1.0);
+        }
+        if self.completed >= 1.0 {
+            self.is_finished = true;
+        }
+    }
+
+    /// Advance the transferred bytes by a delta.
+    pub fn advance_bytes(&mut self, delta: u64) {
+        self.update_bytes(self.transferred_bytes + delta);
+    }
+
+    /// Get the current transferred bytes.
+    #[must_use]
+    pub fn transferred_bytes(&self) -> u64 {
+        self.transferred_bytes
+    }
+
+    /// Get the total bytes (if set).
+    #[must_use]
+    pub fn total_bytes_value(&self) -> Option<u64> {
+        self.total_bytes
+    }
+
+    /// Calculate transfer speed in bytes per second.
+    #[must_use]
+    pub fn transfer_speed(&self) -> Option<f64> {
+        let elapsed = self.elapsed()?;
+        let elapsed_secs = elapsed.as_secs_f64();
+        if elapsed_secs < 0.1 {
+            return None;
+        }
+
+        #[allow(clippy::cast_precision_loss)]
+        Some((self.transferred_bytes as f64) / elapsed_secs)
+    }
+
+    /// Format the current file size as a human-readable string.
+    #[must_use]
+    pub fn format_file_size(&self) -> String {
+        if self.use_binary_units {
+            binary(self.transferred_bytes)
+        } else {
+            decimal(self.transferred_bytes)
+        }
+    }
+
+    /// Format the total file size as a human-readable string.
+    #[must_use]
+    pub fn format_total_size(&self) -> Option<String> {
+        self.total_bytes.map(|total| {
+            if self.use_binary_units {
+                binary(total)
+            } else {
+                decimal(total)
+            }
+        })
+    }
+
+    /// Format the transfer speed as a human-readable string.
+    #[must_use]
+    pub fn format_transfer_speed(&self) -> Option<String> {
+        self.transfer_speed().map(|speed| {
+            if self.use_binary_units {
+                binary_speed(speed)
+            } else {
+                decimal_speed(speed)
+            }
+        })
+    }
+
     /// Format a duration as a human-readable string.
     #[must_use]
     fn format_duration(duration: Duration) -> String {
@@ -544,6 +706,23 @@ impl ProgressBar {
             } else {
                 suffix_parts.push(format!("{speed:.2}/s"));
             }
+        }
+
+        // File size display (e.g., "1.5 MB / 10.0 MB")
+        if self.show_file_size {
+            let current_size = self.format_file_size();
+            if let Some(total_size) = self.format_total_size() {
+                suffix_parts.push(format!("{current_size}/{total_size}"));
+            } else {
+                suffix_parts.push(current_size);
+            }
+        }
+
+        // Transfer speed display (e.g., "1.5 MB/s")
+        if self.show_transfer_speed
+            && let Some(speed_str) = self.format_transfer_speed()
+        {
+            suffix_parts.push(speed_str);
         }
 
         let suffix = if suffix_parts.is_empty() {
@@ -857,5 +1036,91 @@ mod tests {
         bar.update(15);
         assert!((bar.progress() - 1.0).abs() < f64::EPSILON);
         assert!(bar.is_finished());
+    }
+
+    // -------------------------------------------------------------------------
+    // File Size / Transfer Progress Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_for_download() {
+        let bar = ProgressBar::for_download(1_000_000);
+        assert_eq!(bar.total_bytes_value(), Some(1_000_000));
+        assert!(bar.show_file_size);
+        assert!(bar.show_transfer_speed);
+    }
+
+    #[test]
+    fn test_update_bytes() {
+        let mut bar = ProgressBar::for_download(1_000_000);
+        bar.update_bytes(500_000);
+        assert_eq!(bar.transferred_bytes(), 500_000);
+        assert!((bar.progress() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_advance_bytes() {
+        let mut bar = ProgressBar::for_download(1_000_000);
+        bar.advance_bytes(250_000);
+        bar.advance_bytes(250_000);
+        assert_eq!(bar.transferred_bytes(), 500_000);
+        assert!((bar.progress() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_format_file_size_decimal() {
+        let mut bar = ProgressBar::for_download(10_000_000);
+        bar.update_bytes(1_500_000);
+        assert_eq!(bar.format_file_size(), "1.5 MB");
+        assert_eq!(bar.format_total_size(), Some("10.0 MB".to_string()));
+    }
+
+    #[test]
+    fn test_format_file_size_binary() {
+        let mut bar = ProgressBar::for_download(10_485_760) // 10 MiB
+            .use_binary_units(true);
+        bar.update_bytes(1_572_864); // 1.5 MiB
+        assert_eq!(bar.format_file_size(), "1.5 MiB");
+        assert_eq!(bar.format_total_size(), Some("10.0 MiB".to_string()));
+    }
+
+    #[test]
+    fn test_render_with_file_size() {
+        let mut bar = ProgressBar::for_download(10_000_000)
+            .width(20)
+            .show_percentage(false)
+            .show_eta(false);
+        bar.update_bytes(5_000_000);
+        let plain = bar.render_plain(100);
+        // Should contain file size info
+        assert!(plain.contains("MB") || plain.contains("bytes"));
+    }
+
+    #[test]
+    fn test_total_bytes_builder() {
+        let bar = ProgressBar::new()
+            .total_bytes(2_000_000)
+            .show_file_size(true)
+            .show_transfer_speed(true);
+        assert_eq!(bar.total_bytes_value(), Some(2_000_000));
+        assert!(bar.show_file_size);
+        assert!(bar.show_transfer_speed);
+    }
+
+    #[test]
+    fn test_use_binary_units() {
+        let bar = ProgressBar::for_download(1024).use_binary_units(true);
+        assert!(bar.use_binary_units);
+
+        let bar_decimal = ProgressBar::for_download(1000).use_binary_units(false);
+        assert!(!bar_decimal.use_binary_units);
+    }
+
+    #[test]
+    fn test_download_finishes_at_100() {
+        let mut bar = ProgressBar::for_download(1_000_000);
+        bar.update_bytes(1_000_000);
+        assert!(bar.is_finished());
+        assert!((bar.progress() - 1.0).abs() < f64::EPSILON);
     }
 }
