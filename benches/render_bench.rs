@@ -262,6 +262,188 @@ fn benchmark_conformance_rule(c: &mut Criterion) {
     });
 }
 
+// =============================================================================
+// Tree Rendering Benchmarks
+// =============================================================================
+
+fn benchmark_tree_render(c: &mut Criterion) {
+    use rich_rust::renderables::tree::{Tree, TreeNode};
+
+    // Simple tree: 3 children
+    let simple_root = TreeNode::new("Root")
+        .child(TreeNode::new("Child 1"))
+        .child(TreeNode::new("Child 2"))
+        .child(TreeNode::new("Child 3"));
+    let simple_tree = Tree::new(simple_root);
+
+    c.bench_function("tree_render_simple", |b| {
+        b.iter(|| {
+            let segments: Vec<_> = black_box(simple_tree.render());
+            black_box(segments)
+        });
+    });
+
+    // Deep tree: 4 levels of nesting (build using builder pattern)
+    let deep_root = TreeNode::new("Root")
+        .child(
+            TreeNode::new("L1-0")
+                .child(
+                    TreeNode::new("L2-0")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-1")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-2")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                ),
+        )
+        .child(
+            TreeNode::new("L1-1")
+                .child(
+                    TreeNode::new("L2-0")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-1")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-2")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                ),
+        )
+        .child(
+            TreeNode::new("L1-2")
+                .child(
+                    TreeNode::new("L2-0")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-1")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                )
+                .child(
+                    TreeNode::new("L2-2")
+                        .child(TreeNode::new("L3-0"))
+                        .child(TreeNode::new("L3-1")),
+                ),
+        );
+    let deep_tree = Tree::new(deep_root);
+
+    c.bench_function("tree_render_deep", |b| {
+        b.iter(|| {
+            let segments: Vec<_> = black_box(deep_tree.render());
+            black_box(segments)
+        });
+    });
+}
+
+// =============================================================================
+// Markup Parsing Benchmarks
+// =============================================================================
+
+fn benchmark_markup_parse(c: &mut Criterion) {
+    use rich_rust::markup;
+
+    // Simple markup
+    c.bench_function("markup_parse_simple", |b| {
+        b.iter(|| black_box(markup::render_or_plain("[bold]Hello[/bold]")));
+    });
+
+    // Complex nested markup
+    c.bench_function("markup_parse_nested", |b| {
+        b.iter(|| {
+            black_box(markup::render_or_plain(
+                "[bold][red]Error:[/red] [italic]Something went wrong[/italic][/bold]",
+            ))
+        });
+    });
+
+    // Long markup with many tags
+    let long_markup = (0..20)
+        .map(|i| format!("[bold]Item {i}[/bold] "))
+        .collect::<String>();
+
+    c.bench_function("markup_parse_long", |b| {
+        b.iter(|| black_box(markup::render_or_plain(&long_markup)));
+    });
+
+    // Plain text (no markup)
+    c.bench_function("markup_parse_plain", |b| {
+        b.iter(|| {
+            black_box(markup::render_or_plain(
+                "Just plain text with no markup at all",
+            ))
+        });
+    });
+}
+
+// =============================================================================
+// Color Downgrade Benchmarks
+// =============================================================================
+
+fn benchmark_color_downgrade(c: &mut Criterion) {
+    use rich_rust::color::ColorSystem;
+
+    let truecolor = Color::from_rgb(255, 128, 64);
+
+    c.bench_function("color_downgrade_to_256", |b| {
+        b.iter(|| black_box(truecolor.downgrade(ColorSystem::EightBit)));
+    });
+
+    c.bench_function("color_downgrade_to_16", |b| {
+        b.iter(|| black_box(truecolor.downgrade(ColorSystem::Standard)));
+    });
+}
+
+// =============================================================================
+// Large Input Stress Tests
+// =============================================================================
+
+fn benchmark_stress_large_text(c: &mut Criterion) {
+    // 10KB of text
+    let large_text = "Lorem ipsum dolor sit amet. ".repeat(400);
+    let text = Text::new(&large_text);
+
+    c.bench_function("stress_text_render_10kb", |b| {
+        b.iter(|| black_box(text.render("")));
+    });
+
+    c.bench_function("stress_text_wrap_10kb", |b| {
+        b.iter(|| black_box(text.wrap(80)));
+    });
+}
+
+fn benchmark_stress_large_table(c: &mut Criterion) {
+    // 50x10 table
+    let mut large_table = Table::new();
+    for col in 0..10 {
+        large_table = large_table.with_column(Column::new(format!("Col{col}")));
+    }
+    for row in 0..50 {
+        let cells: Vec<String> = (0..10).map(|col| format!("R{row}C{col}")).collect();
+        large_table.add_row_cells(cells);
+    }
+
+    c.bench_function("stress_table_50x10", |b| {
+        b.iter(|| {
+            let segments: Vec<_> = black_box(large_table.render(200));
+            black_box(segments)
+        });
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_text_render,
@@ -274,5 +456,10 @@ criterion_group!(
     benchmark_panel_render,
     benchmark_conformance_text,
     benchmark_conformance_rule,
+    benchmark_tree_render,
+    benchmark_markup_parse,
+    benchmark_color_downgrade,
+    benchmark_stress_large_text,
+    benchmark_stress_large_table,
 );
 criterion_main!(benches);
