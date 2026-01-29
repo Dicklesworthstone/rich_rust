@@ -847,8 +847,11 @@ mod tests {
     fn test_line_number_style_builder() {
         use crate::style::Attributes;
 
-        let custom_style = Style::new().bold().color_str("cyan").unwrap_or_default();
-        let syntax = Syntax::new("code", "rust").line_number_style(custom_style.clone());
+        let custom_style = Style::new()
+            .bold()
+            .color_str("cyan")
+            .expect("cyan should be a valid color");
+        let syntax = Syntax::new("code", "rust").line_number_style(custom_style);
 
         // The line number style should be set with bold attribute
         assert!(

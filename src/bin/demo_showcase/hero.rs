@@ -89,7 +89,10 @@ fn center_padding(content_visible_width: usize, total_width: usize) -> String {
 ///
 /// For very wide terminals (200+ columns), we add left padding to center
 /// the content visually rather than letting it left-align at column 0.
+/// This preserves ANSI styling by working with segments directly.
 fn print_centered_renderable<R: Renderable>(console: &Console, renderable: &R) {
+    use rich_rust::segment::Segment;
+
     let terminal_width = console.width();
 
     // For wide terminals, calculate padding to center content
@@ -103,20 +106,37 @@ fn print_centered_renderable<R: Renderable>(console: &Console, renderable: &R) {
             .update_dimensions(MAX_CONTENT_WIDTH, console.height());
         let segments = renderable.render(console, &options);
 
-        // Convert to string and add indent after each newline
-        let output: String = segments.iter().map(|s| s.text.as_ref()).collect();
-        // Add indent at start and after each newline (except trailing)
-        let indented = format!("{indent}{}", output.replace('\n', &format!("\n{indent}")));
-        // Remove trailing indent if output ended with newline
-        let indented = if output.ends_with('\n') {
-            indented
-                .strip_suffix(&indent)
-                .unwrap_or(&indented)
-                .to_string()
-        } else {
-            indented
-        };
-        console.print_plain(&indented);
+        // Build output segments with indentation, preserving styles
+        let mut output_segments: Vec<Segment<'static>> = Vec::new();
+        let mut at_line_start = true;
+
+        for seg in segments {
+            if seg.text.contains('\n') {
+                // Split segment on newlines, preserving style for each part
+                for (i, part) in seg.text.split('\n').enumerate() {
+                    if i > 0 {
+                        // After a newline, add the newline and mark next as line start
+                        output_segments.push(Segment::new("\n".to_string(), None));
+                        at_line_start = true;
+                    }
+                    if !part.is_empty() {
+                        if at_line_start {
+                            output_segments.push(Segment::new(indent.clone(), None));
+                            at_line_start = false;
+                        }
+                        output_segments.push(Segment::new(part.to_string(), seg.style.clone()));
+                    }
+                }
+            } else {
+                if at_line_start && !seg.text.is_empty() {
+                    output_segments.push(Segment::new(indent.clone(), None));
+                    at_line_start = false;
+                }
+                output_segments.push(seg.into_owned());
+            }
+        }
+
+        console.print_segments(&output_segments);
     } else {
         // Normal width - just print directly
         console.print_renderable(renderable);
