@@ -155,7 +155,7 @@ fn smoke_outro() {
     let result = smoke_runner("outro").run().expect("should run");
     assertions::assert_success(&result);
     assert!(
-        result.stdout_contains("outro") || result.stdout_contains("Outro"),
+        result.stdout_contains("Demo Complete") || result.stdout_contains("Thank you"),
         "outro scene should produce recognizable output:\n{}",
         result.diagnostic_output()
     );
