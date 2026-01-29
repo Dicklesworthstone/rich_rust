@@ -23,69 +23,17 @@ Inspect: Value + Type Information
 DemoStateSnapshot (partial):
 
 Type: demo_showcase::state::DemoStateSnapshot
-┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Field    ┃ Value                             ┃
-┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ run_id   │ 42                                │
-│ seed     │ 12345                             │
-│ headline │ "Booting Nebula Deploy…"          │
-│ services │ [                                 │
-│ name     │ "api"                             │
-│ health   │ Ok                                │
-│ latency  │ 12ms                              │
-│ version  │ "1.2.3"                           │
-│ name     │ "worker"                          │
-│ health   │ Warn                              │
-│ latency  │ 48ms                              │
-│ version  │ "1.2.3"                           │
-│ name     │ "db"                              │
-│ health   │ Err                               │
-│ latency  │ 0ns                               │
-│ version  │ "13.4"                            │
-│ pipeline │ [                                 │
-│ name     │ "plan"                            │
-│ status   │ Done                              │
-│ progress │ 1.0                               │
-│ eta      │ None                              │
-│ name     │ "deploy"                          │
-│ status   │ Running                           │
-│ progress │ 0.42                              │
-│ eta      │ Some(                             │
-│ name     │ "verify"                          │
-│ status   │ Pending                           │
-│ progress │ 0.0                               │
-│ eta      │ None                              │
-│ name     │ "cleanup"                         │
-│ status   │ Failed                            │
-│ progress │ 0.0                               │
-│ eta      │ None                              │
-│ logs     │ [                                 │
-│ level    │ Info                              │
-│ message  │ "svc api: OK (12ms) v1.2.3"       │
-│ level    │ Info                              │
-│ message  │ "svc worker: WARN (48ms) v1.2.3"  │
-│ level    │ Info                              │
-│ message  │ "svc db: ERR (0ms) v13.4"         │
-│ level    │ Debug                             │
-│ message  │ "stage plan -> done"              │
-│ level    │ Debug                             │
-│ message  │ "stage deploy -> running eta=12s" │
-│ level    │ Debug                             │
-│ message  │ "stage verify -> pending"         │
-│ level    │ Debug                             │
-│ message  │ "stage cleanup -> failed"         │
-│ level    │ Trace                             │
-│ message  │ "TRACE: demo log line"            │
-│ level    │ Debug                             │
-│ message  │ "DEBUG: demo log line"            │
-│ level    │ Info                              │
-│ message  │ "INFO: demo log line"             │
-│ level    │ Warn                              │
-│ message  │ "WARN: demo log line"             │
-│ level    │ Error                             │
-│ message  │ "ERROR: demo log line"            │
-│ failure  │ None                              │
-└──────────┴───────────────────────────────────┘
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Field    ┃ Value                    ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ run_id   │ 42                       │
+│ seed     │ 12345                    │
+│ headline │ "Booting Nebula Deploy…" │
+│ services │ [...]                    │
+│ pipeline │ [...]                    │
+│ logs     │ [...]                    │
+│ failure  │ None                     │
+└──────────┴──────────────────────────┘
 
 Inspect shows the Rust type name and extracts struct fields.
 
