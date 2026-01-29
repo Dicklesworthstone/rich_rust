@@ -742,6 +742,44 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_simple_struct_fields_array_of_structs() {
+        // Bug bd-1bt2: nested struct fields were being extracted as top-level
+        let repr = r#"DemoState {
+    name: "test",
+    services: [
+        Service {
+            name: "api",
+            health: Ok,
+            latency: 12,
+        },
+        Service {
+            name: "worker",
+            health: Warn,
+            latency: 45,
+        },
+    ],
+    count: 2,
+}"#;
+        let fields = extract_simple_struct_fields(repr);
+        assert!(fields.is_some());
+        let fields = fields.unwrap();
+
+        // Should extract only top-level fields
+        let names: Vec<&str> = fields.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"name"), "Should have 'name' field");
+        assert!(names.contains(&"services"), "Should have 'services' field");
+        assert!(names.contains(&"count"), "Should have 'count' field");
+
+        // Should NOT have nested field names at top level
+        assert!(!names.contains(&"health"), "Should NOT have nested 'health' at top level");
+        assert!(!names.contains(&"latency"), "Should NOT have nested 'latency' at top level");
+
+        // services value should be collapsed
+        let services = fields.iter().find(|(n, _)| n == "services").unwrap();
+        assert_eq!(services.1, "[...]", "Nested array should be collapsed to [...]");
+    }
+
+    #[test]
     fn test_extract_simple_struct_fields_no_colon() {
         let repr = "TupleStruct {\n    element1\n}";
         let fields = extract_simple_struct_fields(repr);
