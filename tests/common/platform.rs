@@ -64,7 +64,7 @@ impl PlatformInfo {
             // Windows support depends on terminal, but modern Windows Terminal is good
             unicode_likely: !cfg!(target_os = "windows")
                 || std::env::var("WT_SESSION").is_ok()
-                || std::env::var("TERM_PROGRAM").map_or(false, |v| v.contains("vscode")),
+                || std::env::var("TERM_PROGRAM").is_ok_and(|v| v.contains("vscode")),
         }
     }
 
@@ -309,7 +309,6 @@ pub fn assert_eq_platform_agnostic(context: &str, actual: &str, expected: &str) 
 pub fn skip_unless_windows() {
     if !cfg!(target_os = "windows") {
         eprintln!("Skipping test: Windows-only");
-        return;
     }
 }
 
@@ -318,7 +317,6 @@ pub fn skip_unless_windows() {
 pub fn skip_unless_unix() {
     if cfg!(target_os = "windows") {
         eprintln!("Skipping test: Unix-only");
-        return;
     }
 }
 
@@ -327,7 +325,6 @@ pub fn skip_unless_unix() {
 pub fn skip_unless_ci() {
     if !PlatformInfo::is_ci() {
         eprintln!("Skipping test: CI-only");
-        return;
     }
 }
 

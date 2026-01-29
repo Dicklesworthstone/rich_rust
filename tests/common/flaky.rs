@@ -286,7 +286,7 @@ mod tests {
 
         retry_test(config, || {
             counter.fetch_add(1, Ordering::SeqCst);
-            assert!(true);
+            // Test passes (no panic)
         });
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_detect_flakiness_consistent_pass() {
-        let result = detect_flakiness(|| assert!(true), 5);
+        let result = detect_flakiness(|| { /* passes */ }, 5);
         assert!(result.passed);
         assert_eq!(result.attempts, 5);
         assert!(result.last_error.is_none());

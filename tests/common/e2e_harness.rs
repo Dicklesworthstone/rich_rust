@@ -188,7 +188,7 @@ impl AnsiParser {
             && rest
                 .chars()
                 .next()
-                .map_or(false, |c| (0x40..=0x7E).contains(&(c as u8)))
+                .is_some_and(|c| (0x40..=0x7E).contains(&(c as u8)))
         {
             end_idx = 0;
         } else if end_idx == 0 {
@@ -337,10 +337,10 @@ impl AnsiParser {
 
         for segment in segments {
             for seq in segment.sequences {
-                if let AnsiSequence::Sgr(codes) = seq {
-                    if codes.contains(&code) {
-                        count += 1;
-                    }
+                if let AnsiSequence::Sgr(codes) = seq
+                    && codes.contains(&code)
+                {
+                    count += 1;
                 }
             }
         }
@@ -783,7 +783,7 @@ mod tests {
         let segments = parser.parse("\x1b[1;31mRed Bold\x1b[0m");
 
         // Parser creates segments for text and trailing sequences
-        assert!(segments.len() >= 1);
+        assert!(!segments.is_empty());
         assert_eq!(segments[0].text, "Red Bold");
         assert!(segments[0].sequences.iter().any(|s| s.has_bold()));
     }

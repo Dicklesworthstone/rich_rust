@@ -519,8 +519,8 @@ proptest! {
     fn fuzz_render_or_plain_always_returns(input in "\\PC{0,200}") {
         // render_or_plain must always return a Text, never panic
         let text: Text = markup::render_or_plain(&input);
-        // Output should be non-negative length
-        prop_assert!(text.len() >= 0);
+        // Output should exist (text.len() is always >= 0 for usize)
+        let _ = text.len();
     }
 }
 

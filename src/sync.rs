@@ -195,6 +195,8 @@ pub fn write_recover<T>(rwlock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
 mod tests {
     use super::*;
     use std::panic::{self, AssertUnwindSafe};
+    use std::sync::Arc;
+    use std::thread;
 
     #[test]
     fn test_lock_recover_normal_operation() {
@@ -356,8 +358,6 @@ mod tests {
     #[test]
     fn test_concurrent_access_after_poison() {
         println!("[TEST] Concurrent access after poison");
-        use std::sync::Arc;
-        use std::thread;
 
         let mutex = Arc::new(Mutex::new(0));
 
@@ -377,7 +377,7 @@ mod tests {
                 thread::spawn(move || {
                     let mut guard = lock_recover(&m);
                     *guard += 1;
-                    println!("[Thread {}] Incremented to {}", i, *guard);
+                    println!("[Thread {i}] Incremented to {}", *guard);
                 })
             })
             .collect();
@@ -387,7 +387,7 @@ mod tests {
         }
 
         let final_val = *lock_recover(&mutex);
-        println!("[TEST] Final value after 4 increments: {}", final_val);
+        println!("[TEST] Final value after 4 increments: {final_val}");
         assert_eq!(final_val, 4);
         println!("[TEST] PASS: Concurrent recovery works");
     }

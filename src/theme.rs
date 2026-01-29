@@ -624,7 +624,7 @@ mod tests {
             line: "bad line".to_string(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("5"));
+        assert!(msg.contains('5'));
         assert!(msg.contains("bad line"));
     }
 
@@ -1060,7 +1060,7 @@ mod tests {
     fn test_theme_stack_debug() {
         let base = Theme::from_style_definitions([("a", "bold")], false).expect("base");
         let stack = ThemeStack::new(base);
-        let debug_str = format!("{:?}", stack);
+        let debug_str = format!("{stack:?}");
         assert!(debug_str.contains("ThemeStack"));
         assert!(debug_str.contains("entries"));
     }
@@ -1068,7 +1068,7 @@ mod tests {
     #[test]
     fn test_theme_debug() {
         let theme = Theme::from_style_definitions([("test", "bold")], false).expect("theme");
-        let debug_str = format!("{:?}", theme);
+        let debug_str = format!("{theme:?}");
         assert!(debug_str.contains("Theme"));
         assert!(debug_str.contains("styles"));
     }
@@ -1076,7 +1076,7 @@ mod tests {
     #[test]
     fn test_theme_stack_error_clone_copy() {
         let err = ThemeStackError;
-        let cloned = err.clone();
+        let cloned = err; // Copy (clippy: don't use .clone() on Copy types)
         let copied = err; // Copy
         assert_eq!(err, cloned);
         assert_eq!(err, copied);
@@ -1085,14 +1085,14 @@ mod tests {
     #[test]
     fn test_theme_stack_error_debug() {
         let err = ThemeStackError;
-        let debug_str = format!("{:?}", err);
+        let debug_str = format!("{err:?}");
         assert!(debug_str.contains("ThemeStackError"));
     }
 
     #[test]
     fn test_theme_error_debug() {
         let err = ThemeError::MissingStylesSection;
-        let debug_str = format!("{:?}", err);
+        let debug_str = format!("{err:?}");
         assert!(debug_str.contains("MissingStylesSection"));
     }
 

@@ -174,10 +174,11 @@ impl FixtureValidator {
                 report.canonical_hash = Some(hash);
             }
 
-            if self.store_samples && report.sample_outputs.len() < self.max_samples {
-                if !report.sample_outputs.contains(&output) {
-                    report.sample_outputs.push(output);
-                }
+            if self.store_samples
+                && report.sample_outputs.len() < self.max_samples
+                && !report.sample_outputs.contains(&output)
+            {
+                report.sample_outputs.push(output);
             }
         }
 
@@ -316,12 +317,11 @@ impl SnapshotValidator {
                 if name != "target" && !name.starts_with('.') {
                     self.find_snapshots_recursive(&path, snapshots);
                 }
-            } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.ends_with(".snap") || name.ends_with(".snap.new") {
-                    if let Some(info) = SnapshotInfo::from_path(&path) {
-                        snapshots.push(info);
-                    }
-                }
+            } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && (name.ends_with(".snap") || name.ends_with(".snap.new"))
+                && let Some(info) = SnapshotInfo::from_path(&path)
+            {
+                snapshots.push(info);
             }
         }
     }

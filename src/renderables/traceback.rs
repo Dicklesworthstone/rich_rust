@@ -824,7 +824,7 @@ mod tests {
         let traceback = Traceback::new(
             vec![TracebackFrame::new(
                 "very_long_function_name_that_might_wrap",
-                123456,
+                123_456,
             )],
             "LongError",
             "a very long error message that might need to be handled",

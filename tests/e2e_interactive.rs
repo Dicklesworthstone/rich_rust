@@ -764,7 +764,7 @@ fn test_prompt_error_std_error_trait() {
     let err = PromptError::NotInteractive;
     assert!(err.source().is_none());
 
-    let io_err = PromptError::Io(io::Error::new(io::ErrorKind::Other, "test"));
+    let io_err = PromptError::Io(io::Error::other("test"));
     assert!(io_err.source().is_some());
 }
 

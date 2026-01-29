@@ -704,7 +704,7 @@ proptest! {
 // Table Property Tests
 // ============================================================================
 
-use rich_rust::prelude::{Cell, Column, Row, Table};
+use rich_rust::prelude::{Column, Table};
 use rich_rust::segment::split_lines;
 
 proptest! {
@@ -719,7 +719,7 @@ proptest! {
             table.add_column(Column::new(format!("Col{i}")));
         }
 
-        for row_idx in 0..num_rows {
+        for _row_idx in 0..num_rows {
             let cells: Vec<&str> = (0..num_cols).map(|_| "x").collect();
             table.add_row_cells(cells);
         }

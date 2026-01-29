@@ -636,7 +636,7 @@ impl FakeTerminal {
     /// Check if a position has a specific style attribute.
     #[must_use]
     pub fn has_style_at(&self, col: usize, row: usize, attr: StyleAttribute) -> bool {
-        self.cell_at(col, row).map_or(false, |cell| match attr {
+        self.cell_at(col, row).is_some_and(|cell| match attr {
             StyleAttribute::Bold => cell.is_bold(),
             StyleAttribute::Italic => cell.is_italic(),
             StyleAttribute::Underline => cell.is_underline(),

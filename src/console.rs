@@ -2875,9 +2875,9 @@ mod tests {
         let output = buffer.0.lock().unwrap();
         let result = String::from_utf8_lossy(&output);
         // Should contain timestamp format [HH:MM:SS]
-        assert!(result.contains("["));
-        assert!(result.contains("]"));
-        assert!(result.contains(":"));
+        assert!(result.contains('['));
+        assert!(result.contains(']'));
+        assert!(result.contains(':'));
         assert!(result.contains("Test message"));
     }
 
@@ -2942,7 +2942,7 @@ mod tests {
 
         let output = buffer.0.lock().unwrap();
         let result = String::from_utf8_lossy(&output);
-        assert!(result.contains("[")); // timestamp bracket
+        assert!(result.contains('[')); // timestamp bracket
         assert!(result.contains("test.rs"));
         assert!(result.contains("100"));
         assert!(result.contains("Combined test"));
