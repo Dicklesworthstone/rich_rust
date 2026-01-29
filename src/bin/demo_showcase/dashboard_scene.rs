@@ -334,7 +334,7 @@ impl Renderable for DashboardRenderable {
         // Pipeline panel
         let pipeline_text = Self::render_pipeline_text(&self.pipeline);
         let pipeline_panel = Panel::from_rich_text(&pipeline_text, 60)
-            .title("[bold]Pipeline[/]")
+            .title_from_markup("[bold]Pipeline[/]")
             .safe_box(self.safe_box);
         segments.extend(
             pipeline_panel
@@ -347,7 +347,7 @@ impl Renderable for DashboardRenderable {
         // Services panel
         let services_text = Self::render_services_text(&self.services);
         let services_panel = Panel::from_rich_text(&services_text, 30)
-            .title("[bold]Services[/]")
+            .title_from_markup("[bold]Services[/]")
             .safe_box(self.safe_box);
         segments.extend(
             services_panel
@@ -361,7 +361,7 @@ impl Renderable for DashboardRenderable {
         let log_pane = LogPane::from_snapshot(&self.logs, 8);
         let logs_text = log_pane.as_text();
         let logs_panel = Panel::from_rich_text(&logs_text, 80)
-            .title("[bold]Logs[/]")
+            .title_from_markup("[bold]Logs[/]")
             .safe_box(self.safe_box);
         segments.extend(
             logs_panel

@@ -197,7 +197,11 @@ fn render_padding_demo(console: &Console) {
 
     // Card-like padding with background
     let title_text = markup::render_or_plain("[bold]Feature Card[/]");
-    let title_segments: Vec<Segment> = title_text.render("").into_iter().map(Segment::into_owned).collect();
+    let title_segments: Vec<Segment> = title_text
+        .render("")
+        .into_iter()
+        .map(Segment::into_owned)
+        .collect();
     let content_card = vec![
         title_segments,
         vec![Segment::new("", None)],
@@ -266,35 +270,38 @@ fn render_composition_demo(console: &Console, cfg: &Config) {
     console.print("");
 
     // Create a multi-card layout using panels side by side
-    let card1 = Panel::from_text(
+    let card1_content = markup::render_or_plain(
         "[bold green]Production[/]\n\n\
          Status: Healthy\n\
          Uptime: 99.9%\n\
          Latency: 12ms",
-    )
-    .title("[green]us-west-2[/]")
-    .width(28)
-    .safe_box(cfg.is_safe_box());
+    );
+    let card1 = Panel::from_rich_text(&card1_content, 26)
+        .title("[green]us-west-2[/]")
+        .width(28)
+        .safe_box(cfg.is_safe_box());
 
-    let card2 = Panel::from_text(
+    let card2_content = markup::render_or_plain(
         "[bold green]Production[/]\n\n\
          Status: Healthy\n\
          Uptime: 99.8%\n\
          Latency: 45ms",
-    )
-    .title("[green]eu-west-1[/]")
-    .width(28)
-    .safe_box(cfg.is_safe_box());
+    );
+    let card2 = Panel::from_rich_text(&card2_content, 26)
+        .title("[green]eu-west-1[/]")
+        .width(28)
+        .safe_box(cfg.is_safe_box());
 
-    let card3 = Panel::from_text(
+    let card3_content = markup::render_or_plain(
         "[bold yellow]Degraded[/]\n\n\
          Status: Elevated\n\
          Uptime: 98.5%\n\
          Latency: 120ms",
-    )
-    .title("[yellow]ap-south-1[/]")
-    .width(28)
-    .safe_box(cfg.is_safe_box());
+    );
+    let card3 = Panel::from_rich_text(&card3_content, 26)
+        .title("[yellow]ap-south-1[/]")
+        .width(28)
+        .safe_box(cfg.is_safe_box());
 
     // Render cards side by side
     render_panels_side_by_side(console, &[card1, card2, card3], 28, 2);
