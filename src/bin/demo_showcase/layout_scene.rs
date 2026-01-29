@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use rich_rust::cells::cell_len;
 use rich_rust::console::Console;
+use rich_rust::markup;
 use rich_rust::renderables::align::{Align, AlignMethod};
 use rich_rust::renderables::columns::Columns;
 use rich_rust::renderables::padding::{Padding, PaddingDimensions};
@@ -195,8 +196,10 @@ fn render_padding_demo(console: &Console) {
     console.print("");
 
     // Card-like padding with background
+    let title_text = markup::render_or_plain("[bold]Feature Card[/]");
+    let title_segments: Vec<Segment> = title_text.render("").into_iter().map(Segment::into_owned).collect();
     let content_card = vec![
-        vec![Segment::new("[bold]Feature Card[/]", None)],
+        title_segments,
         vec![Segment::new("", None)],
         vec![Segment::new("Add spacing and structure", None)],
         vec![Segment::new("to make content stand out.", None)],
