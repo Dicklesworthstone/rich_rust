@@ -134,6 +134,7 @@ pub fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// assert_eq!(*guard, "hello");
 /// ```
 #[inline]
+#[allow(unused_variables)]
 pub fn lock_recover_debug<'a, T>(mutex: &'a Mutex<T>, context: &str) -> MutexGuard<'a, T> {
     mutex.lock().unwrap_or_else(|e| {
         #[cfg(debug_assertions)]

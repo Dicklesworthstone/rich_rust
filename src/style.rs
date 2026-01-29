@@ -121,7 +121,7 @@ impl Attributes {
     ];
 
     /// Get the ANSI SGR codes for enabled attributes.
-    /// Uses SmallVec to avoid heap allocation for typical 1-4 attribute cases.
+    /// Uses `SmallVec` to avoid heap allocation for typical 1-4 attribute cases.
     #[must_use]
     pub fn to_sgr_codes(&self) -> SmallVec<[u8; 4]> {
         Self::SGR_CODES

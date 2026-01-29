@@ -32,7 +32,7 @@ pub enum ControlType {
 }
 
 /// A control code with optional parameters.
-/// Uses SmallVec to avoid heap allocation for typical 0-2 parameter cases.
+/// Uses `SmallVec` to avoid heap allocation for typical 0-2 parameter cases.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ControlCode {
     pub control_type: ControlType,
@@ -264,7 +264,7 @@ where
 }
 
 /// Split segments into lines at newline characters.
-/// Uses direct iterator over split() to avoid intermediate Vec allocation.
+/// Uses direct iterator over `split()` to avoid intermediate Vec allocation.
 pub fn split_lines<'a>(segments: impl Iterator<Item = Segment<'a>>) -> Vec<Vec<Segment<'a>>> {
     let mut lines: Vec<Vec<Segment<'a>>> = vec![Vec::new()];
 
