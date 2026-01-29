@@ -699,4 +699,149 @@ mod tests {
         assert!(text.contains("let x = 1;"));
         assert!(text.contains("let y = 2;"));
     }
+
+    // =========================================================================
+    // Runtime Theme Switching Tests (bd-hf2k)
+    // =========================================================================
+
+    #[test]
+    fn test_theme_switching_via_builder() {
+        // Test that calling theme() multiple times correctly updates the theme
+        let syntax = Syntax::new("fn main() {}", "rust")
+            .theme("base16-ocean.dark")
+            .theme("InspiredGitHub"); // Switch to a different theme
+
+        assert_eq!(syntax.theme_name, "InspiredGitHub");
+    }
+
+    #[test]
+    fn test_different_themes_produce_different_styles() {
+        let code = "fn main() { println!(\"hello\"); }";
+
+        // Render with two different themes
+        let syntax_dark = Syntax::new(code, "rust").theme("base16-ocean.dark");
+        let syntax_light = Syntax::new(code, "rust").theme("InspiredGitHub");
+
+        let segments_dark = syntax_dark.render(None).expect("dark theme render");
+        let segments_light = syntax_light.render(None).expect("light theme render");
+
+        // Collect styles from each render
+        let styles_dark: Vec<_> = segments_dark.iter().filter_map(|s| s.style.as_ref()).collect();
+        let styles_light: Vec<_> = segments_light
+            .iter()
+            .filter_map(|s| s.style.as_ref())
+            .collect();
+
+        // Both should have styles (non-empty)
+        assert!(!styles_dark.is_empty(), "dark theme should produce styled segments");
+        assert!(!styles_light.is_empty(), "light theme should produce styled segments");
+
+        // The themes should produce different background colors
+        // (dark themes have dark backgrounds, light themes have light backgrounds)
+        // This is a soft check - we just verify they're not identical
+        let dark_first = styles_dark.first().unwrap();
+        let light_first = styles_light.first().unwrap();
+        assert_ne!(
+            dark_first.to_string(),
+            light_first.to_string(),
+            "different themes should produce different styles"
+        );
+    }
+
+    #[test]
+    fn test_render_with_all_available_themes() {
+        let code = "let x = 42;";
+        let themes = Syntax::available_themes();
+
+        // Ensure we have multiple themes to test
+        assert!(
+            themes.len() >= 2,
+            "expected multiple themes, got {}",
+            themes.len()
+        );
+
+        // Render with each available theme - all should succeed
+        for theme_name in &themes {
+            let syntax = Syntax::new(code, "rust").theme(theme_name);
+            let result = syntax.render(None);
+            assert!(
+                result.is_ok(),
+                "rendering with theme '{}' should succeed",
+                theme_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_clone_and_change_theme() {
+        let original = Syntax::new("x = 1", "python").theme("base16-ocean.dark");
+
+        // Clone and change theme
+        let modified = original.clone().theme("InspiredGitHub");
+
+        // Original should be unchanged
+        assert_eq!(original.theme_name, "base16-ocean.dark");
+        assert_eq!(modified.theme_name, "InspiredGitHub");
+
+        // Both should render successfully
+        assert!(original.render(None).is_ok());
+        assert!(modified.render(None).is_ok());
+    }
+
+    #[test]
+    fn test_background_color_override_takes_precedence_over_theme() {
+        let code = "fn main() {}";
+        let custom_bg = Color::parse("#ff0000").expect("parse red");
+
+        let syntax = Syntax::new(code, "rust")
+            .theme("base16-ocean.dark")
+            .background_color(custom_bg.clone());
+
+        let segments = syntax.render(None).expect("render");
+
+        // Find a segment with a style and check its background
+        let styled_segment = segments.iter().find(|s| s.style.is_some());
+        assert!(styled_segment.is_some(), "should have styled segments");
+
+        // The background should be our custom color, not the theme's background
+        if let Some(seg) = styled_segment {
+            let style = seg.style.as_ref().unwrap();
+            // The style should contain our custom background
+            // Note: exact comparison depends on internal representation
+            let style_str = style.to_string();
+            assert!(
+                style_str.contains("on #ff0000")
+                    || style_str.contains("on rgb(255,0,0)")
+                    || style_str.contains("on color("),
+                "expected custom background in style, got: {}",
+                style_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_theme_is_base16_ocean_dark() {
+        let syntax = Syntax::new("code", "rust");
+        assert_eq!(syntax.theme_name, "base16-ocean.dark");
+    }
+
+    #[test]
+    fn test_word_wrap_builder() {
+        let syntax = Syntax::new("code", "rust").word_wrap(Some(80));
+        assert_eq!(syntax.word_wrap, Some(80));
+
+        let syntax2 = Syntax::new("code", "rust").word_wrap(None);
+        assert_eq!(syntax2.word_wrap, None);
+    }
+
+    #[test]
+    fn test_line_number_style_builder() {
+        use crate::style::Attributes;
+
+        let custom_style = Style::new().bold().color_str("cyan").unwrap_or_default();
+        let syntax = Syntax::new("code", "rust").line_number_style(custom_style.clone());
+
+        // The line number style should be set with bold attribute
+        assert!(syntax.line_number_style.attributes.contains(Attributes::BOLD));
+    }
 }

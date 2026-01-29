@@ -199,7 +199,10 @@ mod tests {
         assert_eq!(segments.len(), 1);
         // With variant, the output should include the variant selector
         let text = &segments[0].text;
-        assert!(text.contains('\u{FE0F}'), "should contain emoji variant selector");
+        assert!(
+            text.contains('\u{FE0F}'),
+            "should contain emoji variant selector"
+        );
     }
 
     #[test]
@@ -211,14 +214,15 @@ mod tests {
         let options = console.options();
         let segments = emoji.render(&console, &options);
         let text = &segments[0].text;
-        assert!(text.contains('\u{FE0E}'), "should contain text variant selector");
+        assert!(
+            text.contains('\u{FE0E}'),
+            "should contain text variant selector"
+        );
     }
 
     #[test]
     fn test_emoji_variant_none() {
-        let emoji = Emoji::new("+1")
-            .expect("should create emoji")
-            .variant(None);
+        let emoji = Emoji::new("+1").expect("should create emoji").variant(None);
         let console = Console::builder().force_terminal(false).build();
         let options = console.options();
         let segments = emoji.render(&console, &options);
@@ -265,8 +269,7 @@ mod tests {
         let segments = emoji.render(&console, &options);
         // Without explicit style, segment should have no style
         assert!(
-            segments[0].style.is_none()
-                || segments[0].style.as_ref().is_some_and(|s| s.is_null())
+            segments[0].style.is_none() || segments[0].style.as_ref().is_some_and(Style::is_null)
         );
     }
 
