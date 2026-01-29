@@ -926,3 +926,225 @@ fn e2e_snapshot_table_leading_with_separators() {
     let output = table.render_plain(30);
     insta::assert_snapshot!("e2e_table_leading_with_separators", output);
 }
+
+// =============================================================================
+// Scenario 25: Column Width Edge Cases (bd-2ec5)
+// =============================================================================
+
+#[test]
+fn e2e_table_extremely_narrow_width() {
+    // Edge case: table width less than minimum overhead
+    init_test_logging();
+    tracing::info!("Testing table with extremely narrow width");
+
+    let mut table = Table::new()
+        .with_column(Column::new("Name"))
+        .with_column(Column::new("Value"));
+
+    table.add_row_cells(["Alice", "100"]);
+
+    // Render at width 5 - barely enough for borders
+    let output = table.render_plain(5);
+
+    // Should still produce some output without panicking
+    assert!(!output.is_empty(), "Table should produce output even at narrow width");
+    tracing::info!("Extremely narrow width test PASSED");
+}
+
+#[test]
+fn e2e_table_ratio_column_sizing() {
+    // Test ratio-based column sizing
+    init_test_logging();
+    tracing::info!("Testing ratio-based column sizing");
+
+    let mut table = Table::new()
+        .expand(true)
+        .with_column(Column::new("Small").ratio(1))
+        .with_column(Column::new("Large").ratio(3));
+
+    table.add_row_cells(["A", "B"]);
+
+    let output = table.render_plain(60);
+
+    // Both columns should be present
+    assert!(output.contains("Small"), "Missing 'Small' header");
+    assert!(output.contains("Large"), "Missing 'Large' header");
+
+    // Verify the output lines are consistent width (expanded table)
+    let lines: Vec<&str> = output.lines().filter(|l| !l.is_empty()).collect();
+    if lines.len() > 1 {
+        let first_len = cells::cell_len(lines[0]);
+        for line in &lines[1..] {
+            let len = cells::cell_len(line);
+            assert!(
+                len == first_len || len == first_len - 1 || len == first_len + 1,
+                "Lines should have consistent width, got {} vs {}",
+                len,
+                first_len
+            );
+        }
+    }
+    tracing::info!("Ratio column sizing test PASSED");
+}
+
+#[test]
+fn e2e_table_mixed_ratio_and_fixed() {
+    // Test mixed ratio and fixed-width columns
+    init_test_logging();
+    tracing::info!("Testing mixed ratio and fixed-width columns");
+
+    let mut table = Table::new()
+        .expand(true)
+        .with_column(Column::new("Fixed").width(10))
+        .with_column(Column::new("Flex1").ratio(1))
+        .with_column(Column::new("Flex2").ratio(2));
+
+    table.add_row_cells(["X", "Y", "Z"]);
+
+    let output = table.render_plain(60);
+
+    assert!(output.contains("Fixed"), "Missing 'Fixed' header");
+    assert!(output.contains("Flex1"), "Missing 'Flex1' header");
+    assert!(output.contains("Flex2"), "Missing 'Flex2' header");
+    tracing::info!("Mixed ratio and fixed columns test PASSED");
+}
+
+#[test]
+fn e2e_table_all_columns_at_minimum() {
+    // Edge case: all columns already at minimum width, can't shrink
+    init_test_logging();
+    tracing::info!("Testing columns at minimum width");
+
+    let mut table = Table::new()
+        .with_column(Column::new("A").min_width(5))
+        .with_column(Column::new("B").min_width(5))
+        .with_column(Column::new("C").min_width(5));
+
+    table.add_row_cells(["1", "2", "3"]);
+
+    // Render at width smaller than sum of minimums + overhead
+    let output = table.render_plain(10);
+
+    // Should still produce output without panicking
+    assert!(!output.is_empty(), "Should handle columns at minimum");
+    tracing::info!("Columns at minimum width test PASSED");
+}
+
+#[test]
+fn e2e_table_conflicting_min_max() {
+    // Edge case: min_width greater than max_width should use min
+    init_test_logging();
+    tracing::info!("Testing conflicting min/max width constraints");
+
+    let mut table = Table::new()
+        .with_column(Column::new("Header").min_width(20).max_width(10));
+
+    table.add_row_cells(["Content"]);
+
+    let output = table.render_plain(50);
+
+    // Should still render without panicking
+    assert!(output.contains("Header"), "Should contain header");
+    assert!(output.contains("Content"), "Should contain content");
+    tracing::info!("Conflicting min/max test PASSED");
+}
+
+#[test]
+fn e2e_table_zero_width_column() {
+    // Edge case: column with width(0)
+    init_test_logging();
+    tracing::info!("Testing zero-width column");
+
+    let mut table = Table::new()
+        .with_column(Column::new("Normal"))
+        .with_column(Column::new("Zero").width(0));
+
+    table.add_row_cells(["A", "B"]);
+
+    let output = table.render_plain(40);
+
+    // Should still produce valid output
+    assert!(output.contains("Normal"), "Should contain Normal header");
+    tracing::info!("Zero width column test PASSED");
+}
+
+#[test]
+fn e2e_table_very_long_word_no_wrap() {
+    // Edge case: long word that can't wrap in narrow column
+    init_test_logging();
+    tracing::info!("Testing very long word in narrow column");
+
+    let mut table = Table::new()
+        .with_column(Column::new("Short").max_width(5))
+        .with_column(Column::new("Normal"));
+
+    table.add_row_cells(["Supercalifragilisticexpialidocious", "OK"]);
+
+    let output = table.render_plain(40);
+
+    // Should render without panicking (word may be truncated/wrapped)
+    assert!(output.contains("Short"), "Should contain Short header");
+    assert!(output.contains("OK"), "Should contain OK");
+    tracing::info!("Long word no wrap test PASSED");
+}
+
+#[test]
+fn e2e_table_all_ratios_zero() {
+    // Edge case: expand with all ratios being 0
+    init_test_logging();
+    tracing::info!("Testing expand with zero ratios");
+
+    let mut table = Table::new()
+        .expand(true)
+        .with_column(Column::new("A").ratio(0))
+        .with_column(Column::new("B").ratio(0));
+
+    table.add_row_cells(["X", "Y"]);
+
+    let output = table.render_plain(50);
+
+    // Should fall back to weight-based expansion
+    assert!(output.contains("A"), "Should contain A header");
+    assert!(output.contains("B"), "Should contain B header");
+    tracing::info!("Zero ratios test PASSED");
+}
+
+#[test]
+fn e2e_table_single_huge_cell() {
+    // Edge case: single cell much larger than table width
+    init_test_logging();
+    tracing::info!("Testing single huge cell");
+
+    let huge_content = "A".repeat(200);
+    let mut table = Table::new().with_column(Column::new("Data"));
+
+    table.add_row_cells([huge_content.as_str()]);
+
+    let output = table.render_plain(30);
+
+    // Should wrap/truncate without panicking
+    assert!(!output.is_empty(), "Should produce output");
+    assert!(output.contains("Data"), "Should contain header");
+    tracing::info!("Single huge cell test PASSED");
+}
+
+#[test]
+fn e2e_table_width_equals_overhead() {
+    // Edge case: table width exactly equals border overhead
+    init_test_logging();
+    tracing::info!("Testing width equals overhead");
+
+    let mut table = Table::new()
+        .with_column(Column::new("X"))
+        .with_column(Column::new("Y"));
+
+    table.add_row_cells(["1", "2"]);
+
+    // With show_edge=true, 2 columns, padding 1:
+    // overhead = 2 (border) + 3 (separator) + 2 (edge padding) = 7
+    let output = table.render_plain(7);
+
+    // Should handle edge case gracefully
+    assert!(!output.is_empty(), "Should produce some output");
+    tracing::info!("Width equals overhead test PASSED");
+}
