@@ -901,7 +901,8 @@ fn test_md_console_print() {
 
     console.begin_capture();
     console.print_renderable(&md);
-    let output = console.end_capture();
+    let segments = console.end_capture();
+    let output: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(output.contains("Hello World"));
     assert!(output.contains("Paragraph text"));
 }
