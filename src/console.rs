@@ -84,7 +84,7 @@ use std::sync::{
     Arc, Mutex, Weak,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::SystemTime;
+use time::OffsetDateTime;
 
 use crate::color::ColorSystem;
 use crate::emoji;
@@ -1226,83 +1226,69 @@ impl Console {
 
     /// Format the current time as a timestamp string.
     fn format_timestamp(format: Option<&str>) -> String {
-        let now = SystemTime::now();
-        let duration = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default();
-        let secs = duration.as_secs();
+        // Prefer local time for parity with typical "console logger" expectations, but
+        // fall back to UTC when local offset can't be determined (e.g., sandboxed envs).
+        let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
 
-        // Calculate hours, minutes, seconds (simplified - ignores timezone)
-        let hours = (secs % 86400) / 3600;
-        let minutes = (secs % 3600) / 60;
-        let seconds = secs % 60;
-
-        if let Some(fmt) = format {
-            // Simple substitution for common format codes
-            let mut result = fmt.to_string();
-            result = result.replace("%H", &format!("{hours:02}"));
-            result = result.replace("%M", &format!("{minutes:02}"));
-            result = result.replace("%S", &format!("{seconds:02}"));
-
-            // Date components (simplified - days since epoch)
-            let days = secs / 86400;
-            // Approximate: 1970-01-01 + days
-            // This is a simplified calculation - not accounting for leap years properly
-            let (year, month, day) = days_to_ymd(days);
-            result = result.replace("%Y", &format!("{year:04}"));
-            result = result.replace("%m", &format!("{month:02}"));
-            result = result.replace("%d", &format!("{day:02}"));
-
-            result
-        } else {
-            // Default format: [HH:MM:SS]
-            format!("[{hours:02}:{minutes:02}:{seconds:02}]")
+        match format {
+            None => format!(
+                "[{:02}:{:02}:{:02}]",
+                now.hour(),
+                now.minute(),
+                now.second()
+            ),
+            Some(fmt) => Self::format_timestamp_strftime_subset(&now, fmt),
         }
     }
-}
 
-/// Convert days since Unix epoch to year, month, day.
-/// This is a simplified calculation for timestamp formatting.
-fn days_to_ymd(days: u64) -> (u32, u32, u32) {
-    // Simplified calculation - approximation only
-    // Clamp days to u32::MAX to prevent overflow (covers dates up to ~11.7 million years)
-    let mut year = 1970u32;
-    let mut remaining = u32::try_from(days).unwrap_or(u32::MAX);
+    // Intentionally supports a small, stable subset of strftime:
+    // %Y %m %d %H %M %S and %%.
+    fn format_timestamp_strftime_subset(now: &OffsetDateTime, fmt: &str) -> String {
+        let mut out = String::with_capacity(fmt.len().saturating_add(8));
+        let mut it = fmt.chars();
 
-    // Count years
-    loop {
-        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
+        while let Some(ch) = it.next() {
+            if ch != '%' {
+                out.push(ch);
+                continue;
+            }
+
+            let Some(code) = it.next() else {
+                out.push('%');
+                break;
+            };
+
+            match code {
+                '%' => out.push('%'),
+                'H' => {
+                    let _ = write!(out, "{:02}", now.hour());
+                }
+                'M' => {
+                    let _ = write!(out, "{:02}", now.minute());
+                }
+                'S' => {
+                    let _ = write!(out, "{:02}", now.second());
+                }
+                'Y' => {
+                    let _ = write!(out, "{:04}", now.year());
+                }
+                'm' => {
+                    // time::Month implements `From<Month> for u8`.
+                    let _ = write!(out, "{:02}", u8::from(now.month()));
+                }
+                'd' => {
+                    let _ = write!(out, "{:02}", now.day());
+                }
+                other => {
+                    // Preserve unknown tokens literally to avoid surprising callers.
+                    out.push('%');
+                    out.push(other);
+                }
+            }
         }
-        remaining -= days_in_year;
-        year += 1;
+
+        out
     }
-
-    // Count months
-    let days_in_months: [u32; 12] = if is_leap_year(year) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-
-    let mut month = 1u32;
-    for &days_in_month in &days_in_months {
-        if remaining < days_in_month {
-            break;
-        }
-        remaining -= days_in_month;
-        month += 1;
-    }
-
-    let day = remaining + 1;
-
-    (year, month, day)
-}
-
-/// Check if a year is a leap year.
-const fn is_leap_year(year: u32) -> bool {
-    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 fn control_param(params: &[i32], index: usize, default: i32) -> i32 {
@@ -1533,8 +1519,12 @@ pub enum LogLevel {
 pub struct LogOptions {
     /// Whether to show a timestamp.
     pub show_timestamp: bool,
-    /// Custom timestamp format (strftime-like format, simplified).
-    /// If None, uses default format: "[HH:MM:SS]".
+    /// Custom timestamp format (strftime-like subset).
+    ///
+    /// Supported codes: `%Y` `%m` `%d` `%H` `%M` `%S` and `%%`.
+    /// Unknown codes are preserved literally.
+    ///
+    /// If None, uses default format: `"[HH:MM:SS]"`.
     pub timestamp_format: Option<String>,
     /// File path (e.g., "src/main.rs").
     pub file_path: Option<String>,
@@ -1848,10 +1838,10 @@ mod tests {
         let console = Console::new();
         console.begin_capture();
 
-        // Print would add to buffer
-        // For testing, we just verify the mechanism
+        console.print_plain("capture test");
         let segments = console.end_capture();
-        assert!(segments.is_empty()); // Nothing captured in this test
+        let captured: String = segments.iter().map(|s| s.text.as_ref()).collect();
+        assert!(captured.contains("capture test"));
     }
 
     #[test]
@@ -3026,24 +3016,12 @@ mod tests {
     }
 
     #[test]
-    fn test_days_to_ymd() {
-        // Test epoch: 1970-01-01
-        let (y, m, d) = super::days_to_ymd(0);
-        assert_eq!((y, m, d), (1970, 1, 1));
-
-        // Test known date: 2000-01-01 is day 10957
-        let (y, m, d) = super::days_to_ymd(10957);
-        assert_eq!(y, 2000);
-        assert_eq!(m, 1);
-        assert_eq!(d, 1);
-    }
-
-    #[test]
-    fn test_is_leap_year() {
-        assert!(super::is_leap_year(2000)); // divisible by 400
-        assert!(!super::is_leap_year(1900)); // divisible by 100 but not 400
-        assert!(super::is_leap_year(2004)); // divisible by 4 but not 100
-        assert!(!super::is_leap_year(2001)); // not divisible by 4
+    fn test_format_timestamp_custom_with_date_tokens() {
+        let ts = Console::format_timestamp(Some("%Y-%m-%d %H:%M:%S"));
+        // We don't assert wall-clock values; we only assert the substitutions happened.
+        assert_eq!(ts.len(), "0000-00-00 00:00:00".len());
+        assert_eq!(ts.matches('-').count(), 2);
+        assert_eq!(ts.matches(':').count(), 2);
     }
 
     // ========== Markup Integration Tests ==========
