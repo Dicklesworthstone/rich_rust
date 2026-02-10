@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-02-10T17:19:22.831466+00:00",
+  "generated_at": "2026-02-10T17:48:13.168767+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -109,6 +109,42 @@
         "ansi": "\u001b[3;92mTrue\u001b[0m \u001b[3;91mFalse\u001b[0m \u001b[3;35mNone\u001b[0m \u001b[1;36m123\u001b[0m \u001b[1;36m0xFF\u001b[0m \u001b[1;36m1+2j\u001b[0m \u001b[32m'hi'\u001b[0m \u001b[32m\"dq\"\u001b[0m \u001b[1m(\u001b[0m\u001b[1;35mcall\u001b[0m\u001b[1m(\u001b[0m\u001b[1m)\u001b[0m\u001b[1m)\u001b[0m \u001b[33m...\u001b[0m \u001b[4;94mhttps://example.com\u001b[0m\n"
       },
       "notes": "Exercise default ReprHighlighter (Console highlight=True) ANSI output."
+    },
+    {
+      "id": "text/from_ansi_basic",
+      "kind": "text_from_ansi",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 80
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "ansi": "\u001b[1;31mBoldRed\u001b[0m plain \u001b[38;2;10;20;30mRGB\u001b[0m"
+      },
+      "expected": {
+        "plain": "BoldRed plain RGB\n",
+        "ansi": "\u001b[1;31mBoldRed\u001b[0m plain \u001b[38;2;10;20;30mRGB\u001b[0m\n"
+      },
+      "notes": "Exercise Text.from_ansi + AnsiDecoder SGR parsing (attrs + 24-bit color)."
+    },
+    {
+      "id": "text/from_ansi_osc8_link",
+      "kind": "text_from_ansi",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 80
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "ansi": "\u001b]8;;https://example.com\u001b\\link\u001b]8;;\u001b\\"
+      },
+      "expected": {
+        "plain": "link\n",
+        "ansi": "\u001b]8;;https://example.com\u001b\\link\u001b]8;;\u001b\\\n"
+      },
+      "notes": "Exercise Text.from_ansi OSC 8 hyperlink set + clear."
     },
     {
       "id": "protocol/rich_cast",

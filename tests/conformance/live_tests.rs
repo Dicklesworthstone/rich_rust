@@ -489,6 +489,7 @@ mod tests {
         let mut writer = LiveWriter::new(console);
 
         writer.write_all(b"direct writer").expect("write");
+        writer.flush().expect("flush");
 
         let output = buffer.contents();
         assert!(output.contains("direct writer"));

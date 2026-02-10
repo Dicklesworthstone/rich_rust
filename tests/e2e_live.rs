@@ -599,6 +599,7 @@ fn test_live_stderr_proxy() {
 
         tracing::debug!("Writing through stderr proxy");
         writer.write_all(b"Proxied stderr output").expect("write");
+        writer.flush().expect("flush");
 
         let output = buffer.contents();
         assert!(

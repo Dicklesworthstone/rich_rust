@@ -11,6 +11,7 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use crate::ansi::AnsiDecoder;
 use crate::console::{Console, ConsoleOptions, RenderHook};
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment, split_lines};
@@ -103,23 +104,54 @@ pub struct Live {
 #[derive(Clone)]
 pub struct LiveWriter {
     console: Arc<Console>,
+    buffer: Vec<u8>,
+    decoder: AnsiDecoder,
 }
 
 impl LiveWriter {
     #[must_use]
     pub fn new(console: Arc<Console>) -> Self {
-        Self { console }
+        Self {
+            console,
+            buffer: Vec::new(),
+            decoder: AnsiDecoder::new(),
+        }
     }
 }
 
 impl io::Write for LiveWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let text = String::from_utf8_lossy(buf);
-        self.console.print_plain(&text);
+        // Match Python Rich's FileProxy behavior: buffer until newline, then decode ANSI
+        // and print styled output.
+        self.buffer.extend_from_slice(buf);
+
+        let mut lines: Vec<Text> = Vec::new();
+        while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
+            let line_bytes: Vec<u8> = self.buffer.drain(..pos).collect();
+            // Drain the newline itself.
+            let _ = self.buffer.drain(..1);
+            let line = String::from_utf8_lossy(&line_bytes);
+            lines.push(self.decoder.decode_line(&line));
+        }
+
+        if !lines.is_empty() {
+            let sep = Text::new("\n");
+            let mut joined = sep.join(lines.iter());
+            joined.end = "\n".to_string();
+            self.console.print_text(&joined);
+        }
+
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let remainder = String::from_utf8_lossy(&self.buffer).to_string();
+            self.buffer.clear();
+            let mut decoded = self.decoder.decode_line(&remainder);
+            decoded.end = "\n".to_string();
+            self.console.print_text(&decoded);
+        }
         Ok(())
     }
 }
@@ -783,6 +815,7 @@ impl LiveRender {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::ColorSystem;
     use std::io::Write;
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -1257,6 +1290,13 @@ mod tests {
         let _ = writer.write_all(b"proxy output");
 
         let text = buffer.text();
+        assert!(
+            !text.contains("proxy output"),
+            "LiveWriter should buffer until newline or flush"
+        );
+
+        let _ = writer.write_all(b"\n");
+        let text = buffer.text();
         assert!(text.contains("proxy output"));
     }
 
@@ -1274,7 +1314,36 @@ mod tests {
         let _ = writer.write_all(b"stderr content");
 
         let text = buffer.text();
+        assert!(
+            !text.contains("stderr content"),
+            "LiveWriter should buffer until newline or flush"
+        );
+
+        let _ = writer.write_all(b"\n");
+        let text = buffer.text();
         assert!(text.contains("stderr content"));
+    }
+
+    #[test]
+    fn test_live_writer_decodes_ansi_sgr() {
+        let buffer = SharedBuffer::new();
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(ColorSystem::Standard)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+        let live = Live::new(console.clone());
+        let mut writer = live.stdout_proxy();
+        let _ = writer.write_all(b"\x1b[31mred\x1b[0m\n");
+
+        let text = buffer.text();
+        assert!(text.contains("red"));
+        assert!(
+            text.contains("\x1b["),
+            "expected ANSI output when terminal is forced"
+        );
     }
 
     #[test]

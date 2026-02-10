@@ -301,6 +301,17 @@ fn render_renderable(
     (normalize_line_endings(&plain), ansi)
 }
 
+fn render_prepared_text(console: &Console, text: &Text) -> (String, String) {
+    let segments = text.render(&text.end);
+    let plain: String = segments
+        .iter()
+        .filter(|segment| !segment.is_control())
+        .map(|segment| segment.text.as_ref())
+        .collect();
+    let ansi = render_segments_to_ansi(console, &segments);
+    (normalize_line_endings(&plain), ansi)
+}
+
 fn value_string(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
@@ -659,6 +670,10 @@ fn python_rich_fixtures() {
         let (mut actual_plain, mut actual_ansi) = if kind == "text" {
             let markup = input.get("markup").and_then(|v| v.as_str()).unwrap_or("");
             render_text(&console, markup, options.width)
+        } else if kind == "text_from_ansi" {
+            let ansi_text = input.get("ansi").and_then(|v| v.as_str()).unwrap_or("");
+            let text = Text::from_ansi(ansi_text);
+            render_prepared_text(&console, &text)
         } else if kind == "protocol_rich_cast" {
             let markup = input.get("markup").and_then(|v| v.as_str()).unwrap_or("");
             render_protocol_rich_cast(&console, markup, options.width)

@@ -42,6 +42,7 @@ This document is the source of truth. If code or docs change, update this file, 
 | Markup | Rich markup parsing | Implemented | `src/markup/mod.rs` | E2E + regression tests |
 | Console | Highlighters (`rich.highlighter`) | Implemented | `src/highlighter.rs`, `src/console.rs` | Unit tests cover `NullHighlighter`, `RegexHighlighter`, `ReprHighlighter`, and Console integration; Python fixture conformance includes `text/highlighter_repr`. |
 | Protocol | Protocol hooks (`rich.protocol` / `rich_cast`) | Implemented | `src/protocol.rs`, `src/console.rs`, `src/renderables/mod.rs` | Conformance fixtures: `protocol/rich_cast` (casts via `__rich__` to a string and highlights it), `protocol/measure` (uses `__rich_measure__` via `Console.measure`, output rendered through standard string pipeline). |
+| ANSI | ANSI decode (`rich.ansi` / `Text.from_ansi`) | Implemented | `src/ansi.rs`, `src/text.rs`, `src/live.rs` | Conformance fixtures: `text/from_ansi_basic`, `text/from_ansi_osc8_link`. Live proxy writer buffers by line and decodes ANSI (FileProxy parity). |
 | Emoji | Emoji code replacement (`:smile:`) | Implemented | `src/emoji.rs`, `src/console.rs` | Unit tests + Python fixture conformance |
 | Theme | Theme + named styles (`rule.line`, `[warning]`) | Implemented | `src/theme.rs`, `src/console.rs` | Unit tests + Python fixture conformance (`text/theme_named_style`) |
 | Text | Styled spans, wrapping | Implemented | `src/text.rs` | E2E + property tests |

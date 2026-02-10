@@ -30,6 +30,7 @@ try:
     from rich.padding import Padding  # type: ignore
     from rich.align import Align  # type: ignore
     from rich.progress_bar import ProgressBar  # type: ignore
+    from rich.text import Text  # type: ignore
     from rich.markdown import Markdown  # type: ignore
     from rich.syntax import Syntax  # type: ignore
     from rich.json import JSON  # type: ignore
@@ -84,6 +85,24 @@ CASES = [
             "markup": "True False None 123 0xFF 1+2j 'hi' \"dq\" (call()) ... https://example.com"
         },
         "notes": "Exercise default ReprHighlighter (Console highlight=True) ANSI output.",
+    },
+    {
+        "id": "text/from_ansi_basic",
+        "kind": "text_from_ansi",
+        "render_options": {"width": 80},
+        "input": {
+            "ansi": "\x1b[1;31mBoldRed\x1b[0m plain \x1b[38;2;10;20;30mRGB\x1b[0m"
+        },
+        "notes": "Exercise Text.from_ansi + AnsiDecoder SGR parsing (attrs + 24-bit color).",
+    },
+    {
+        "id": "text/from_ansi_osc8_link",
+        "kind": "text_from_ansi",
+        "render_options": {"width": 80},
+        "input": {
+            "ansi": "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\"
+        },
+        "notes": "Exercise Text.from_ansi OSC 8 hyperlink set + clear.",
     },
     {
         "id": "protocol/rich_cast",
@@ -419,6 +438,9 @@ def build_renderable(case: Dict[str, Any]):
 
     if kind == "text":
         return inp["markup"]
+
+    if kind == "text_from_ansi":
+        return Text.from_ansi(inp.get("ansi", ""))
 
     if kind == "protocol_rich_cast":
         class RichCastable:

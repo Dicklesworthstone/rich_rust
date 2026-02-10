@@ -167,6 +167,7 @@
 #![allow(clippy::unused_self)]
 #![allow(clippy::too_many_lines)]
 
+pub mod ansi;
 pub mod r#box;
 pub mod cells;
 pub mod color;
@@ -190,6 +191,7 @@ pub mod theme;
 
 /// Re-exports for convenient usage
 pub mod prelude {
+    pub use crate::ansi::AnsiDecoder;
     pub use crate::r#box::BoxChars;
     pub use crate::color::{
         Color, ColorSystem, ColorTriplet, ColorType, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI,

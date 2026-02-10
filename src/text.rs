@@ -9,6 +9,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, AddAssign};
 
+use crate::ansi::AnsiDecoder;
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions};
 use crate::renderables::Renderable;
@@ -152,7 +153,72 @@ pub struct Text {
     pub tab_size: usize,
 }
 
+/// Options for [`Text::from_ansi_with_options`].
+#[derive(Debug, Clone)]
+pub struct FromAnsiOptions {
+    /// Base style applied to all decoded text (Python `Text.from_ansi(style=...)`).
+    pub style: Style,
+    pub justify: Option<JustifyMethod>,
+    pub overflow: Option<OverflowMethod>,
+    pub no_wrap: Option<bool>,
+    /// String to append after text (Python `end=`), default `"\n"`.
+    pub end: String,
+    /// Tab expansion size. Python uses an integer, with default 8.
+    pub tab_size: Option<usize>,
+}
+
+impl Default for FromAnsiOptions {
+    fn default() -> Self {
+        Self {
+            style: Style::null(),
+            justify: None,
+            overflow: None,
+            no_wrap: None,
+            end: "\n".to_string(),
+            tab_size: Some(8),
+        }
+    }
+}
+
 impl Text {
+    /// Create a [`Text`] object from a string containing ANSI escape codes.
+    ///
+    /// Python reference: `rich.text.Text.from_ansi` + `rich.ansi.AnsiDecoder`.
+    #[must_use]
+    pub fn from_ansi(text: &str) -> Self {
+        Self::from_ansi_with_options(text, &FromAnsiOptions::default())
+    }
+
+    /// Create a [`Text`] object from ANSI escape codes with explicit options.
+    #[must_use]
+    pub fn from_ansi_with_options(text: &str, options: &FromAnsiOptions) -> Self {
+        let mut decoder = AnsiDecoder::new();
+        let lines = decoder.decode(text);
+
+        let mut result = Self::new("");
+        result.set_style(options.style.clone());
+        if let Some(justify) = options.justify {
+            result.justify = justify;
+        }
+        if let Some(overflow) = options.overflow {
+            result.overflow = overflow;
+        }
+        if let Some(no_wrap) = options.no_wrap {
+            result.no_wrap = no_wrap;
+        }
+        result.end.clone_from(&options.end);
+        result.tab_size = options.tab_size.unwrap_or(8);
+
+        for (idx, line) in lines.iter().enumerate() {
+            if idx > 0 {
+                result.append("\n");
+            }
+            result.append_text(line);
+        }
+
+        result
+    }
+
     /// Create a new Text from plain text.
     ///
     /// This does **NOT** parse Rich markup. If you pass `"[bold]text[/]"`,
