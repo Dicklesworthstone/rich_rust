@@ -500,6 +500,15 @@ impl Console {
         self.force_terminal.unwrap_or(self.is_terminal)
     }
 
+    /// Terminal detection result without `force_terminal` overrides.
+    ///
+    /// This is used for behaviors that must not affect non-TTY contexts even if
+    /// a caller forces terminal rendering (e.g. process-wide stdio redirection).
+    #[must_use]
+    pub(crate) const fn is_terminal_detected(&self) -> bool {
+        self.is_terminal
+    }
+
     /// Get the color system in use.
     #[must_use]
     pub fn color_system(&self) -> Option<ColorSystem> {
@@ -510,6 +519,12 @@ impl Console {
     #[must_use]
     pub const fn emoji(&self) -> bool {
         self.emoji
+    }
+
+    /// Check if ASCII-safe box drawing is enabled.
+    #[must_use]
+    pub const fn safe_box(&self) -> bool {
+        self.safe_box
     }
 
     /// Get a style by theme name or parse a style definition.
@@ -636,6 +651,10 @@ impl Console {
         let segment = Segment::control(control_codes);
         let mut file = lock_recover(&self.file);
         self.write_segments_raw(&mut *file, &[segment])
+    }
+
+    pub(crate) fn swap_file(&self, writer: Box<dyn Write + Send>) -> Box<dyn Write + Send> {
+        std::mem::replace(&mut *lock_recover(&self.file), writer)
     }
 
     /// Show or hide the cursor.

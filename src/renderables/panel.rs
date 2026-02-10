@@ -22,7 +22,7 @@ pub struct Panel<'a> {
     /// Box drawing style.
     box_style: &'static BoxChars,
     /// Use ASCII-safe characters.
-    safe_box: bool,
+    safe_box: Option<bool>,
     /// Expand to fill available width.
     expand: bool,
     /// Style for the panel background.
@@ -50,7 +50,7 @@ impl Default for Panel<'_> {
         Self {
             content_lines: Vec::new(),
             box_style: &ROUNDED,
-            safe_box: false,
+            safe_box: None,
             expand: true,
             style: Style::new(),
             border_style: Style::new(),
@@ -139,14 +139,14 @@ impl<'a> Panel<'a> {
     #[must_use]
     pub fn ascii(mut self) -> Self {
         self.box_style = &ASCII;
-        self.safe_box = true;
+        self.safe_box = Some(true);
         self
     }
 
     /// Force ASCII-safe rendering.
     #[must_use]
     pub fn safe_box(mut self, safe: bool) -> Self {
-        self.safe_box = safe;
+        self.safe_box = Some(safe);
         self
     }
 
@@ -266,7 +266,8 @@ impl<'a> Panel<'a> {
 
     /// Get the effective box characters.
     fn effective_box(&self) -> &'static BoxChars {
-        if self.safe_box && !self.box_style.ascii {
+        let safe = self.safe_box.unwrap_or(false);
+        if safe && !self.box_style.ascii {
             &ASCII
         } else {
             self.box_style
@@ -653,8 +654,14 @@ impl<'a> Panel<'a> {
 }
 
 impl Renderable for Panel<'_> {
-    fn render<'b>(&'b self, _console: &Console, options: &ConsoleOptions) -> Vec<Segment<'b>> {
-        self.render(options.max_width).into_iter().collect()
+    fn render<'b>(&'b self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'b>> {
+        if self.safe_box.is_some() {
+            return self.render(options.max_width).into_iter().collect();
+        }
+
+        // Inherit the Console's safe_box setting unless explicitly overridden.
+        let effective = self.clone().safe_box(console.safe_box());
+        effective.render(options.max_width).into_iter().collect()
     }
 }
 

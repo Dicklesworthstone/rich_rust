@@ -63,7 +63,12 @@ impl Emoji {
 }
 
 impl Renderable for Emoji {
-    fn render<'a>(&'a self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
+    fn render<'a>(&'a self, console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        // Match Python Rich's Console(emoji=False) expectation: don't emit unicode emoji glyphs.
+        if !console.emoji() {
+            return vec![Segment::plain(format!(":{name}:", name = self.name))];
+        }
+
         let Some(emoji) = get_emoji(&self.name) else {
             return vec![Segment::plain(format!(":{name}:", name = self.name))];
         };

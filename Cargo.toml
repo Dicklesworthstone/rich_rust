@@ -31,6 +31,12 @@ lru = "0.16"
 # Stack-allocated small vectors for performance
 smallvec = "1.13"
 
+# Cross-platform OS pipes (used for Live stdout/stderr redirection)
+os_pipe = "1.2.3"
+
+# Cross-platform stdin/stdout/stderr override guards (used by Live redirection)
+stdio-override = "0.2.0"
+
 # Logging integration (std feature required for set_boxed_logger)
 log = { version = "0.4", features = ["std"] }
 
@@ -80,7 +86,7 @@ test-log = { version = "0.2.19", features = ["trace"] }
 
 [features]
 default = []
-conformance_test = []
+conformance_test = ["full"]
 syntax = ["syntect"]
 markdown = ["pulldown-cmark"]
 json = ["serde_json"]

@@ -63,7 +63,7 @@ This document is the source of truth. If code or docs change, update this file, 
 | Padding | Padding | Implemented | `src/renderables/padding.rs` | Golden tests |
 | Align | Alignment | Implemented | `src/renderables/align.rs` | Golden tests |
 | Pretty / Inspect | Debug-based pretty printing + type inspection | Implemented | `src/renderables/pretty.rs` | Unit tests + snapshots in `src/renderables/snapshots/` |
-| Traceback | Traceback rendering + `Console::print_exception` | Implemented | `src/renderables/traceback.rs` | Deterministic synthetic frames + Python fixture conformance (`traceback/basic`). Code context via `extra_lines` + `source_context` (from file or embedded). Automatic Rust backtrace capture via `Traceback::capture()` (requires `backtrace` feature). No locals display yet. |
+| Traceback | Traceback rendering + `Console::print_exception` | Implemented | `src/renderables/traceback.rs` | Deterministic explicit frames + Python fixture conformance (`traceback/basic`). Code context via `extra_lines` + `source_context` (from file or embedded). Automatic Rust backtrace capture via `Traceback::capture()` (requires `backtrace` feature). Locals rendering supported when provided explicitly (`TracebackFrame::locals`, `Traceback::show_locals`). |
 | Syntax | Syntax highlighting | Implemented | `src/renderables/syntax.rs` (feature `syntax`) | Python fixture conformance (`syntax/basic`, `syntax/no_terminal`). ANSI output differs (syntect vs Pygments); plain text parity verified. |
 | Markdown | Markdown rendering | Implemented | `src/renderables/markdown.rs` (feature `markdown`) | Python fixture conformance (`markdown/plain`, `markdown/emphasis_no_terminal`). Both plain and ANSI parity verified. |
 | JSON | JSON pretty-print | Implemented | `src/renderables/json.rs` (feature `json`) | Python fixture conformance (`json/basic`, `json/nested`). Both plain and ANSI parity verified. |
@@ -84,7 +84,7 @@ This document is the source of truth. If code or docs change, update this file, 
 
 | Feature | Python Rich Feature | Status | Rust Location / Flags | Evidence / Notes |
 |---|---|---|---|---|
-| Live | Dynamic refresh (`Live`) | Implemented | `src/live.rs` | Nested Live supported; stdout/stderr redirection is best-effort (use Live proxy writers). |
+| Live | Dynamic refresh (`Live`) | Implemented | `src/live.rs` | Nested Live supported; stdout/stderr can be redirected process-wide in interactive terminals (see `LiveOptions.redirect_stdout` / `redirect_stderr`). |
 | Layout | Layout engine | Implemented | `src/renderables/layout.rs` | Ratio-based row/column splits with named lookups. |
 | Logging | Rich logging handler | Implemented | `src/logging.rs` | `RichLogger` implements the `log` crate; optional `RichTracingLayer` via `tracing` feature. |
 

@@ -545,7 +545,7 @@ console.print_renderable(&md);
 ### Pretty / Inspect
 
 Rust doesn't have Python-style runtime reflection, so rich_rust's equivalents are
-`Debug`-based and best-effort.
+`Debug`-based and deterministic.
 
 ```rust
 use rich_rust::prelude::*;
@@ -870,7 +870,7 @@ cargo run --bin demo_showcase --features showcase -- \
 - **No input:** This is an output library; use `crossterm` or `dialoguer` for input
 - **Limited input:** rich_rust includes prompts/pager/status helpers, but it is not a full TUI/input widget framework. For complex input, use crates like `dialoguer`, `rustyline`, or `inquire`.
 - **No async:** Rendering is synchronous; wrap in `spawn_blocking` if needed
-- **Live redirection:** `Live` does not globally redirect stdout/stderr; only console output is intercepted
+- **Live redirection:** `Live` can redirect process-wide stdout/stderr in interactive terminals (TTY-only). In piped/non-interactive contexts it stays disabled; use `live.stdout_proxy()` / `live.stderr_proxy()` for external writers.
 - **HTML/SVG export:** Export is minimal (pre + inline CSS, SVG via `<foreignObject>`), not a full Rich theme engine
 
 ---

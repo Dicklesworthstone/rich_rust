@@ -178,13 +178,7 @@ impl BoxChars {
     /// Substitute characters for ASCII-safe rendering.
     #[must_use]
     pub fn substitute(&self, safe: bool) -> &Self {
-        // For now, return self; implement ASCII substitution if needed
-        if safe && !self.ascii {
-            // Could return ASCII equivalent here
-            self
-        } else {
-            self
-        }
+        if safe && !self.ascii { &ASCII } else { self }
     }
 }
 
@@ -623,14 +617,20 @@ mod tests {
     fn test_substitute_ascii() {
         // ASCII box should return self
         let subst = ASCII.substitute(true);
-        assert!(std::ptr::eq(subst, &ASCII));
+        assert!(subst.ascii);
+        assert_eq!(subst.top, ASCII.top);
+        assert_eq!(subst.head, ASCII.head);
+        assert_eq!(subst.bottom, ASCII.bottom);
     }
 
     #[test]
     fn test_substitute_unicode() {
-        // Unicode box returns self (current implementation)
+        // Unicode boxes substitute to ASCII in safe mode.
         let subst = SQUARE.substitute(true);
-        assert!(std::ptr::eq(subst, &SQUARE));
+        assert!(subst.ascii);
+        assert_eq!(subst.top, ASCII.top);
+        assert_eq!(subst.head, ASCII.head);
+        assert_eq!(subst.bottom, ASCII.bottom);
     }
 
     #[test]

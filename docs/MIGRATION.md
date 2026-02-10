@@ -37,18 +37,23 @@ This guide helps Python Rich users migrate to rich_rust. Both libraries share si
 | `Syntax` | `Syntax` | `syntax` |
 | `Markdown` | `Markdown` | `markdown` |
 | `JSON` | `Json` | `json` |
+| `Traceback` capture | `Traceback::capture` | `backtrace` |
+| `tracing` integration | `RichTracingLayer` | `tracing` |
 
-### Not Implemented
+### Additional Systems
 
-| Python Rich | Status |
-|-------------|--------|
-| `Live` | Not planned (use TUI crates) |
-| `Status` | Not planned |
-| `Spinner` (live) | Partial (static only) |
-| `Progress` (live) | Partial (static bars) |
-| `Prompt` | Not planned (use dialoguer) |
-| `Logging Handler` | Not planned |
-| `Traceback` | Not planned |
+| Python Rich | rich_rust | Notes |
+|-------------|-----------|-------|
+| `Live` | `Live` | Dynamic refresh + optional process-wide stdout/stderr redirection in interactive terminals |
+| `Console.status(...)` | `Status` | Spinner + message helper built on `Live` |
+| `Prompt` / `Confirm` / `IntPrompt` | `Prompt` / `Confirm` / `Select` | Output-focused interactive helpers (degrade cleanly when non-interactive) |
+| Logging handler (`RichHandler`) | `RichLogger` | Implements the `log` crate; prints Rich-style log lines |
+| Tracebacks (`rich.traceback`) | `Traceback` | Deterministic explicit frames; optional runtime backtrace capture behind `backtrace` |
+
+### Explicit Exclusions (Out of Scope)
+
+- Jupyter/IPython integration
+- Legacy Windows cmd.exe (use modern terminals with VT support)
 
 ## API Differences
 
@@ -333,8 +338,8 @@ for seg in md.render(80) {
 2. **Explicit Rendering**: Call `.render(width)` to get segments, then iterate
 3. **Error Handling**: Methods that can fail return `Result`, use `.unwrap()` or proper error handling
 4. **Ownership**: Rust's ownership model means some methods take `&self`, others `&mut self`
-5. **No Live Updates**: rich_rust is for static output; use `ratatui` for interactive TUIs
-6. **Feature Flags**: Optional features (syntax, markdown) require explicit Cargo.toml flags
+5. **Interactive helpers**: rich_rust includes Live/Status/Prompt helpers, but it is not a full TUI widget framework
+6. **Feature Flags**: Optional features (syntax, markdown, json, tracing, backtrace) require explicit Cargo.toml flags
 
 ## Common Migration Patterns
 
@@ -359,11 +364,11 @@ html = console.export_html()
 
 **Rust equivalent:**
 ```rust
-let mut console = Console::new();
+let console = Console::new();
 console.begin_capture();
 console.print("Hello");
-let segments = console.end_capture();
-// Note: HTML export not yet implemented
+let html = console.export_html(false);
+let svg = console.export_svg(true);
 ```
 
 ### Python idiom: Render to string

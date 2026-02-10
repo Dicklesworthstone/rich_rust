@@ -553,7 +553,7 @@
         "plain": "╭─────────── Traceback (most recent call last) ────────────╮\n│ in <module>:14                                           │\n│ in level1:11                                             │\n│ in level2:8                                              │\n│ in level3:5                                              │\n╰──────────────────────────────────────────────────────────╯\nZeroDivisionError: division by zero\n",
         "ansi": "\u001b[31m╭─\u001b[0m\u001b[31m──────────\u001b[0m\u001b[31m \u001b[0m\u001b[1;31mTraceback \u001b[0m\u001b[1;2;31m(most recent call last)\u001b[0m\u001b[31m \u001b[0m\u001b[31m───────────\u001b[0m\u001b[31m─╮\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92m<module>\u001b[0m:\u001b[94m14\u001b[0m                                           \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel1\u001b[0m:\u001b[94m11\u001b[0m                                             \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel2\u001b[0m:\u001b[94m8\u001b[0m                                              \u001b[31m│\u001b[0m\n\u001b[31m│\u001b[0m in \u001b[92mlevel3\u001b[0m:\u001b[94m5\u001b[0m                                              \u001b[31m│\u001b[0m\n\u001b[31m╰──────────────────────────────────────────────────────────╯\u001b[0m\n\u001b[1;91mZeroDivisionError: \u001b[0mdivision by zero\n"
       },
-      "notes": "Deterministic traceback generated from synthetic frames."
+      "notes": "Deterministic traceback generated from explicit frames."
     },
     {
       "id": "terminal/no_color",

@@ -1,6 +1,6 @@
 //! Traceback error scene for demo_showcase.
 //!
-//! Demonstrates the Traceback renderable with synthetic error frames,
+//! Demonstrates the Traceback renderable with constructed demo frames,
 //! showing how rich_rust renders exception information.
 
 use std::sync::Arc;
@@ -56,7 +56,7 @@ fn render_log_escalation(console: &Console) {
     console.print("[brand.accent]Log Escalation[/]");
     console.print("");
 
-    // Create synthetic logs that escalate from info -> warn -> error
+    // Create demo logs that escalate from info -> warn -> error
     let logs = vec![
         LogLine {
             t: Duration::from_secs(45),
@@ -103,7 +103,7 @@ fn render_traceback(console: &Console) {
         .stack_frames
         .iter()
         .map(|sf| {
-            // Create synthetic source context for each frame
+            // Create demo source context for each frame
             let source = generate_source_context(&sf.function);
             TracebackFrame::new(&sf.function, sf.line as usize)
                 .filename(&sf.file)
@@ -123,7 +123,7 @@ fn render_traceback(console: &Console) {
     );
 }
 
-/// Generate synthetic source context for a function.
+/// Generate demo source context for a function.
 fn generate_source_context(function: &str) -> String {
     // Extract the function name (last part after ::)
     let func_name = function.split("::").last().unwrap_or(function);

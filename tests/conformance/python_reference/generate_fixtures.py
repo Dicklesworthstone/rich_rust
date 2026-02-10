@@ -255,7 +255,7 @@ CASES = [
             "show_locals": False,
             "indent_guides": False,
         },
-        "notes": "Deterministic traceback generated from synthetic frames.",
+        "notes": "Deterministic traceback generated from explicit frames.",
     },
     {
         "id": "terminal/no_color",

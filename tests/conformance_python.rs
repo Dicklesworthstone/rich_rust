@@ -1,6 +1,6 @@
-//! Python Rich conformance tests - currently disabled pending API alignment
+//! Python Rich conformance tests.
 //!
-//! Enable with: cargo test --features conformance_test
+//! Enable with: `cargo test --features conformance_test`
 #![allow(unexpected_cfgs)]
 #![cfg(feature = "conformance_test")]
 

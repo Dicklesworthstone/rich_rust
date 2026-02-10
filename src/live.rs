@@ -3,6 +3,7 @@
 //! This module implements Rich-style Live updates with cursor control.
 
 use std::io;
+use std::io::{Read, Write};
 use std::sync::{
     Arc, Mutex, RwLock,
     atomic::{AtomicBool, Ordering},
@@ -16,6 +17,9 @@ use crate::segment::{ControlCode, ControlType, Segment, split_lines};
 use crate::style::Style;
 use crate::sync::{lock_recover, read_recover, write_recover};
 use crate::text::{JustifyMethod, OverflowMethod, Text};
+
+use os_pipe::PipeReader;
+use stdio_override::{StderrOverride, StdoutOverride};
 
 /// Vertical overflow handling for Live renders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -133,6 +137,7 @@ pub(crate) struct LiveInner {
     refresh_stop: Arc<AtomicBool>,
     refresh_thread: Mutex<Option<JoinHandle<()>>>,
     live_render: Mutex<LiveRender>,
+    stdio_redirect: Mutex<Option<StdioRedirect>>,
 }
 
 impl Live {
@@ -165,6 +170,7 @@ impl Live {
                 refresh_stop: Arc::new(AtomicBool::new(false)),
                 refresh_thread: Mutex::new(None),
                 live_render: Mutex::new(LiveRender::default()),
+                stdio_redirect: Mutex::new(None),
             }),
         }
     }
@@ -208,7 +214,12 @@ impl Live {
 
         self.inner.console.show_cursor(false)?;
 
-        // Redirect stdout/stderr is best-effort; currently only applies to Console output.
+        // Redirect stdout/stderr (process-wide) so external prints can be routed through Live.
+        //
+        // This only activates when stdout is actually a TTY (not when force_terminal is used),
+        // to avoid interfering with piped output and parallel test harnesses.
+        self.inner.maybe_start_stdio_redirect()?;
+
         self.inner
             .console
             .push_render_hook(Arc::clone(&self.inner) as Arc<dyn RenderHook>);
@@ -250,6 +261,8 @@ impl Live {
 
         self.inner.console.pop_render_hook();
         let _ = self.inner.console.show_cursor(true);
+
+        self.inner.stop_stdio_redirect();
 
         if self.inner.alt_screen_active.swap(false, Ordering::SeqCst) {
             let _ = self.inner.console.set_alt_screen(false);
@@ -305,6 +318,55 @@ impl LiveInner {
 
     fn options_mut(&self) -> std::sync::MutexGuard<'_, LiveOptions> {
         lock_recover(&self.options)
+    }
+
+    fn maybe_start_stdio_redirect(&self) -> io::Result<()> {
+        let options = self.options();
+        if !options.redirect_stdout && !options.redirect_stderr {
+            return Ok(());
+        }
+
+        // Never override process stdio when stdout isn't a real terminal.
+        if !self.console.is_terminal_detected() || self.console.is_dumb_terminal() {
+            return Ok(());
+        }
+
+        // Idempotent: only one redirect instance per LiveInner.
+        if lock_recover(&self.stdio_redirect).is_some() {
+            return Ok(());
+        }
+
+        let mut redirect = StdioRedirect::start(
+            &self.console,
+            options.redirect_stdout,
+            options.redirect_stderr,
+        )?;
+
+        // If we redirected stdout, keep Console writing to the original stdout to avoid recursion.
+        // (StdoutOverride itself writes to the pre-redirect stdout.)
+        if let Some(stdout) = redirect.stdout_override.clone() {
+            let original = self
+                .console
+                .swap_file(Box::new(OverrideWriter { inner: stdout }));
+            redirect.console_original_writer = Some(original);
+        }
+
+        *lock_recover(&self.stdio_redirect) = Some(redirect);
+        Ok(())
+    }
+
+    fn stop_stdio_redirect(&self) {
+        let mut slot = lock_recover(&self.stdio_redirect);
+        let Some(mut redirect) = slot.take() else {
+            return;
+        };
+
+        // Restore console writer first so any final output is not forced to original stdout.
+        if let Some(original) = redirect.console_original_writer.take() {
+            let _ = self.console.swap_file(original);
+        }
+
+        redirect.stop();
     }
 
     fn current_renderable(
@@ -467,6 +529,167 @@ impl LiveInner {
             self.console.print_segments(&[]);
         }
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct OverrideWriter<T> {
+    inner: Arc<Mutex<T>>,
+}
+
+impl<T: Write> Write for OverrideWriter<T> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        lock_recover(&*self.inner).write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        lock_recover(&*self.inner).flush()
+    }
+}
+
+struct StdioRedirect {
+    stop: Arc<AtomicBool>,
+    stdout_override: Option<Arc<Mutex<StdoutOverride>>>,
+    stderr_override: Option<Arc<Mutex<StderrOverride>>>,
+    stdout_reader: Option<JoinHandle<()>>,
+    stderr_reader: Option<JoinHandle<()>>,
+    pump: Option<JoinHandle<()>>,
+    console_original_writer: Option<Box<dyn Write + Send>>,
+}
+
+impl StdioRedirect {
+    fn start(
+        console: &Arc<Console>,
+        redirect_stdout: bool,
+        redirect_stderr: bool,
+    ) -> io::Result<Self> {
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
+        let pump_console = Arc::clone(console);
+        let pump_stop = Arc::clone(&stop);
+        let pump = thread::spawn(move || {
+            // Stream UTF-8 safely: keep any incomplete tail between chunks.
+            let mut carry: Vec<u8> = Vec::new();
+
+            while !pump_stop.load(Ordering::Relaxed) {
+                let Ok(mut chunk) = rx.recv() else {
+                    break;
+                };
+                if chunk.is_empty() {
+                    continue;
+                }
+
+                if !carry.is_empty() {
+                    carry.append(&mut chunk);
+                    chunk = std::mem::take(&mut carry);
+                }
+
+                match String::from_utf8(chunk) {
+                    Ok(s) => {
+                        if !s.is_empty() {
+                            pump_console.print_plain(&s);
+                        }
+                    }
+                    Err(e) => {
+                        let valid = e.utf8_error().valid_up_to();
+                        let bytes = e.into_bytes();
+                        let (ok_bytes, rest) = bytes.split_at(valid);
+                        if !ok_bytes.is_empty() {
+                            let s = String::from_utf8_lossy(ok_bytes);
+                            pump_console.print_plain(&s);
+                        }
+                        carry.extend_from_slice(rest);
+                    }
+                }
+            }
+
+            if !carry.is_empty() {
+                let s = String::from_utf8_lossy(&carry);
+                pump_console.print_plain(&s);
+            }
+        });
+
+        let mut stdout_override = None;
+        let mut stderr_override = None;
+        let mut stdout_reader = None;
+        let mut stderr_reader = None;
+
+        if redirect_stdout {
+            let (reader, writer) = os_pipe::pipe()?;
+            let guard = StdoutOverride::from_io(writer)?;
+            let guard = Arc::new(Mutex::new(guard));
+            stdout_override = Some(Arc::clone(&guard));
+            stdout_reader = Some(Self::start_reader_thread(
+                reader,
+                tx.clone(),
+                Arc::clone(&stop),
+            ));
+        }
+
+        if redirect_stderr {
+            let (reader, writer) = os_pipe::pipe()?;
+            let guard = StderrOverride::from_io(writer)?;
+            let guard = Arc::new(Mutex::new(guard));
+            stderr_override = Some(Arc::clone(&guard));
+            stderr_reader = Some(Self::start_reader_thread(
+                reader,
+                tx.clone(),
+                Arc::clone(&stop),
+            ));
+        }
+
+        Ok(Self {
+            stop,
+            stdout_override,
+            stderr_override,
+            stdout_reader,
+            stderr_reader,
+            pump: Some(pump),
+            console_original_writer: None,
+        })
+    }
+
+    fn start_reader_thread(
+        mut reader: PipeReader,
+        tx: std::sync::mpsc::Sender<Vec<u8>>,
+        stop: Arc<AtomicBool>,
+    ) -> JoinHandle<()> {
+        thread::spawn(move || {
+            let mut buf = [0u8; 8192];
+            while !stop.load(Ordering::Relaxed) {
+                match reader.read(&mut buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        let _ = tx.send(buf[..n].to_vec());
+                    }
+                    Err(_) => break,
+                }
+            }
+        })
+    }
+
+    fn stop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+
+        // Drop overrides first: this restores stdio and closes the pipe writer ends, unblocking readers.
+        //
+        // Drop stderr before stdout if it was created after stdout (out-of-order drops panic).
+        self.stderr_override.take();
+        self.stdout_override.take();
+
+        if let Some(h) = self.stdout_reader.take() {
+            let _ = h.join();
+        }
+        if let Some(h) = self.stderr_reader.take() {
+            let _ = h.join();
+        }
+
+        // Close the channel so the pump exits.
+        if let Some(h) = self.pump.take() {
+            let _ = h.join();
+        }
     }
 }
 

@@ -37,6 +37,12 @@ pub struct TracebackFrame {
     pub filename: Option<String>,
     pub name: String,
     pub line: usize,
+    /// Optional locals for this frame.
+    ///
+    /// Rust can't generally capture locals automatically; this is an explicit,
+    /// deterministic representation for parity with Python Rich when the caller
+    /// has locals available.
+    pub locals: Option<Vec<(String, String)>>,
     /// Optional source code snippet for this frame.
     ///
     /// When provided, this is used instead of reading from the filesystem.
@@ -57,6 +63,7 @@ impl TracebackFrame {
             filename: None,
             name: name.into(),
             line,
+            locals: None,
             source_context: None,
             source_first_line: 1,
         }
@@ -65,6 +72,13 @@ impl TracebackFrame {
     #[must_use]
     pub fn filename(mut self, filename: impl Into<String>) -> Self {
         self.filename = Some(filename.into());
+        self
+    }
+
+    /// Provide locals for this frame (key/value pairs).
+    #[must_use]
+    pub fn locals(mut self, locals: impl Into<Vec<(String, String)>>) -> Self {
+        self.locals = Some(locals.into());
         self
     }
 
@@ -84,7 +98,7 @@ impl TracebackFrame {
     /// use rich_rust::renderables::TracebackFrame;
     ///
     /// let frame = TracebackFrame::new("my_function", 5)
-    ///     .source_context("fn my_function() {\n    let x = 1;\n    panic!(\"oops\");\n}", 3);
+    ///     .source_context("fn my_function() {\n    let x = 1;\n    return Err(\"oops\");\n}", 3);
     /// ```
     #[must_use]
     pub fn source_context(mut self, source: impl Into<String>, first_line: usize) -> Self {
@@ -102,6 +116,7 @@ pub struct Traceback {
     exception_message: String,
     title: Text,
     extra_lines: usize,
+    show_locals: bool,
 }
 
 impl Traceback {
@@ -118,6 +133,7 @@ impl Traceback {
             exception_message: exception_message.into(),
             title: Text::new("Traceback (most recent call last)"),
             extra_lines: 0,
+            show_locals: false,
         }
     }
 
@@ -131,6 +147,12 @@ impl Traceback {
     #[must_use]
     pub fn extra_lines(mut self, extra_lines: usize) -> Self {
         self.extra_lines = extra_lines;
+        self
+    }
+
+    #[must_use]
+    pub fn show_locals(mut self, show: bool) -> Self {
+        self.show_locals = show;
         self
     }
 
@@ -250,6 +272,10 @@ impl Traceback {
             "core::",
             "alloc::",
             "backtrace::",
+            "log::",
+            "tracing::",
+            "tracing_subscriber::",
+            "rich_rust::logging::",
             "<alloc::",
             "<core::",
             "<std::",
@@ -392,6 +418,23 @@ impl Renderable for Traceback {
                     }
                 }
 
+                if self.show_locals
+                    && let Some(locals) = frame.locals.as_ref()
+                    && !locals.is_empty()
+                {
+                    let locals_key_style = Style::parse("dim").ok();
+                    let locals_value_style = Style::parse("cyan").ok();
+                    content_lines.push(vec![Segment::new(String::new(), None)]);
+                    content_lines.push(vec![Segment::new("locals:", dim_style.clone())]);
+                    for (k, v) in locals {
+                        content_lines.push(vec![
+                            Segment::new("  ", None),
+                            Segment::new(format!("{k}="), locals_key_style.clone()),
+                            Segment::new(v.clone(), locals_value_style.clone()),
+                        ]);
+                    }
+                }
+
                 continue;
             }
 
@@ -402,6 +445,23 @@ impl Renderable for Traceback {
                 Segment::new(":", dim_style.clone()),
                 Segment::new(frame.line.to_string(), lineno_style.clone()),
             ]);
+
+            if self.show_locals
+                && let Some(locals) = frame.locals.as_ref()
+                && !locals.is_empty()
+            {
+                let locals_key_style = Style::parse("dim").ok();
+                let locals_value_style = Style::parse("cyan").ok();
+                content_lines.push(vec![Segment::new(String::new(), None)]);
+                content_lines.push(vec![Segment::new("locals:", dim_style.clone())]);
+                for (k, v) in locals {
+                    content_lines.push(vec![
+                        Segment::new("  ", None),
+                        Segment::new(format!("{k}="), locals_key_style.clone()),
+                        Segment::new(v.clone(), locals_value_style.clone()),
+                    ]);
+                }
+            }
         }
 
         let panel = Panel::new(content_lines)
@@ -429,7 +489,8 @@ impl Renderable for Traceback {
 /// Convenience helper mirroring Python Rich's `Console.print_exception`.
 ///
 /// Rust doesn't have a standardized structured backtrace API across error
-/// types; for now, this prints a provided [`Traceback`] renderable.
+/// types, so this helper prints a provided [`Traceback`] renderable. For automatic
+/// capture, use [`Traceback::capture`] (feature `backtrace`).
 pub fn print_exception(console: &Console, traceback: &Traceback) {
     console.print_exception(traceback);
 }
@@ -461,7 +522,7 @@ mod tests {
 
     #[test]
     fn frame_with_source_context_renders_code() {
-        let source = "fn main() {\n    let x = 1;\n    panic!(\"oops\");\n    let y = 2;\n}";
+        let source = "fn main() {\n    let x = 1;\n    return Err(\"oops\");\n    let y = 2;\n}";
         let frame = TracebackFrame::new("main", 3).source_context(source, 1);
         let traceback = Traceback::new(vec![frame], "PanicError", "oops").extra_lines(1);
 
@@ -469,7 +530,7 @@ mod tests {
 
         // Should show the error line with indicator
         assert!(output.contains("❱"));
-        assert!(output.contains("panic!"));
+        assert!(output.contains("return Err"));
 
         // Should show context lines (extra_lines=1)
         assert!(output.contains("let x = 1"));
@@ -536,7 +597,7 @@ mod tests {
         let frame1 =
             TracebackFrame::new("outer", 2).source_context("fn outer() {\n    inner();\n}", 1);
         let frame2 =
-            TracebackFrame::new("inner", 2).source_context("fn inner() {\n    panic!();\n}", 1);
+            TracebackFrame::new("inner", 2).source_context("fn inner() {\n    fail();\n}", 1);
 
         let traceback = Traceback::new(vec![frame1, frame2], "PanicError", "boom");
 
@@ -559,6 +620,26 @@ mod tests {
         assert_eq!(frame.filename, Some("src/lib.rs".to_string()));
         assert_eq!(frame.source_context, Some("test code".to_string()));
         assert_eq!(frame.source_first_line, 5);
+    }
+
+    #[test]
+    fn frame_locals_builder_and_rendering() {
+        let frame = TracebackFrame::new("func", 1)
+            .source_context("line1\nline2\nline3", 1)
+            .locals(vec![
+                ("user".to_string(), "\"alice\"".to_string()),
+                ("retries".to_string(), "3".to_string()),
+            ]);
+
+        let traceback = Traceback::new(vec![frame], "Error", "msg")
+            .extra_lines(0)
+            .show_locals(true);
+
+        let output = render_to_text(&traceback, 80);
+        assert!(output.contains("locals:"));
+        assert!(output.contains("user="));
+        assert!(output.contains("alice"));
+        assert!(output.contains("retries="));
     }
 
     #[test]

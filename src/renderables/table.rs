@@ -61,7 +61,9 @@
 
 use crate::r#box::{ASCII, BoxChars, HEAVY_HEAD, RowLevel};
 use crate::cells;
+use crate::console::{Console, ConsoleOptions};
 use crate::markup;
+use crate::renderables::Renderable;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
@@ -392,7 +394,7 @@ pub struct Table {
     /// Box style.
     box_style: &'static BoxChars,
     /// Force ASCII boxes.
-    safe_box: bool,
+    safe_box: Option<bool>,
     /// Cell padding (horizontal, vertical).
     padding: (usize, usize),
     /// Collapse padding between cells.
@@ -441,7 +443,7 @@ impl Default for Table {
             width: None,
             min_width: None,
             box_style: &HEAVY_HEAD,
-            safe_box: false,
+            safe_box: None,
             padding: (1, 0),
             collapse_padding: false,
             pad_edge: true,
@@ -602,14 +604,14 @@ impl Table {
     #[must_use]
     pub fn ascii(mut self) -> Self {
         self.box_style = &ASCII;
-        self.safe_box = true;
+        self.safe_box = Some(true);
         self
     }
 
     /// Set safe box mode.
     #[must_use]
     pub fn safe_box(mut self, safe: bool) -> Self {
-        self.safe_box = safe;
+        self.safe_box = Some(safe);
         self
     }
 
@@ -727,7 +729,8 @@ impl Table {
 
     /// Get the effective box characters.
     fn effective_box(&self) -> &'static BoxChars {
-        if self.safe_box && !self.box_style.ascii {
+        let safe = self.safe_box.unwrap_or(false);
+        if safe && !self.box_style.ascii {
             &ASCII
         } else {
             self.box_style
@@ -1543,6 +1546,18 @@ impl Table {
             .into_iter()
             .map(|seg| seg.text)
             .collect()
+    }
+}
+
+impl Renderable for Table {
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        if self.safe_box.is_some() {
+            return self.render(options.max_width).into_iter().collect();
+        }
+
+        // Inherit the Console's safe_box setting unless explicitly overridden.
+        let effective = self.clone().safe_box(console.safe_box());
+        effective.render(options.max_width).into_iter().collect()
     }
 }
 

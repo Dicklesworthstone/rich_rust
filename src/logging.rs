@@ -12,8 +12,12 @@ use time::{OffsetDateTime, format_description::OwnedFormatItem};
 
 use crate::console::Console;
 use crate::markup;
+use crate::renderables::traceback::Traceback;
 use crate::style::Style;
 use crate::text::Text;
+
+#[cfg(not(feature = "backtrace"))]
+use crate::renderables::traceback::TracebackFrame;
 
 const DEFAULT_KEYWORDS: [&str; 8] = [
     "GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE", "PATCH",
@@ -46,6 +50,8 @@ pub struct RichLogger {
     time_format: OwnedFormatItem,
     last_time: Mutex<Option<String>>,
     keyword_style: Style,
+    rich_tracebacks: bool,
+    tracebacks_extra_lines: usize,
 }
 
 impl RichLogger {
@@ -68,6 +74,8 @@ impl RichLogger {
             time_format,
             last_time: Mutex::new(None),
             keyword_style: Style::parse("bold yellow").unwrap_or_default(),
+            rich_tracebacks: false,
+            tracebacks_extra_lines: 3,
         }
     }
 
@@ -133,6 +141,24 @@ impl RichLogger {
         if let Ok(parsed) = time::format_description::parse_owned::<2>(format) {
             self.time_format = parsed;
         }
+        self
+    }
+
+    /// Enable Rich-style tracebacks for error logs.
+    ///
+    /// When enabled, `ERROR`-level records will be followed by a rendered
+    /// [`Traceback`] (captured backtrace when `backtrace` feature is enabled,
+    /// otherwise a single-frame traceback at the log callsite).
+    #[must_use]
+    pub fn rich_tracebacks(mut self, enable: bool) -> Self {
+        self.rich_tracebacks = enable;
+        self
+    }
+
+    /// How many source context lines to render around the error line.
+    #[must_use]
+    pub fn tracebacks_extra_lines(mut self, extra_lines: usize) -> Self {
+        self.tracebacks_extra_lines = extra_lines;
         self
     }
 
@@ -222,6 +248,31 @@ impl RichLogger {
 
         line
     }
+
+    fn build_traceback_for_record(&self, record: &Record<'_>) -> Traceback {
+        let exception_type = "Error";
+        let exception_message = record.args().to_string();
+
+        #[cfg(feature = "backtrace")]
+        {
+            Traceback::capture(exception_type, exception_message)
+                .extra_lines(self.tracebacks_extra_lines)
+        }
+
+        #[cfg(not(feature = "backtrace"))]
+        {
+            let name = record.module_path().unwrap_or(record.target()).to_string();
+
+            let line = record.line().unwrap_or(0) as usize;
+            let mut frame = TracebackFrame::new(name, line);
+            if let Some(file) = record.file() {
+                frame = frame.filename(file);
+            }
+
+            Traceback::new(vec![frame], exception_type, exception_message)
+                .extra_lines(self.tracebacks_extra_lines)
+        }
+    }
 }
 
 impl Log for RichLogger {
@@ -236,6 +287,11 @@ impl Log for RichLogger {
 
         let text = self.format_record(record);
         self.console.print_text(&text);
+
+        if self.rich_tracebacks && record.level() == Level::Error {
+            let traceback = self.build_traceback_for_record(record);
+            self.console.print_exception(&traceback);
+        }
     }
 
     fn flush(&self) {}
@@ -244,7 +300,7 @@ impl Log for RichLogger {
 #[cfg(feature = "tracing")]
 mod tracing_integration {
     use super::{Console, RichLogger};
-    use log::Level;
+    use log::{Level, Log};
     use std::fmt::Debug;
     use std::sync::Arc;
 
@@ -335,8 +391,7 @@ mod tracing_integration {
                 .module_path(metadata.module_path())
                 .build();
 
-            let text = self.logger.format_record(&record);
-            self.logger.console.print_text(&text);
+            self.logger.log(&record);
         }
     }
 

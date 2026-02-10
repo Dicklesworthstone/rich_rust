@@ -3,8 +3,9 @@
 //! This module contains Rust-idiomatic equivalents of a few Rich conveniences
 //! that combine rendering with terminal interactivity.
 //!
-//! Note: `rich_rust`'s core remains output-focused; these helpers are best-effort
-//! and fall back gracefully when the console is not interactive.
+//! Note: `rich_rust`'s core remains output-focused; these helpers are designed to
+//! degrade cleanly when the console is not interactive (TTY detection, piped output,
+//! and CI-safe behavior).
 //!
 //! # Design RFC: Input Length Limiting Strategy (bd-191n)
 //!
@@ -221,7 +222,7 @@ pub const DEFAULT_MAX_INPUT_LENGTH: usize = 64 * 1024;
 /// display that refreshes a single-line spinner. When the console is not interactive,
 /// it prints the message once and does not animate.
 ///
-/// Dropping this value stops the live display (best-effort).
+/// Dropping this value stops the live display.
 ///
 /// # Thread Safety
 ///
@@ -608,7 +609,7 @@ impl Prompt {
     }
 }
 
-/// Best-effort pager support.
+/// Pager support with a deterministic fallback when a pager isn't available.
 ///
 /// When interactive, this attempts to pipe content through `$PAGER` (or a platform default).
 /// When not interactive or if spawning the pager fails, it falls back to printing directly
@@ -649,7 +650,8 @@ impl Pager {
         self
     }
 
-    /// Display content through the pager (best-effort).
+    /// Display content through the pager, falling back to normal console output
+    /// when a pager can't be used.
     pub fn show(&self, console: &Console, content: &str) -> io::Result<()> {
         if !console.is_terminal() {
             print_exact(console, content);
@@ -2396,12 +2398,11 @@ mod tests {
 
             let confirm = Confirm::new("Continue?");
             let mut reader = io::Cursor::new(*input_bytes);
-            let answer = confirm.ask_from(&console, &mut reader).unwrap_or_else(|_| {
-                panic!(
-                    "Failed on input: {:?}",
-                    String::from_utf8_lossy(input_bytes)
-                )
-            });
+            let msg = format!(
+                "Failed on input: {:?}",
+                String::from_utf8_lossy(input_bytes)
+            );
+            let answer = confirm.ask_from(&console, &mut reader).expect(&msg);
             assert!(
                 answer,
                 "Expected true for input {:?}",
@@ -2425,12 +2426,11 @@ mod tests {
 
             let confirm = Confirm::new("Continue?");
             let mut reader = io::Cursor::new(*input_bytes);
-            let answer = confirm.ask_from(&console, &mut reader).unwrap_or_else(|_| {
-                panic!(
-                    "Failed on input: {:?}",
-                    String::from_utf8_lossy(input_bytes)
-                )
-            });
+            let msg = format!(
+                "Failed on input: {:?}",
+                String::from_utf8_lossy(input_bytes)
+            );
+            let answer = confirm.ask_from(&console, &mut reader).expect(&msg);
             assert!(
                 !answer,
                 "Expected false for input {:?}",

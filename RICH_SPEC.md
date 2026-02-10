@@ -2775,11 +2775,11 @@ features (not planned) from **planned-but-not-yet-implemented** features.
 | Feature | Status |
 |---------|--------|
 | Theme + named styles | Implemented (`Theme`, `Console::get_style`, `.ini` loading via `Theme::read`) |
-| Pretty / Inspect | Implemented (`renderables::Pretty`, `renderables::Inspect`, `renderables::inspect`; `Debug`-based, best-effort field extraction) |
+| Pretty / Inspect | Implemented (`renderables::Pretty`, `renderables::Inspect`, `renderables::inspect`; `Debug`-based output + explicit, documented extraction rules) |
 | Traceback rendering | Implemented (`renderables::Traceback`, `Console::print_exception`; explicit frames for deterministic fixtures; optional `Traceback::capture()` via `backtrace` feature; code context via `extra_lines` + `source_context` or filesystem source) |
-| Live display (`Live`) | Implemented (stdout/stderr redirection is best-effort; no Jupyter integration) |
+| Live display (`Live`) | Implemented (process-wide stdout/stderr redirection in interactive terminals; no Jupyter integration) |
 | Layout engine (`Layout`) | Implemented (ratio splits + named lookup; no render-map caching) |
-| Logging handler integration | Implemented (`RichLogger` for `log` crate; tracebacks not yet integrated) |
+| Logging handler integration | Implemented (`RichLogger` for `log` crate; optional Rich-style tracebacks for error logs) |
 | Console export (HTML/SVG) | Implemented (minimal HTML/SVG export; no full theme templates) |
 
 ### 15.3 Implemented (No Longer Excluded)
@@ -2806,9 +2806,9 @@ dynamic terminal UI.
 
 **Implementation note (Rust):** `src/live.rs` implements Live with nested Live stacking,
 alternate screen support, overflow handling, and an auto-refresh thread. Stdout/stderr
-redirection is **best-effort only** (console output is intercepted; global IO redirection
-is not performed). Use `Live::stdout_proxy()` / `Live::stderr_proxy()` to route external
-writes through the Console. Jupyter-specific behavior is not supported.
+redirection is supported via process-wide stdio overrides in interactive terminals
+(`LiveOptions.redirect_stdout` / `redirect_stderr`), and proxy writers are also available
+(`Live::stdout_proxy()` / `Live::stderr_proxy()`). Jupyter-specific behavior is not supported.
 
 ### 16.1 Data Structures
 
@@ -3863,10 +3863,9 @@ with Live(layout, screen=true) {
 ## 18. Logging Handler Integration
 
 **Implementation note (Rust):** `src/logging.rs` provides `RichLogger`, a `log`-crate
-logger with level/time/path formatting and keyword highlighting. An optional
-`RichTracingLayer` is available behind the `tracing` feature. `renderables::Traceback`
-and `Console::print_exception` exist, but automatic traceback rendering inside the
-logger/layer is not implemented yet.
+logger with level/time/path formatting, keyword highlighting, and optional Rich-style
+tracebacks for `ERROR` logs. An optional `RichTracingLayer` is available behind the
+`tracing` feature and uses the same formatting and traceback behavior.
 
 > Source: `rich/logging.py` (298 lines), `rich/_log_render.py` (95 lines)
 
@@ -4088,7 +4087,8 @@ fn render_message(&self, record: &LogRecord, message: &str) -> Box<dyn Renderabl
 **Implementation note (Rust):** `renderables::Traceback` supports deterministic rendering
 from explicit frames for conformance/tests, and optional automatic capture via
 `Traceback::capture()` when the `backtrace` feature is enabled. Locals rendering is
-not implemented.
+supported when locals are provided explicitly (`TracebackFrame::locals` +
+`Traceback::show_locals(true)`); automatic locals capture is not available in Rust.
 
 When `rich_tracebacks` is enabled and an exception is attached to the record:
 

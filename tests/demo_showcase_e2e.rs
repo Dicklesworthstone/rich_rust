@@ -511,6 +511,7 @@ fn test_piped_all_scenes_complete() {
     ];
 
     for scene in scenes {
+        let msg = format!("scene '{scene}' should run");
         let result = DemoRunner::new()
             .arg("--scene")
             .arg(scene)
@@ -522,7 +523,7 @@ fn test_piped_all_scenes_complete() {
             .arg("--no-interactive")
             .timeout_secs(15)
             .run()
-            .unwrap_or_else(|_| panic!("scene '{}' should run", scene));
+            .expect(&msg);
 
         assert_success(&result);
         assert_no_timeout(&result);
@@ -622,6 +623,7 @@ fn test_piped_per_scene_output_bounded() {
     const MAX_SCENE_OUTPUT: usize = 50 * 1024; // 50 KB per scene
 
     for scene in scenes {
+        let msg = format!("scene '{scene}' should run");
         let result = DemoRunner::new()
             .arg("--scene")
             .arg(scene)
@@ -633,7 +635,7 @@ fn test_piped_per_scene_output_bounded() {
             .arg("--no-interactive")
             .timeout_secs(15)
             .run()
-            .unwrap_or_else(|_| panic!("scene '{}' should run", scene));
+            .expect(&msg);
 
         assert_success(&result);
 
@@ -684,7 +686,7 @@ fn test_no_emoji_disables_emoji_replacement() {
     // Run with --no-emoji
     let result_no_emoji = DemoRunner::quick()
         .arg("--scene")
-        .arg("hero")
+        .arg("emoji_links")
         .arg("--no-emoji")
         .no_color()
         .run()
@@ -695,7 +697,7 @@ fn test_no_emoji_disables_emoji_replacement() {
     // Run with emoji enabled (default)
     let result_with_emoji = DemoRunner::quick()
         .arg("--scene")
-        .arg("hero")
+        .arg("emoji_links")
         .arg("--emoji")
         .no_color()
         .run()
@@ -703,15 +705,16 @@ fn test_no_emoji_disables_emoji_replacement() {
 
     assert_success(&result_with_emoji);
 
-    // The outputs should differ if emoji replacement is working
-    // With --no-emoji, we should NOT see actual emoji characters like 🚀
-    // Instead we might see the shortcode or nothing
-    // This is a coarse check - if both outputs are identical, emoji toggle isn't working
-    // Note: This test is best-effort since hero might not use emoji shortcodes
+    // emoji_links scene prints a `:rocket:` shortcode when emoji is enabled.
+    // With emoji replacement disabled, the raw shortcode should remain.
+    assert_stdout_contains(&result_no_emoji, ":rocket:");
+    assert!(!result_no_emoji.stdout.contains('🚀'));
+
+    assert!(!result_with_emoji.stdout.contains(":rocket:"));
+    assert_stdout_contains(&result_with_emoji, "🚀");
 }
 
 /// Verifies --safe-box flag is accepted and runs successfully.
-/// Note: Full safe_box propagation to all renderables is tracked in a separate bead.
 /// This test verifies the flag is parsed and the scene runs without error.
 #[test]
 fn test_safe_box_flag_accepted() {
@@ -996,6 +999,7 @@ fn test_narrow_width_all_scenes() {
     ];
 
     for scene in scenes {
+        let msg = format!("scene '{scene}' should run at narrow width");
         let result = DemoRunner::new()
             .arg("--scene")
             .arg(scene)
@@ -1007,7 +1011,7 @@ fn test_narrow_width_all_scenes() {
             .arg("none")
             .timeout_secs(15)
             .run()
-            .unwrap_or_else(|_| panic!("scene '{}' should run at narrow width", scene));
+            .expect(&msg);
 
         assert_success(&result);
         assert_no_timeout(&result);
@@ -1129,6 +1133,7 @@ fn test_color_systems_show_palette() {
     let color_systems = ["standard", "256", "truecolor"];
 
     for system in color_systems {
+        let msg = format!("should run with {system}");
         let result = DemoRunner::quick()
             .arg("--scene")
             .arg("hero")
@@ -1136,7 +1141,7 @@ fn test_color_systems_show_palette() {
             .arg(system)
             .arg("--force-terminal")
             .run()
-            .unwrap_or_else(|_| panic!("should run with {}", system));
+            .expect(&msg);
 
         assert_success(&result);
 
@@ -1156,6 +1161,7 @@ fn test_color_systems_badges_visible() {
     let color_systems = ["standard", "256", "truecolor"];
 
     for system in color_systems {
+        let msg = format!("should run with {system}");
         let result = DemoRunner::quick()
             .arg("--scene")
             .arg("hero")
@@ -1163,7 +1169,7 @@ fn test_color_systems_badges_visible() {
             .arg(system)
             .arg("--force-terminal")
             .run()
-            .unwrap_or_else(|_| panic!("should run with {}", system));
+            .expect(&msg);
 
         assert_success(&result);
 

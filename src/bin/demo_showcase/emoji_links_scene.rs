@@ -5,6 +5,7 @@
 //! - The Emoji renderable for individual emojis
 //! - OSC8 hyperlinks with graceful fallback
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use rich_rust::console::Console;
@@ -135,20 +136,28 @@ fn render_combined_demo(console: &Console, cfg: &Config) {
     console.print("");
 
     // Create a styled notification panel
-    // Pre-process content: replace emoji shortcodes, then parse markup
+    // Pre-process content: if emoji rendering is enabled, replace emoji shortcodes, then parse markup.
     let content = ":sparkles: [bold]New Release Available![/] :sparkles:\n\n\
          Version 2.5.0 includes:\n\
          :white_check_mark: Improved table rendering\n\
          :white_check_mark: New panel styles\n\
          :white_check_mark: Better Unicode support\n\n\
          [dim]View release notes:[/] [cyan underline]github.com/releases/v2.5.0[/]";
-    let content_with_emoji = emoji::replace(content, None);
-    let styled_content = markup::render_or_plain(&content_with_emoji);
+    let content_with_emoji = if console.emoji() {
+        emoji::replace(content, None)
+    } else {
+        Cow::Borrowed(content)
+    };
+    let styled_content = markup::render_or_plain(content_with_emoji.as_ref());
 
     // Process title the same way
     let title = ":bell: [bold]Notification[/]";
-    let title_with_emoji = emoji::replace(title, None);
-    let styled_title = markup::render_or_plain(&title_with_emoji);
+    let title_with_emoji = if console.emoji() {
+        emoji::replace(title, None)
+    } else {
+        Cow::Borrowed(title)
+    };
+    let styled_title = markup::render_or_plain(title_with_emoji.as_ref());
 
     let notification = Panel::from_rich_text(&styled_content, 50)
         .title(styled_title)

@@ -386,28 +386,26 @@ impl Syntax {
                 .replace('\t', &" ".repeat(self.tab_size))
                 .replace("\r\n", "\n");
 
-            // Add indentation guides if enabled
-            if self.indent_guides {
-                let leading_spaces = line_expanded.len() - line_expanded.trim_start().len();
-                let guide_positions: Vec<usize> =
-                    (0..leading_spaces).step_by(self.tab_size).skip(1).collect();
-
-                if !guide_positions.is_empty() {
-                    // We'll handle guides during highlight processing
-                    // For now, just highlight the line
-                }
-            }
+            // Indentation guides: inject guide characters into leading whitespace, then post-style
+            // them as dim during segment construction.
+            let leading_spaces = line_expanded.len() - line_expanded.trim_start().len();
+            let line_for_highlight = if self.indent_guides && leading_spaces > 0 {
+                apply_indent_guides(&line_expanded, self.tab_size)
+            } else {
+                line_expanded.clone()
+            };
 
             // Highlight the line
             let ranges = highlighter
-                .highlight_line(&line_expanded, ps)
+                .highlight_line(&line_for_highlight, ps)
                 .unwrap_or_else(|_| {
                     vec![(
                         syntect::highlighting::Style::default(),
-                        line_expanded.as_str(),
+                        line_for_highlight.as_str(),
                     )]
                 });
 
+            let mut col = 0usize;
             let mut saw_newline = false;
             for (style, text) in ranges {
                 let rich_style = self.syntect_style_to_rich(style, theme);
@@ -415,8 +413,13 @@ impl Syntax {
                     let mut parts = text.split('\n').peekable();
                     while let Some(part) = parts.next() {
                         if !part.is_empty() {
-                            // Clone string to own it (Segment<'static>)
-                            segments.push(Segment::new(part.to_string(), Some(rich_style.clone())));
+                            push_syntax_text(
+                                &mut segments,
+                                part,
+                                &rich_style,
+                                leading_spaces,
+                                &mut col,
+                            );
                         }
                         if parts.peek().is_some() {
                             if self.padding.1 > 0 {
@@ -424,11 +427,11 @@ impl Syntax {
                             }
                             segments.push(Segment::new("\n", None));
                             saw_newline = true;
+                            col = 0;
                         }
                     }
                 } else if !text.is_empty() {
-                    // Clone string to own it
-                    segments.push(Segment::new(text.to_string(), Some(rich_style)));
+                    push_syntax_text(&mut segments, text, &rich_style, leading_spaces, &mut col);
                 }
             }
 
@@ -493,6 +496,79 @@ impl Syntax {
     #[must_use]
     pub fn plain_text(&self) -> String {
         self.code.clone()
+    }
+}
+
+fn apply_indent_guides(line: &str, tab_size: usize) -> String {
+    if tab_size == 0 {
+        return line.to_string();
+    }
+
+    let leading_spaces = line.len() - line.trim_start().len();
+    if leading_spaces < tab_size {
+        return line.to_string();
+    }
+
+    let mut out = String::with_capacity(line.len());
+    let mut col = 0usize;
+    for ch in line.chars() {
+        if col < leading_spaces && ch == ' ' {
+            col += 1;
+            if col.is_multiple_of(tab_size) {
+                out.push('│');
+            } else {
+                out.push(' ');
+            }
+            continue;
+        }
+
+        out.push(ch);
+        col += 1;
+    }
+    out
+}
+
+fn push_syntax_text(
+    segments: &mut Vec<Segment<'static>>,
+    text: &str,
+    style: &Style,
+    leading_spaces: usize,
+    col: &mut usize,
+) {
+    let guide_style = Style::new().dim();
+
+    let mut buf = String::new();
+    let mut buf_is_guide = false;
+    let mut started = false;
+
+    for ch in text.chars() {
+        let is_guide = *col < leading_spaces && ch == '│';
+
+        if started && is_guide != buf_is_guide {
+            let seg_style = if buf_is_guide {
+                Some(guide_style.clone())
+            } else {
+                Some(style.clone())
+            };
+            segments.push(Segment::new(std::mem::take(&mut buf), seg_style));
+        }
+
+        if !started {
+            started = true;
+        }
+        buf_is_guide = is_guide;
+
+        buf.push(ch);
+        *col = (*col).saturating_add(1);
+    }
+
+    if !buf.is_empty() {
+        let seg_style = if buf_is_guide {
+            Some(guide_style)
+        } else {
+            Some(style.clone())
+        };
+        segments.push(Segment::new(buf, seg_style));
     }
 }
 
@@ -626,24 +702,18 @@ mod tests {
     fn test_render_unknown_language() {
         let syntax = Syntax::new("code", "nonexistent_lang_xyz");
         let result = syntax.render(None);
-        assert!(result.is_err());
-        if let Err(SyntaxError::UnknownLanguage(lang)) = result {
-            assert_eq!(lang, "nonexistent_lang_xyz");
-        } else {
-            panic!("Expected UnknownLanguage error");
-        }
+        assert!(
+            matches!(result, Err(SyntaxError::UnknownLanguage(ref lang)) if lang == "nonexistent_lang_xyz")
+        );
     }
 
     #[test]
     fn test_render_unknown_theme() {
         let syntax = Syntax::new("let x = 1", "rust").theme("nonexistent_theme_xyz");
         let result = syntax.render(None);
-        assert!(result.is_err());
-        if let Err(SyntaxError::UnknownTheme(theme)) = result {
-            assert_eq!(theme, "nonexistent_theme_xyz");
-        } else {
-            panic!("Expected UnknownTheme error");
-        }
+        assert!(
+            matches!(result, Err(SyntaxError::UnknownTheme(ref theme)) if theme == "nonexistent_theme_xyz")
+        );
     }
 
     #[test]
@@ -775,8 +845,7 @@ mod tests {
             let result = syntax.render(None);
             assert!(
                 result.is_ok(),
-                "rendering with theme '{}' should succeed",
-                theme_name
+                "rendering with theme '{theme_name}' should succeed",
             );
         }
     }
@@ -822,8 +891,7 @@ mod tests {
                 style_str.contains("on #ff0000")
                     || style_str.contains("on rgb(255,0,0)")
                     || style_str.contains("on color("),
-                "expected custom background in style, got: {}",
-                style_str
+                "expected custom background in style, got: {style_str}",
             );
         }
     }

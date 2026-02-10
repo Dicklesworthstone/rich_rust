@@ -1,7 +1,7 @@
 //! Pretty printing / inspection helpers.
 //!
-//! This is a Rust-idiomatic approximation of Python Rich's `rich.pretty` and
-//! `rich.inspect` modules.
+//! This is a Rust-idiomatic implementation inspired by Python Rich's `rich.pretty`
+//! and `rich.inspect` modules.
 //!
 //! ## Differences vs Python Rich
 //!
@@ -47,8 +47,8 @@ impl Default for PrettyOptions {
 
 /// Render a Rust value using a stable, width-aware `Debug` representation.
 ///
-/// This is a best-effort, Rust-idiomatic "pretty printer" intended for use in
-/// terminal UIs.
+/// This "pretty printer" is intended for terminal UIs and is based on `Debug`
+/// output (no general-purpose runtime reflection).
 #[derive(Debug)]
 pub struct Pretty<'a, T: Debug + ?Sized> {
     value: &'a T,
@@ -149,8 +149,9 @@ impl Default for InspectOptions {
 /// Inspect a Rust value: show its type and a readable representation.
 ///
 /// This is inspired by Python Rich's `inspect`, but is limited by Rust's lack
-/// of runtime reflection. Field extraction is best-effort and relies on the
-/// `Debug` output format.
+/// of runtime reflection. Field extraction follows a documented heuristic over
+/// the value's `Debug` output; types with custom `Debug` impls may not expose
+/// field structure.
 #[derive(Debug)]
 pub struct Inspect<'a, T: Debug + ?Sized> {
     value: &'a T,

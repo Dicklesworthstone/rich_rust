@@ -22,14 +22,6 @@ fn render_md_text(source: &str, width: usize) -> String {
     segments.iter().map(|s| s.text.as_ref()).collect()
 }
 
-fn render_md_segments(source: &str, width: usize) -> Vec<rich_rust::segment::Segment<'static>> {
-    let md = Markdown::new(source);
-    md.render(width)
-        .into_iter()
-        .map(|s| s.into_owned())
-        .collect()
-}
-
 fn render_md_to_html(source: &str, width: usize) -> String {
     let md = Markdown::new(source);
     let console = Console::builder()

@@ -306,6 +306,8 @@ mod tests {
         let console = Console::builder()
             .force_terminal(false)
             .markup(true)
+            // Don't spam stdout during tests; we only care that the scene runs.
+            .file(Box::new(Vec::<u8>::new()))
             .build()
             .shared();
         let cfg = Config::with_defaults();

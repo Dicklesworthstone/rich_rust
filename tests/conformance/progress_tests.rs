@@ -44,9 +44,22 @@ impl TestCase for ProgressTest {
     }
 
     fn python_rich_code(&self) -> Option<String> {
-        // Python Rich's Progress API is different - uses context manager with tasks
-        // So we'll just return None for now
-        None
+        // Use Python Rich's ProgressBar renderable (not the Progress context manager) so we can
+        // compare a single static render.
+        let completed = (self.progress * 100.0).round() as i64;
+        Some(format!(
+            r#"
+from rich.console import Console
+from rich.progress_bar import ProgressBar
+
+console = Console(width={width}, force_terminal=True, color_system="truecolor")
+bar = ProgressBar(total=100, completed={completed}, width=20)
+console.print("{desc}", bar)
+"#,
+            width = self.width,
+            completed = completed,
+            desc = self.description.replace('"', "\\\""),
+        ))
     }
 }
 
