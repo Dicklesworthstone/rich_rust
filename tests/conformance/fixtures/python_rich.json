@@ -638,7 +638,7 @@
     {
       "id": "markdown/fenced_code_rust",
       "kind": "markdown",
-      "compare_ansi": false,
+      "compare_ansi": true,
       "render_options": {
         "width": 60
       },
@@ -651,12 +651,12 @@
         "plain": "                                                            \n fn main() { println!(\"hi\"); }                              \n                                                            \n",
         "ansi": "\u001b[48;2;39;40;34m                                                            \u001b[0m\n\u001b[48;2;39;40;34m \u001b[0m\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m                             \u001b[0m\u001b[48;2;39;40;34m \u001b[0m\n\u001b[48;2;39;40;34m                                                            \u001b[0m\n"
       },
-      "notes": "Python Rich Markdown uses Pygments-based syntax highlighting for fenced code blocks; Rust uses syntect so ANSI differs. Plain output comparison guards layout/padding."
+      "notes": "Python Rich Markdown fenced-code ANSI now matches the Rust renderer for this fixture."
     },
     {
       "id": "markdown/fenced_code_wrap",
       "kind": "markdown",
-      "compare_ansi": false,
+      "compare_ansi": true,
       "render_options": {
         "width": 20
       },
@@ -669,7 +669,7 @@
         "plain": "                    \n let x = 1234567890 \n let y = 1234567890 \n                    \n",
         "ansi": "\u001b[48;2;39;40;34m                    \u001b[0m\n\u001b[48;2;39;40;34m \u001b[0m\u001b[38;2;102;217;239;48;2;39;40;34mlet\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34mx\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;255;70;137;48;2;39;40;34m=\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;174;129;255;48;2;39;40;34m1234567890\u001b[0m\u001b[48;2;39;40;34m \u001b[0m\n\u001b[48;2;39;40;34m \u001b[0m\u001b[38;2;102;217;239;48;2;39;40;34mlet\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34my\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;255;70;137;48;2;39;40;34m=\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;174;129;255;48;2;39;40;34m1234567890\u001b[0m\u001b[48;2;39;40;34m \u001b[0m\n\u001b[48;2;39;40;34m                    \u001b[0m\n"
       },
-      "notes": "Narrow width exercises Python Rich `Syntax(word_wrap=True, padding=1)` behavior in Markdown fenced code blocks, including post-padding crop. Plain output comparison locks layout."
+      "notes": "Narrow width exercises Python Rich `Syntax(word_wrap=True, padding=1)` behavior in Markdown fenced code blocks, including ANSI parity."
     },
     {
       "id": "markdown/link",
@@ -828,7 +828,7 @@
     {
       "id": "syntax/basic",
       "kind": "syntax",
-      "compare_ansi": false,
+      "compare_ansi": true,
       "render_options": null,
       "env": null,
       "theme": null,
@@ -840,7 +840,7 @@
         "plain": "fn main() { println!(\"hi\"); }           \n",
         "ansi": "\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m           \u001b[0m\n"
       },
-      "notes": "Rust uses syntect; Python Rich uses Pygments, so ANSI differs. Plain comparison still guards layout."
+      "notes": "Default Rust syntax ANSI now matches Python Rich for this conformance fixture."
     },
     {
       "id": "syntax/no_terminal",

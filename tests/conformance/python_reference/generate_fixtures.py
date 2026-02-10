@@ -291,18 +291,18 @@ CASES = [
     {
         "id": "markdown/fenced_code_rust",
         "kind": "markdown",
-        "compare_ansi": False,
+        "compare_ansi": True,
         "render_options": {"width": 60},
         "input": {"text": "```rust\nfn main() { println!(\"hi\"); }\n```"},
-        "notes": "Python Rich Markdown uses Pygments-based syntax highlighting for fenced code blocks; Rust uses syntect so ANSI differs. Plain output comparison guards layout/padding.",
+        "notes": "Python Rich Markdown fenced-code ANSI now matches the Rust renderer for this fixture.",
     },
     {
         "id": "markdown/fenced_code_wrap",
         "kind": "markdown",
-        "compare_ansi": False,
+        "compare_ansi": True,
         "render_options": {"width": 20},
         "input": {"text": "```rust\nlet x = 1234567890; let y = 1234567890;\n```"},
-        "notes": "Narrow width exercises Python Rich `Syntax(word_wrap=True, padding=1)` behavior in Markdown fenced code blocks, including post-padding crop. Plain output comparison locks layout.",
+        "notes": "Narrow width exercises Python Rich `Syntax(word_wrap=True, padding=1)` behavior in Markdown fenced code blocks, including ANSI parity.",
     },
     {
         "id": "markdown/link",
@@ -375,9 +375,9 @@ CASES = [
     {
         "id": "syntax/basic",
         "kind": "syntax",
-        "compare_ansi": False,
+        "compare_ansi": True,
         "input": {"code": "fn main() { println!(\"hi\"); }", "language": "rust"},
-        "notes": "Rust uses syntect; Python Rich uses Pygments, so ANSI differs. Plain comparison still guards layout.",
+        "notes": "Default Rust syntax ANSI now matches Python Rich for this conformance fixture.",
     },
     {
         "id": "syntax/no_terminal",

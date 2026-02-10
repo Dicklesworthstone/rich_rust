@@ -43,7 +43,7 @@
 //! let syntax = Syntax::new(code, "python")
 //!     .line_numbers(true)
 //!     .start_line(10)  // Start numbering from line 10
-//!     .theme("base16-ocean.dark");
+//!     .theme("python-rich-default");
 //!
 //! let segments = syntax.render(None)?;
 //! ```
@@ -62,7 +62,7 @@
 //! # Available Themes
 //!
 //! Call [`Syntax::available_themes()`] to list all built-in themes. Common themes include:
-//! - `base16-ocean.dark` (default)
+//! - `python-rich-default` (default compatibility mode)
 //! - `base16-ocean.light`
 //! - `InspiredGitHub`
 //! - `Solarized (dark)`
@@ -102,6 +102,9 @@ use syntect::util::LinesWithEndings;
 
 static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+
+const PYTHON_RICH_THEME: &str = "python-rich-default";
+const PYTHON_RICH_FALLBACK_THEME: &str = "base16-ocean.dark";
 
 /// Error type for syntax highlighting operations.
 #[derive(Debug, Clone)]
@@ -170,7 +173,7 @@ impl Default for Syntax {
             language: String::from("text"),
             line_numbers: false,
             start_line: 1,
-            theme_name: String::from("base16-ocean.dark"),
+            theme_name: String::from(PYTHON_RICH_THEME),
             background_color: None,
             indent_guides: false,
             tab_size: 4,
@@ -320,7 +323,7 @@ impl Syntax {
 
     /// Set the theme for syntax highlighting.
     ///
-    /// Common themes: "base16-ocean.dark", "base16-ocean.light",
+    /// Common themes: "python-rich-default", "base16-ocean.dark", "base16-ocean.light",
     /// `InspiredGitHub`, `Solarized (dark)`, `Solarized (light)`
     #[must_use]
     pub fn theme(mut self, theme_name: impl Into<String>) -> Self {
@@ -373,7 +376,11 @@ impl Syntax {
     /// Get the list of available themes.
     #[must_use]
     pub fn available_themes() -> Vec<String> {
-        THEME_SET.themes.keys().cloned().collect()
+        let mut themes: Vec<String> = THEME_SET.themes.keys().cloned().collect();
+        themes.push(PYTHON_RICH_THEME.to_string());
+        themes.sort();
+        themes.dedup();
+        themes
     }
 
     /// Get the list of available languages.
@@ -394,6 +401,8 @@ impl Syntax {
     pub fn render(&self, max_width: Option<usize>) -> Result<Vec<Segment<'_>>, SyntaxError> {
         let ps: &SyntaxSet = self.custom_syntax_set.as_deref().unwrap_or(&*SYNTAX_SET);
         let ts: &ThemeSet = self.custom_theme_set.as_deref().unwrap_or(&*THEME_SET);
+        let use_python_rich_theme = self.uses_python_rich_theme();
+        let use_python_rich_rust = use_python_rich_theme && Self::is_rust_language(&self.language);
 
         // Find the syntax definition
         let syntax = ps
@@ -401,10 +410,17 @@ impl Syntax {
             .or_else(|| ps.find_syntax_by_extension(&self.language))
             .ok_or_else(|| SyntaxError::UnknownLanguage(self.language.clone()))?;
 
-        // Get the theme
+        // Get the theme. The Python-Rich compatibility theme name is an alias; use a built-in
+        // syntect theme as fallback for non-Rust languages and any behavior that still depends on
+        // syntect internals.
+        let resolved_theme_name = if use_python_rich_theme {
+            PYTHON_RICH_FALLBACK_THEME
+        } else {
+            &self.theme_name
+        };
         let theme = ts
             .themes
-            .get(&self.theme_name)
+            .get(resolved_theme_name)
             .ok_or_else(|| SyntaxError::UnknownTheme(self.theme_name.clone()))?;
 
         let mut highlighter = HighlightLines::new(syntax, theme);
@@ -413,6 +429,8 @@ impl Syntax {
         // Background used for padding/fill and for styling indent guides.
         let bg = if let Some(ref override_bg) = self.background_color {
             override_bg.clone()
+        } else if use_python_rich_theme {
+            Color::from_rgb(39, 40, 34)
         } else {
             let bg_color = theme
                 .settings
@@ -420,7 +438,7 @@ impl Syntax {
                 .unwrap_or(syntect::highlighting::Color::BLACK);
             Color::from_rgb(bg_color.r, bg_color.g, bg_color.b)
         };
-        let base_bg_style = Style::new().bgcolor(bg);
+        let base_bg_style = Style::new().bgcolor(bg.clone());
         let guide_style = base_bg_style.combine(&Style::new().dim());
 
         // Calculate line number width (digits only).
@@ -484,31 +502,37 @@ impl Syntax {
                 tab_expanded
             };
 
-            // Highlight the line (no trailing newline).
-            let ranges = highlighter
-                .highlight_line(&line_for_highlight, ps)
-                .unwrap_or_else(|_| {
-                    vec![(
-                        syntect::highlighting::Style::default(),
-                        line_for_highlight.as_str(),
-                    )]
-                });
-
             let mut line_text = Text::new("");
-            let mut col = 0usize;
-            for (style, text) in ranges {
-                if text.is_empty() {
-                    continue;
+            if use_python_rich_rust {
+                for (text, style) in self.python_rich_rust_highlight(&line_for_highlight, &bg) {
+                    line_text.append_styled(&text, style);
                 }
-                let rich_style = self.syntect_style_to_rich(style, theme);
-                append_syntax_text(
-                    &mut line_text,
-                    text,
-                    &rich_style,
-                    leading_spaces,
-                    &mut col,
-                    &guide_style,
-                );
+            } else {
+                // Highlight the line (no trailing newline).
+                let ranges = highlighter
+                    .highlight_line(&line_for_highlight, ps)
+                    .unwrap_or_else(|_| {
+                        vec![(
+                            syntect::highlighting::Style::default(),
+                            line_for_highlight.as_str(),
+                        )]
+                    });
+
+                let mut col = 0usize;
+                for (style, text) in ranges {
+                    if text.is_empty() {
+                        continue;
+                    }
+                    let rich_style = self.syntect_style_to_rich(style, theme);
+                    append_syntax_text(
+                        &mut line_text,
+                        text,
+                        &rich_style,
+                        leading_spaces,
+                        &mut col,
+                        &guide_style,
+                    );
+                }
             }
 
             let visual_lines: Vec<Text> = if let Some(wrap_width) = wrap_width {
@@ -633,11 +657,258 @@ impl Syntax {
         rich_style
     }
 
+    fn uses_python_rich_theme(&self) -> bool {
+        self.theme_name == PYTHON_RICH_THEME
+    }
+
+    fn is_rust_language(language: &str) -> bool {
+        matches!(language.to_ascii_lowercase().as_str(), "rust" | "rs")
+    }
+
+    fn python_rich_style(token_kind: RustTokenKind, background: &Color) -> Style {
+        let fg = match token_kind {
+            RustTokenKind::Keyword => Color::from_rgb(102, 217, 239),
+            RustTokenKind::Function => Color::from_rgb(166, 226, 46),
+            RustTokenKind::Operator => Color::from_rgb(255, 70, 137),
+            RustTokenKind::Number => Color::from_rgb(174, 129, 255),
+            RustTokenKind::String => Color::from_rgb(230, 219, 116),
+            RustTokenKind::Comment => Color::from_rgb(117, 113, 94),
+            RustTokenKind::Plain => Color::from_rgb(248, 248, 242),
+        };
+
+        let mut style = Style::new().color(fg).bgcolor(background.clone());
+        if matches!(token_kind, RustTokenKind::Comment) {
+            style = style.italic();
+        }
+        style
+    }
+
+    fn python_rich_rust_highlight(&self, line: &str, background: &Color) -> Vec<(String, Style)> {
+        let mut out: Vec<(String, Style)> = Vec::new();
+        let bytes = line.as_bytes();
+        let mut i = 0usize;
+
+        while i < bytes.len() {
+            let b = bytes[i];
+
+            if b.is_ascii_whitespace() {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                out.push((
+                    line[start..i].to_string(),
+                    Self::python_rich_style(RustTokenKind::Plain, background),
+                ));
+                continue;
+            }
+
+            if b == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+                out.push((
+                    line[i..].to_string(),
+                    Self::python_rich_style(RustTokenKind::Comment, background),
+                ));
+                break;
+            }
+
+            if b == b'"' {
+                out.push((
+                    "\"".to_string(),
+                    Self::python_rich_style(RustTokenKind::String, background),
+                ));
+                i += 1;
+
+                let string_start = i;
+                let mut escaped = false;
+                while i < bytes.len() {
+                    let current = bytes[i];
+                    if escaped {
+                        escaped = false;
+                        i += 1;
+                        continue;
+                    }
+                    if current == b'\\' {
+                        escaped = true;
+                        i += 1;
+                        continue;
+                    }
+                    if current == b'"' {
+                        break;
+                    }
+                    i += 1;
+                }
+
+                if string_start < i {
+                    out.push((
+                        line[string_start..i].to_string(),
+                        Self::python_rich_style(RustTokenKind::String, background),
+                    ));
+                }
+
+                if i < bytes.len() && bytes[i] == b'"' {
+                    out.push((
+                        "\"".to_string(),
+                        Self::python_rich_style(RustTokenKind::String, background),
+                    ));
+                    i += 1;
+                }
+                continue;
+            }
+
+            if b.is_ascii_digit() {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                out.push((
+                    line[start..i].to_string(),
+                    Self::python_rich_style(RustTokenKind::Number, background),
+                ));
+                continue;
+            }
+
+            if is_identifier_start(b) {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && is_identifier_continue(bytes[i]) {
+                    i += 1;
+                }
+
+                let mut end = i;
+                if end < bytes.len() && bytes[end] == b'!' {
+                    end += 1;
+                    i = end;
+                }
+
+                let lexeme = &line[start..end];
+                let keyword_lexeme = lexeme.strip_suffix('!').unwrap_or(lexeme);
+                let next_non_whitespace = next_non_whitespace_byte(bytes, i);
+
+                let kind = if is_rust_keyword(keyword_lexeme) {
+                    RustTokenKind::Keyword
+                } else if lexeme.ends_with('!') || next_non_whitespace == Some(b'(') {
+                    RustTokenKind::Function
+                } else {
+                    RustTokenKind::Plain
+                };
+
+                out.push((
+                    lexeme.to_string(),
+                    Self::python_rich_style(kind, background),
+                ));
+                continue;
+            }
+
+            if is_operator_byte(b) {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && is_operator_byte(bytes[i]) {
+                    i += 1;
+                }
+                out.push((
+                    line[start..i].to_string(),
+                    Self::python_rich_style(RustTokenKind::Operator, background),
+                ));
+                continue;
+            }
+
+            let ch_len = line[i..].chars().next().map_or(1, char::len_utf8);
+            out.push((
+                line[i..i + ch_len].to_string(),
+                Self::python_rich_style(RustTokenKind::Plain, background),
+            ));
+            i += ch_len;
+        }
+
+        out
+    }
+
     /// Get the highlighted code as a concatenated string (for testing/preview).
     #[must_use]
     pub fn plain_text(&self) -> String {
         self.code.clone()
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RustTokenKind {
+    Keyword,
+    Function,
+    Operator,
+    Number,
+    String,
+    Comment,
+    Plain,
+}
+
+fn is_identifier_start(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+fn is_identifier_continue(byte: u8) -> bool {
+    is_identifier_start(byte) || byte.is_ascii_digit()
+}
+
+fn is_operator_byte(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'=' | b'+' | b'-' | b'*' | b'/' | b'%' | b'!' | b'<' | b'>' | b'&' | b'|' | b'^'
+    )
+}
+
+fn next_non_whitespace_byte(bytes: &[u8], mut index: usize) -> Option<u8> {
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_whitespace() {
+            return Some(bytes[index]);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn is_rust_keyword(token: &str) -> bool {
+    matches!(
+        token,
+        "as" | "async"
+            | "await"
+            | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "Self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+    )
 }
 
 fn apply_indent_guides(line: &str, tab_size: usize) -> String {
@@ -1108,9 +1379,38 @@ mod tests {
     }
 
     #[test]
-    fn test_default_theme_is_base16_ocean_dark() {
+    fn test_default_theme_is_python_rich_default() {
         let syntax = Syntax::new("code", "rust");
-        assert_eq!(syntax.theme_name, "base16-ocean.dark");
+        assert_eq!(syntax.theme_name, "python-rich-default");
+    }
+
+    #[test]
+    fn test_python_rich_default_theme_is_available() {
+        let themes = Syntax::available_themes();
+        assert!(themes.iter().any(|name| name == "python-rich-default"));
+    }
+
+    #[test]
+    fn test_python_rich_rust_token_styles() {
+        let syntax = Syntax::new("", "rust");
+        let background = Color::from_rgb(39, 40, 34);
+        let highlighted = syntax.python_rich_rust_highlight("let x = 1234;", &background);
+
+        let eq_style = highlighted
+            .iter()
+            .find(|(text, _)| text == "=")
+            .map(|(_, style)| style.clone())
+            .expect("operator token should exist");
+        assert_eq!(eq_style.color, Some(Color::from_rgb(255, 70, 137)));
+        assert_eq!(eq_style.bgcolor, Some(background.clone()));
+
+        let number_style = highlighted
+            .iter()
+            .find(|(text, _)| text == "1234")
+            .map(|(_, style)| style.clone())
+            .expect("number token should exist");
+        assert_eq!(number_style.color, Some(Color::from_rgb(174, 129, 255)));
+        assert_eq!(number_style.bgcolor, Some(background));
     }
 
     #[test]
