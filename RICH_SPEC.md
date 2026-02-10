@@ -2776,7 +2776,7 @@ features (not planned) from **planned-but-not-yet-implemented** features.
 |---------|--------|
 | Theme + named styles | Implemented (`Theme`, `Console::get_style`, `.ini` loading via `Theme::read`) |
 | Pretty / Inspect | Implemented (`renderables::Pretty`, `renderables::Inspect`, `renderables::inspect`; `Debug`-based, best-effort field extraction) |
-| Traceback rendering | Partial (`renderables::Traceback`, `Console::print_exception`; synthetic frames only; no locals/code/backtrace capture yet) |
+| Traceback rendering | Implemented (`renderables::Traceback`, `Console::print_exception`; explicit frames for deterministic fixtures; optional `Traceback::capture()` via `backtrace` feature; code context via `extra_lines` + `source_context` or filesystem source) |
 | Live display (`Live`) | Implemented (stdout/stderr redirection is best-effort; no Jupyter integration) |
 | Layout engine (`Layout`) | Implemented (ratio splits + named lookup; no render-map caching) |
 | Logging handler integration | Implemented (`RichLogger` for `log` crate; tracebacks not yet integrated) |
@@ -4085,9 +4085,10 @@ fn render_message(&self, record: &LogRecord, message: &str) -> Box<dyn Renderabl
 
 ### 18.9 Rich Tracebacks
 
-**Implementation note (Rust):** `renderables::Traceback` currently supports deterministic
-rendering from synthetic frames for conformance and tests. A higher-fidelity integration
-can be built later (captured Rust backtraces, code context, locals).
+**Implementation note (Rust):** `renderables::Traceback` supports deterministic rendering
+from explicit frames for conformance/tests, and optional automatic capture via
+`Traceback::capture()` when the `backtrace` feature is enabled. Locals rendering is
+not implemented.
 
 When `rich_tracebacks` is enabled and an exception is attached to the record:
 

@@ -568,8 +568,10 @@ inspect(&console, &cfg);
 
 ### Tracebacks
 
-`Traceback` is a renderable inspired by Python Rich's `rich.traceback`. For now it renders
-from **synthetic frames** (name + line number), which makes output deterministic in tests.
+`Traceback` is a renderable inspired by Python Rich's `rich.traceback`.
+
+You can construct it from explicit frames (deterministic, great for tests/fixtures),
+or capture a real runtime backtrace when the `backtrace` feature is enabled.
 
 ```rust
 use rich_rust::prelude::*;
@@ -586,6 +588,16 @@ let traceback = Traceback::new(
     "division by zero",
 );
 
+console.print_exception(&traceback);
+```
+
+Automatic capture (requires `backtrace` feature):
+
+```rust
+use rich_rust::prelude::*;
+
+let console = Console::new();
+let traceback = Traceback::capture("MyError", "something went wrong");
 console.print_exception(&traceback);
 ```
 
@@ -672,15 +684,15 @@ See `FEATURE_PARITY.md` for the authoritative matrix and `RICH_SPEC.md` for deta
 - Syntax highlighting (feature `syntax`)
 - Markdown rendering (feature `markdown`)
 - JSON pretty-print (feature `json`)
-- Traceback rendering (`Traceback`, `Console::print_exception`) (synthetic frames; no automatic Rust backtrace capture yet)
+- Traceback rendering (`Traceback`, `Console::print_exception`) (explicit frames for deterministic tests; optional `Traceback::capture` via feature `backtrace`)
 - Unicode width handling + auto color downgrade
 
-**Out of scope**
-- Input widgets (this is an output library)
+**Notes**
+- rich_rust is output-focused, but it also includes small, pragmatic interactive helpers (prompts, pager, status) for common CLI workflows.
 
 ---
 
-## Demo Showcase (Roadmap): `demo_showcase`
+## Demo Showcase: `demo_showcase`
 
 We’re building a standalone `demo_showcase` binary that shows off rich_rust end-to-end in a single cohesive narrative (product-grade visuals, not just a grab bag of examples).
 
@@ -856,6 +868,7 @@ cargo run --bin demo_showcase --features showcase -- \
 ## Limitations
 
 - **No input:** This is an output library; use `crossterm` or `dialoguer` for input
+- **Limited input:** rich_rust includes prompts/pager/status helpers, but it is not a full TUI/input widget framework. For complex input, use crates like `dialoguer`, `rustyline`, or `inquire`.
 - **No async:** Rendering is synchronous; wrap in `spawn_blocking` if needed
 - **Live redirection:** `Live` does not globally redirect stdout/stderr; only console output is intercepted
 - **HTML/SVG export:** Export is minimal (pre + inline CSS, SVG via `<foreignObject>`), not a full Rich theme engine
