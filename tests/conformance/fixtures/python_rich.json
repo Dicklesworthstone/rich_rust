@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-02-10T07:48:07.774771+00:00",
+  "generated_at": "2026-02-10T16:14:37.564090+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -109,6 +109,43 @@
         "ansi": "\u001b[3;92mTrue\u001b[0m \u001b[3;91mFalse\u001b[0m \u001b[3;35mNone\u001b[0m \u001b[1;36m123\u001b[0m \u001b[1;36m0xFF\u001b[0m \u001b[1;36m1+2j\u001b[0m \u001b[32m'hi'\u001b[0m \u001b[32m\"dq\"\u001b[0m \u001b[1m(\u001b[0m\u001b[1;35mcall\u001b[0m\u001b[1m(\u001b[0m\u001b[1m)\u001b[0m\u001b[1m)\u001b[0m \u001b[33m...\u001b[0m \u001b[4;94mhttps://example.com\u001b[0m\n"
       },
       "notes": "Exercise default ReprHighlighter (Console highlight=True) ANSI output."
+    },
+    {
+      "id": "protocol/rich_cast",
+      "kind": "protocol_rich_cast",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 80
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "markup": "True False None 123 0xFF 1+2j"
+      },
+      "expected": {
+        "plain": "True False None 123 0xFF 1+2j\n",
+        "ansi": "\u001b[3;92mTrue\u001b[0m \u001b[3;91mFalse\u001b[0m \u001b[3;35mNone\u001b[0m \u001b[1;36m123\u001b[0m \u001b[1;36m0xFF\u001b[0m \u001b[1;36m1+2j\u001b[0m\n"
+      },
+      "notes": "Exercise Python Rich `__rich__` casting via rich.protocol.rich_cast inside Console.print."
+    },
+    {
+      "id": "protocol/measure",
+      "kind": "protocol_measure",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 40
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "minimum": 2,
+        "maximum": 10
+      },
+      "expected": {
+        "plain": "2:10\n",
+        "ansi": "\u001b[1;92m2:10\u001b[0m\n"
+      },
+      "notes": "Exercise Python Rich `__rich_measure__` and Console.measure; output is \"min:max\"."
     },
     {
       "id": "text/colors",

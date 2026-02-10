@@ -179,6 +179,7 @@ pub mod live;
 pub mod logging;
 pub mod markup;
 pub mod measure;
+pub mod protocol;
 pub mod renderables;
 pub mod segment;
 pub mod style;
@@ -210,6 +211,7 @@ pub mod prelude {
     #[cfg(feature = "tracing")]
     pub use crate::logging::RichTracingLayer;
     pub use crate::measure::Measurement;
+    pub use crate::protocol::{RichCast, RichCastOutput, rich_cast};
     pub use crate::renderables::{
         Align, AlignLines, AlignMethod, BarStyle, Cell, Column, Columns, DownloadColumn, Emoji,
         FileSizeColumn, Inspect, InspectOptions, Layout, LayoutSplitter, PaddingDimensions, Panel,

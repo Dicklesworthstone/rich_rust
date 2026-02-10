@@ -86,6 +86,20 @@ CASES = [
         "notes": "Exercise default ReprHighlighter (Console highlight=True) ANSI output.",
     },
     {
+        "id": "protocol/rich_cast",
+        "kind": "protocol_rich_cast",
+        "render_options": {"width": 80},
+        "input": {"markup": "True False None 123 0xFF 1+2j"},
+        "notes": "Exercise Python Rich `__rich__` casting via rich.protocol.rich_cast inside Console.print.",
+    },
+    {
+        "id": "protocol/measure",
+        "kind": "protocol_measure",
+        "render_options": {"width": 40},
+        "input": {"minimum": 2, "maximum": 10},
+        "notes": "Exercise Python Rich `__rich_measure__` and Console.measure; output is \"min:max\".",
+    },
+    {
         "id": "text/colors",
         "kind": "text",
         "input": {"markup": "[red]Red[/] and [green]Green[/]"},
@@ -384,6 +398,16 @@ def build_renderable(case: Dict[str, Any]):
     if kind == "text":
         return inp["markup"]
 
+    if kind == "protocol_rich_cast":
+        class RichCastable:
+            def __init__(self, markup: str) -> None:
+                self._markup = markup
+
+            def __rich__(self) -> str:
+                return self._markup
+
+        return RichCastable(inp.get("markup", ""))
+
     if kind == "rule":
         return Rule(inp.get("title", ""), characters=inp.get("character", "─"), align=inp.get("align", "center"))
 
@@ -554,8 +578,29 @@ def render_case(case: Dict[str, Any]) -> Dict[str, str]:
         markup=True,
         _environ=env,
     )
-    renderable = build_renderable(case)
-    console.print(renderable)
+    kind = case["kind"]
+
+    if kind == "protocol_measure":
+        from rich.measure import Measurement  # type: ignore
+
+        class RichMeasure:
+            def __init__(self, minimum: int, maximum: int) -> None:
+                self._minimum = minimum
+                self._maximum = maximum
+
+            def __rich_measure__(self, _console: Console, _options: Any) -> Measurement:
+                return Measurement(self._minimum, self._maximum)
+
+            def __rich_console__(self, _console: Console, _options: Any):
+                # Console.measure requires a renderable; we provide an empty renderable body.
+                yield ""
+
+        measure_obj = RichMeasure(int(case["input"].get("minimum", 0)), int(case["input"].get("maximum", 0)))
+        measurement = console.measure(measure_obj)
+        console.print(f"{measurement.minimum}:{measurement.maximum}")
+    else:
+        renderable = build_renderable(case)
+        console.print(renderable)
     plain = console.export_text(styles=False, clear=False)
     ansi = console._render_buffer(console._record_buffer)  # type: ignore[attr-defined]
     console._record_buffer.clear()  # type: ignore[attr-defined]

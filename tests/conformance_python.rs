@@ -215,6 +215,69 @@ fn render_text(console: &Console, markup: &str, width: Option<usize>) -> (String
     )
 }
 
+fn render_protocol_rich_cast(
+    console: &Console,
+    markup: &str,
+    width: Option<usize>,
+) -> (String, String) {
+    #[derive(Debug)]
+    struct ProtocolCast {
+        markup: String,
+    }
+
+    impl RichCast for ProtocolCast {
+        fn rich_cast(&self) -> rich_rust::protocol::RichCastOutput {
+            rich_rust::protocol::RichCastOutput::Str(self.markup.clone())
+        }
+    }
+
+    let mut options = PrintOptions::new().with_markup(true);
+    if let Some(width) = width {
+        options = options.with_width(width);
+    }
+
+    let value = ProtocolCast {
+        markup: markup.to_string(),
+    };
+    let plain = console.export_cast_text_with_options(&value, &options);
+
+    let mut buf = Vec::new();
+    console
+        .print_cast_to(&mut buf, &value, &options)
+        .expect("print_cast_to failed");
+
+    (
+        normalize_line_endings(&plain),
+        normalize_ansi(&String::from_utf8(buf).expect("utf8 output")),
+    )
+}
+
+fn render_protocol_measure(
+    console: &Console,
+    minimum: usize,
+    maximum: usize,
+    width: Option<usize>,
+) -> (String, String) {
+    struct ProtocolMeasure {
+        minimum: usize,
+        maximum: usize,
+    }
+
+    impl rich_rust::measure::RichMeasure for ProtocolMeasure {
+        fn rich_measure(
+            &self,
+            _console: &Console,
+            _options: &rich_rust::console::ConsoleOptions,
+        ) -> Measurement {
+            Measurement::new(self.minimum, self.maximum)
+        }
+    }
+
+    let measurement = console.measure(&ProtocolMeasure { minimum, maximum }, None);
+    let display = format!("{}:{}", measurement.minimum, measurement.maximum);
+    render_text(console, &display, width)
+}
+
 fn render_segments_to_ansi(console: &Console, segments: &[Segment<'_>]) -> String {
     let mut buf = Vec::new();
     console
@@ -584,6 +647,13 @@ fn python_rich_fixtures() {
         let (mut actual_plain, mut actual_ansi) = if kind == "text" {
             let markup = input.get("markup").and_then(|v| v.as_str()).unwrap_or("");
             render_text(&console, markup, options.width)
+        } else if kind == "protocol_rich_cast" {
+            let markup = input.get("markup").and_then(|v| v.as_str()).unwrap_or("");
+            render_protocol_rich_cast(&console, markup, options.width)
+        } else if kind == "protocol_measure" {
+            let minimum = value_usize(input, "minimum").unwrap_or(0);
+            let maximum = value_usize(input, "maximum").unwrap_or(0);
+            render_protocol_measure(&console, minimum, maximum, options.width)
         } else {
             let renderable = build_renderable(kind, input, &options);
             render_renderable(&console, &*renderable)

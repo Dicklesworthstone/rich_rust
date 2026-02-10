@@ -139,13 +139,17 @@ impl Renderable for str {
         };
 
         // Honor the markup setting from ConsoleOptions
-        let text = if options.markup.unwrap_or(true) {
+        let mut text = if options.markup.unwrap_or(true) {
             markup::render_or_plain_with_style_resolver(content.as_ref(), |definition| {
                 console.get_style(definition)
             })
         } else {
             Text::new(content.as_ref())
         };
+
+        // Apply Console highlighter when enabled (parity with Python Rich's default string pipeline).
+        console.apply_highlighter_to_text(options, &mut text);
+
         text.render("")
             .into_iter()
             .map(Segment::into_owned)
@@ -236,5 +240,32 @@ impl Renderable for Json {
         }
 
         wrapped.into_iter().map(Segment::into_owned).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::color::ColorSystem;
+    use crate::console::Console;
+    use crate::renderables::Renderable;
+
+    #[test]
+    fn str_renderable_applies_console_highlighter_when_enabled() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(ColorSystem::TrueColor)
+            .highlight(true)
+            .build();
+        let options = console.options();
+
+        let segments = "True".render(&console, &options);
+        assert!(segments.iter().any(|segment| segment.style.is_some()));
+
+        let mut buf = Vec::new();
+        console
+            .print_segments_to(&mut buf, &segments)
+            .expect("print_segments_to failed");
+        let ansi = String::from_utf8(buf).expect("utf8");
+        assert!(ansi.contains("\x1b["));
     }
 }

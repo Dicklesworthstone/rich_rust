@@ -4708,23 +4708,23 @@ pub static SVG_EXPORT_THEME: Lazy<TerminalTheme> = Lazy::new(|| {
 ## Appendix A: Rust Trait Summary
 
 ```rust
-/// Primary rendering trait (equivalent to __rich_console__)
+/// Primary rendering trait (equivalent to Python Rich `__rich_console__`).
 trait Renderable {
-    fn rich_console(&self, console: &Console, options: &ConsoleOptions) -> Vec<RenderItem>;
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>>;
 }
 
-/// Conversion trait (equivalent to __rich__)
-trait RichDisplay {
-    fn to_rich(&self) -> Box<dyn Renderable>;
-}
-
-/// Measurement trait (equivalent to __rich_measure__)
-trait Measurable {
+/// Measurement trait (equivalent to Python Rich `__rich_measure__`).
+trait RichMeasure {
     fn rich_measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement;
 }
 
-/// Combined trait for renderables that support measurement
-trait MeasurableRenderable: Renderable + Measurable {}
+/// Casting trait (equivalent to Python Rich `__rich__`).
+trait RichCast {
+    fn rich_cast(&self) -> RichCastOutput;
+}
+
+/// Helper that mirrors Python Rich `rich.protocol.rich_cast` recursion.
+fn rich_cast(value: &dyn RichCast) -> RichCastOutput;
 ```
 
 ---

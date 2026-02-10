@@ -92,6 +92,8 @@ use crate::emoji;
 use crate::highlighter::{Highlighter, ReprHighlighter};
 use crate::live::LiveInner;
 use crate::markup;
+use crate::measure::{Measurement, RichMeasure};
+use crate::protocol::{RichCast, RichCastOutput};
 use crate::renderables::Renderable;
 use crate::segment::{ControlCode, ControlType, Segment};
 use crate::style::{Attributes, Style, StyleParseError};
@@ -636,6 +638,24 @@ impl Console {
         }
     }
 
+    pub(crate) fn apply_highlighter_to_text(&self, options: &ConsoleOptions, text: &mut Text) {
+        let highlight_enabled = options.highlight.unwrap_or(self.highlight);
+        if highlight_enabled {
+            self.highlighter.highlight(self, text);
+        }
+    }
+
+    /// Measure a renderable via the measurement protocol (Python Rich `Console.measure` parity).
+    #[must_use]
+    pub fn measure(
+        &self,
+        renderable: &dyn RichMeasure,
+        options: Option<ConsoleOptions>,
+    ) -> Measurement {
+        let options = options.unwrap_or_else(|| self.options());
+        Measurement::get(self, &options, Some(renderable))
+    }
+
     /// Check if the terminal is "dumb".
     #[must_use]
     pub fn is_dumb_terminal(&self) -> bool {
@@ -788,6 +808,55 @@ impl Console {
         self.print_segments(&segments);
     }
 
+    fn render_rich_cast_segments(
+        &self,
+        value: &dyn RichCast,
+        options: &PrintOptions,
+    ) -> Vec<Segment<'static>> {
+        match crate::protocol::rich_cast(value) {
+            RichCastOutput::Str(text) => self.render_str_segments(&text, options),
+            RichCastOutput::Renderable(renderable) => {
+                let options = self.options();
+                renderable
+                    .render(self, &options)
+                    .into_iter()
+                    .map(Segment::into_owned)
+                    .collect()
+            }
+            RichCastOutput::Castable(renderable) => {
+                let options = self.options();
+                renderable
+                    .render(self, &options)
+                    .into_iter()
+                    .map(Segment::into_owned)
+                    .collect()
+            }
+        }
+    }
+
+    /// Print a value via the protocol casting hook (Python Rich `rich.protocol.rich_cast` parity).
+    pub fn print_cast(&self, value: &dyn RichCast) {
+        self.print_cast_with_options(value, &PrintOptions::new().with_markup(self.markup));
+    }
+
+    /// Print a castable value with custom options (string options apply when the cast yields a string).
+    pub fn print_cast_with_options(&self, value: &dyn RichCast, options: &PrintOptions) {
+        let mut file = lock_recover(&self.file);
+        let _ = self.print_cast_to(&mut *file, value, options);
+    }
+
+    /// Print a castable value to a specific writer.
+    pub fn print_cast_to<W: Write>(
+        &self,
+        writer: &mut W,
+        value: &dyn RichCast,
+        options: &PrintOptions,
+    ) -> io::Result<()> {
+        let segments = self.render_rich_cast_segments(value, options);
+        let segments = self.apply_render_hooks(segments);
+        self.write_segments_raw(writer, &segments)
+    }
+
     /// Print an exception / traceback renderable.
     ///
     /// This is a convenience wrapper mirroring Python Rich's `Console.print_exception`.
@@ -813,6 +882,23 @@ impl Console {
     #[must_use]
     pub fn export_text_with_options(&self, content: &str, options: &PrintOptions) -> String {
         let segments = self.render_str_segments(content, options);
+        Self::segments_to_plain(&segments)
+    }
+
+    /// Export a castable value to plain text (no ANSI).
+    #[must_use]
+    pub fn export_cast_text(&self, value: &dyn RichCast) -> String {
+        self.export_cast_text_with_options(value, &PrintOptions::new().with_markup(self.markup))
+    }
+
+    /// Export a castable value to plain text (no ANSI) using custom print options.
+    #[must_use]
+    pub fn export_cast_text_with_options(
+        &self,
+        value: &dyn RichCast,
+        options: &PrintOptions,
+    ) -> String {
+        let segments = self.render_rich_cast_segments(value, options);
         Self::segments_to_plain(&segments)
     }
 

@@ -34,7 +34,11 @@ pub struct HighlighterRegexError {
 
 impl std::fmt::Display for HighlighterRegexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "highlighter regex error for {:?}: {}", self.pattern, self.message)
+        write!(
+            f,
+            "highlighter regex error for {:?}: {}",
+            self.pattern, self.message
+        )
     }
 }
 
@@ -64,7 +68,7 @@ impl std::fmt::Debug for RegexHighlighter {
 }
 
 impl RegexHighlighter {
-    /// Create a new RegexHighlighter.
+    /// Create a new `RegexHighlighter`.
     pub fn new(
         base_style: impl Into<String>,
         highlights: &[&str],
@@ -110,9 +114,8 @@ impl RegexHighlighter {
             let mut ops: Vec<(usize, usize, Style)> = Vec::new();
             let iter = re.captures_iter(plain);
             for next in iter {
-                let caps = match next {
-                    Ok(c) => c,
-                    Err(_) => break, // runtime regex error; don't take down rendering
+                let Ok(caps) = next else {
+                    break; // runtime regex error; don't take down rendering
                 };
 
                 // Skip 0 = whole match; we only care about named groups.
@@ -129,15 +132,12 @@ impl RegexHighlighter {
 
                     let byte_start = m.start();
                     let byte_end = m.end();
-                    if byte_start >= byte_end
-                        || byte_start > total_bytes
-                        || byte_end > total_bytes
+                    if byte_start >= byte_end || byte_start > total_bytes || byte_end > total_bytes
                     {
                         continue;
                     }
 
-                    let char_start =
-                        char_starts.binary_search(&byte_start).unwrap_or_else(|x| x);
+                    let char_start = char_starts.binary_search(&byte_start).unwrap_or_else(|x| x);
                     let char_end = if byte_end == total_bytes {
                         total_chars
                     } else {
@@ -173,6 +173,15 @@ impl Highlighter for RegexHighlighter {
     }
 }
 
+// Patterns from Python Rich `rich.highlighter.ReprHighlighter` (as shipped with Rich 13.x).
+// We intentionally compile them with fancy-regex to preserve look-around semantics.
+const REPR_HIGHLIGHTS: &[&str] = &[
+    r"(?P<tag_start><)(?P<tag_name>[-\w.:|]*)(?P<tag_contents>[\w\W]*)(?P<tag_end>>)",
+    r#"(?P<attrib_name>[\w_]{1,50})=(?P<attrib_value>"?[\w_]+"?)?"#,
+    r"(?P<brace>[\\[\\]{}()])",
+    r#"(?P<ipv4>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(?P<ipv6>([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})|(?P<eui64>(?:[0-9A-Fa-f]{1,2}-){7}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{1,2}:){7}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{4}\.){3}[0-9A-Fa-f]{4})|(?P<eui48>(?:[0-9A-Fa-f]{1,2}-){5}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4})|(?P<uuid>[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})|(?P<call>[\w.]*?)\(|\b(?P<bool_true>True)\b|\b(?P<bool_false>False)\b|\b(?P<none>None)\b|(?P<ellipsis>\.\.\.)|(?P<number_complex>(?<!\w)(?:\-?[0-9]+\.?[0-9]*(?:e[-+]?\d+?)?)(?:[-+](?:[0-9]+\.?[0-9]*(?:e[-+]?\d+)?))?j)|(?P<number>(?<!\w)\-?[0-9]+\.?[0-9]*(e[-+]?\d+?)?\b|0x[0-9a-fA-F]*)|(?P<path>\B(/[-\w._+]+)*\/)(?P<filename>[-\w._+]*)?|(?<![\\w])(?P<str>b?'''.*?(?<!\\)'''|b?'.*?(?<!\\)'|b?""".*?(?<!\\)"""|b?".*?(?<!\\)")|(?P<url>(file|https|http|ws|wss)://[-0-9a-zA-Z$_+!`(),.?/;:&=%#~@]*)"#,
+];
+
 /// Default "repr" highlighter, mirroring Python Rich `ReprHighlighter`.
 #[derive(Debug, Clone)]
 pub struct ReprHighlighter {
@@ -181,19 +190,11 @@ pub struct ReprHighlighter {
 
 impl Default for ReprHighlighter {
     fn default() -> Self {
-        // Patterns from Python Rich `rich.highlighter.ReprHighlighter` (as shipped with Rich 13.x).
-        // We intentionally compile them with fancy-regex to preserve look-around semantics.
-        const HIGHLIGHTS: &[&str] = &[
-            r"(?P<tag_start><)(?P<tag_name>[-\w.:|]*)(?P<tag_contents>[\w\W]*)(?P<tag_end>>)",
-            r#"(?P<attrib_name>[\w_]{1,50})=(?P<attrib_value>"?[\w_]+"?)?"#,
-            r"(?P<brace>[][{}()])",
-            r#"(?P<ipv4>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(?P<ipv6>([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})|(?P<eui64>(?:[0-9A-Fa-f]{1,2}-){7}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{1,2}:){7}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{4}\.){3}[0-9A-Fa-f]{4})|(?P<eui48>(?:[0-9A-Fa-f]{1,2}-){5}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}|(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4})|(?P<uuid>[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})|(?P<call>[\w.]*?)\(|\b(?P<bool_true>True)\b|\b(?P<bool_false>False)\b|\b(?P<none>None)\b|(?P<ellipsis>\.\.\.)|(?P<number_complex>(?<!\w)(?:\-?[0-9]+\.?[0-9]*(?:e[-+]?\d+?)?)(?:[-+](?:[0-9]+\.?[0-9]*(?:e[-+]?\d+)?))?j)|(?P<number>(?<!\w)\-?[0-9]+\.?[0-9]*(e[-+]?\d+?)?\b|0x[0-9a-fA-F]*)|(?P<path>\B(/[-\w._+]+)*\/)(?P<filename>[-\w._+]*)?|(?<![\\w])(?P<str>b?'''.*?(?<!\\)'''|b?'.*?(?<!\\)'|b?""".*?(?<!\\)"""|b?".*?(?<!\\)")|(?P<url>(file|https|http|ws|wss)://[-0-9a-zA-Z$_+!`(),.?/;:&=%#~@]*)"#,
-        ];
-
-        let inner = RegexHighlighter::new("repr.", HIGHLIGHTS).unwrap_or_else(|_| RegexHighlighter {
-            base_style: "repr.".to_string(),
-            highlights: Vec::new(),
-        });
+        let inner =
+            RegexHighlighter::new("repr.", REPR_HIGHLIGHTS).unwrap_or_else(|_| RegexHighlighter {
+                base_style: "repr.".to_string(),
+                highlights: Vec::new(),
+            });
         Self { inner }
     }
 }
@@ -207,6 +208,17 @@ impl Highlighter for ReprHighlighter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_repr_highlighter_patterns_compile() {
+        for pattern in REPR_HIGHLIGHTS {
+            fancy_regex::Regex::new(pattern).unwrap_or_else(|err| {
+                std::panic::panic_any(format!(
+                    "ReprHighlighter pattern failed to compile: {pattern:?}: {err}"
+                ))
+            });
+        }
+    }
 
     #[test]
     fn test_repr_highlighter_applies_named_styles() {
@@ -240,4 +252,3 @@ mod tests {
         assert!(text.spans().is_empty());
     }
 }
-
