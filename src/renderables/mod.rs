@@ -100,6 +100,7 @@ pub trait Renderable {
 
 pub mod align;
 pub mod columns;
+pub mod constrain;
 pub mod emoji;
 pub mod group;
 pub mod layout;
@@ -115,6 +116,7 @@ pub mod tree;
 // Re-export commonly used types
 pub use align::{Align, AlignLines, AlignMethod, VerticalAlignMethod, align_text};
 pub use columns::Columns;
+pub use constrain::Constrain;
 pub use emoji::{Emoji, NoEmoji};
 pub use group::{Group, group};
 pub use layout::{Layout, LayoutSplitter, Region};

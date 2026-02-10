@@ -506,6 +506,18 @@ fn build_renderable(
             };
             Box::new(align)
         }
+        "constrain" => {
+            let child_kind =
+                value_string(input, "child_kind").unwrap_or_else(|| "rule".to_string());
+            let child_input = input.get("child_input").unwrap_or(&Value::Null);
+            let width = input
+                .get("width")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize);
+
+            let child = build_renderable(&child_kind, child_input, options);
+            Box::new(rich_rust::renderables::Constrain::new_boxed(child, width))
+        }
         "markdown" => {
             #[cfg(feature = "markdown")]
             {

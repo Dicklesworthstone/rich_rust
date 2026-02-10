@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-02-10T16:14:37.564090+00:00",
+  "generated_at": "2026-02-10T17:19:22.831466+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -446,6 +446,54 @@
         "ansi": "            \n  Padded    \n            \n"
       },
       "notes": null
+    },
+    {
+      "id": "constrain/rule_width_10",
+      "kind": "constrain",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 40
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "child_kind": "rule",
+        "child_input": {
+          "title": "",
+          "align": "center",
+          "character": "─"
+        },
+        "width": 10
+      },
+      "expected": {
+        "plain": "──────────\n",
+        "ansi": "\u001b[92m──────────\u001b[0m\n"
+      },
+      "notes": "Constrain should cap Rule width to 10 even if console width is larger."
+    },
+    {
+      "id": "constrain/none_passthrough",
+      "kind": "constrain",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 20
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "child_kind": "rule",
+        "child_input": {
+          "title": "",
+          "align": "center",
+          "character": "─"
+        },
+        "width": null
+      },
+      "expected": {
+        "plain": "────────────────────\n",
+        "ansi": "\u001b[92m────────────────────\u001b[0m\n"
+      },
+      "notes": "width=None should be pass-through (Rule spans console width)."
     },
     {
       "id": "align/center",

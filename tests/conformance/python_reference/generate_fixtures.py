@@ -209,6 +209,28 @@ CASES = [
         "input": {"text": "Padded", "pad": [1, 2, 1, 2]},
     },
     {
+        "id": "constrain/rule_width_10",
+        "kind": "constrain",
+        "render_options": {"width": 40},
+        "input": {
+            "child_kind": "rule",
+            "child_input": {"title": "", "align": "center", "character": "─"},
+            "width": 10,
+        },
+        "notes": "Constrain should cap Rule width to 10 even if console width is larger.",
+    },
+    {
+        "id": "constrain/none_passthrough",
+        "kind": "constrain",
+        "render_options": {"width": 20},
+        "input": {
+            "child_kind": "rule",
+            "child_input": {"title": "", "align": "center", "character": "─"},
+            "width": None,
+        },
+        "notes": "width=None should be pass-through (Rule spans console width).",
+    },
+    {
         "id": "align/center",
         "kind": "align",
         "input": {"text": "Centered", "width": 20, "align": "center"},
@@ -407,6 +429,17 @@ def build_renderable(case: Dict[str, Any]):
                 return self._markup
 
         return RichCastable(inp.get("markup", ""))
+
+    if kind == "constrain":
+        from rich.constrain import Constrain  # type: ignore
+
+        child_kind = inp.get("child_kind", "rule")
+        child_input = inp.get("child_input", {})
+        width = inp.get("width", 80)
+
+        child_case = {"kind": child_kind, "input": child_input}
+        child = build_renderable(child_case)
+        return Constrain(child, width=width)
 
     if kind == "rule":
         return Rule(inp.get("title", ""), characters=inp.get("character", "─"), align=inp.get("align", "center"))
