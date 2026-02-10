@@ -1201,13 +1201,16 @@ impl Console {
                     write!(writer, "\x1b[{n}D")?;
                 }
                 crate::segment::ControlType::CursorMoveToColumn => {
-                    let column = control_param(&control.params, 0, 1);
-                    write!(writer, "\x1b[{column}G")?;
+                    // Python Rich expects 0-based columns in ControlCode parameters and
+                    // formats with +1 (terminal control sequences are 1-based).
+                    let column0 = control_param(&control.params, 0, 0);
+                    write!(writer, "\x1b[{}G", column0 + 1)?;
                 }
                 crate::segment::ControlType::CursorMoveTo => {
-                    let row = control_param(&control.params, 0, 1);
-                    let column = control_param(&control.params, 1, 1);
-                    write!(writer, "\x1b[{row};{column}H")?;
+                    // Python Rich stores (x, y) 0-based and formats as (y+1; x+1).
+                    let x0 = control_param(&control.params, 0, 0);
+                    let y0 = control_param(&control.params, 1, 0);
+                    write!(writer, "\x1b[{};{}H", y0 + 1, x0 + 1)?;
                 }
                 crate::segment::ControlType::EraseInLine => {
                     let mode = erase_in_line_mode(&control.params);
