@@ -1,6 +1,6 @@
 {
   "rich_version": "13.9.4",
-  "generated_at": "2026-01-27T22:05:06.895763+00:00",
+  "generated_at": "2026-02-10T06:22:17.498573+00:00",
   "defaults": {
     "width": 40,
     "color_system": "truecolor",
@@ -446,6 +446,79 @@
       "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage."
     },
     {
+      "id": "markdown/fenced_code_rust",
+      "kind": "markdown",
+      "compare_ansi": false,
+      "render_options": {
+        "width": 60
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "text": "```rust\nfn main() { println!(\"hi\"); }\n```"
+      },
+      "expected": {
+        "plain": "                                                            \n fn main() { println!(\"hi\"); }                              \n                                                            \n",
+        "ansi": "\u001b[48;2;39;40;34m                                                            \u001b[0m\n\u001b[48;2;39;40;34m \u001b[0m\u001b[38;2;102;217;239;48;2;39;40;34mfn\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mmain\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m{\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;166;226;46;48;2;39;40;34mprintln!\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m(\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34mhi\u001b[0m\u001b[38;2;230;219;116;48;2;39;40;34m\"\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m)\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m;\u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m \u001b[0m\u001b[38;2;248;248;242;48;2;39;40;34m}\u001b[0m\u001b[48;2;39;40;34m                             \u001b[0m\u001b[48;2;39;40;34m \u001b[0m\n\u001b[48;2;39;40;34m                                                            \u001b[0m\n"
+      },
+      "notes": "Python Rich Markdown uses Pygments-based syntax highlighting for fenced code blocks; Rust uses syntect so ANSI differs. Plain output comparison guards layout/padding."
+    },
+    {
+      "id": "markdown/link",
+      "kind": "markdown",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 60
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "text": "This is a [link](https://example.com)."
+      },
+      "expected": {
+        "plain": "This is a link.                                             \n",
+        "ansi": "This is a \u001b]8;;https://example.com\u001b\\\u001b[4;34mlink\u001b[0m\u001b]8;;\u001b\\.                                             \n"
+      },
+      "notes": "Default Markdown link behavior: OSC8 hyperlink with no URL suffix."
+    },
+    {
+      "id": "markdown/link_hyperlinks_false",
+      "kind": "markdown",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 60
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "text": "[link](https://example.com)",
+        "hyperlinks": false
+      },
+      "expected": {
+        "plain": "link (https://example.com)                                  \n",
+        "ansi": "\u001b[94mlink\u001b[0m (\u001b[4;34mhttps://example.com\u001b[0m)                                  \n"
+      },
+      "notes": "Markdown hyperlinks disabled: render `text (url)` with styled URL suffix (no OSC8)."
+    },
+    {
+      "id": "markdown/image",
+      "kind": "markdown",
+      "compare_ansi": true,
+      "render_options": {
+        "width": 60
+      },
+      "env": null,
+      "theme": null,
+      "input": {
+        "text": "![alt text](https://example.com/img.png)"
+      },
+      "expected": {
+        "plain": "🌆 alt text                                                 \n",
+        "ansi": "🌆 \u001b]8;;https://example.com/img.png\u001b\\alt text\u001b]8;;\u001b\\                                                 \n"
+      },
+      "notes": "Images render as an emoji + alt text; with hyperlinks enabled, the alt text is an OSC8 hyperlink."
+    },
+    {
       "id": "json/basic",
       "kind": "json",
       "compare_ansi": true,
@@ -476,6 +549,73 @@
         "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"items\"\u001b[0m: \u001b[1m[\u001b[0m\n    \u001b[1m{\u001b[0m\n      \u001b[1;34m\"id\"\u001b[0m: \u001b[1;36m1\u001b[0m,\n      \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"A\"\u001b[0m\n    \u001b[1m}\u001b[0m,\n    \u001b[1m{\u001b[0m\n      \u001b[1;34m\"id\"\u001b[0m: \u001b[1;36m2\u001b[0m,\n      \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"B\"\u001b[0m\n    \u001b[1m}\u001b[0m\n  \u001b[1m]\u001b[0m\n\u001b[1m}\u001b[0m\n"
       },
       "notes": "Nested structures with default JSON styling."
+    },
+    {
+      "id": "json/compact_indent_none",
+      "kind": "json",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "theme": null,
+      "input": {
+        "json": "{\"age\": 30, \"name\": \"Alice\"}",
+        "indent": null
+      },
+      "expected": {
+        "plain": "{\"age\": 30, \"name\": \"Alice\"}\n",
+        "ansi": "\u001b[1m{\u001b[0m\u001b[1;34m\"age\"\u001b[0m: \u001b[1;36m30\u001b[0m, \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"Alice\"\u001b[0m\u001b[1m}\u001b[0m\n"
+      },
+      "notes": "Python Rich JSON compact mode via indent=None."
+    },
+    {
+      "id": "json/indent_tab",
+      "kind": "json",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "theme": null,
+      "input": {
+        "json": "{\"age\": 30, \"name\": \"Alice\"}",
+        "indent": "\t"
+      },
+      "expected": {
+        "plain": "{\n        \"age\": 30,\n        \"name\": \"Alice\"\n}\n",
+        "ansi": "\u001b[1m{\u001b[0m\n        \u001b[1;34m\"age\"\u001b[0m: \u001b[1;36m30\u001b[0m,\n        \u001b[1;34m\"name\"\u001b[0m: \u001b[32m\"Alice\"\u001b[0m\n\u001b[1m}\u001b[0m\n"
+      },
+      "notes": "Python Rich JSON supports string indents (tabs are expanded in Text)."
+    },
+    {
+      "id": "json/bools_null",
+      "kind": "json",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "theme": null,
+      "input": {
+        "json": "{\"b\": true, \"f\": false, \"n\": null}"
+      },
+      "expected": {
+        "plain": "{\n  \"b\": true,\n  \"f\": false,\n  \"n\": null\n}\n",
+        "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"b\"\u001b[0m: \u001b[3;92mtrue\u001b[0m,\n  \u001b[1;34m\"f\"\u001b[0m: \u001b[3;91mfalse\u001b[0m,\n  \u001b[1;34m\"n\"\u001b[0m: \u001b[3;35mnull\u001b[0m\n\u001b[1m}\u001b[0m\n"
+      },
+      "notes": "Boolean and null styling parity (true/false distinct colors + italic, null italic magenta)."
+    },
+    {
+      "id": "json/ensure_ascii",
+      "kind": "json",
+      "compare_ansi": true,
+      "render_options": null,
+      "env": null,
+      "theme": null,
+      "input": {
+        "json": "{\"greeting\": \"こんにちは\"}",
+        "ensure_ascii": true
+      },
+      "expected": {
+        "plain": "{\n  \"greeting\": \n\"\\u3053\\u3093\\u306b\\u3061\\u306f\"\n}\n",
+        "ansi": "\u001b[1m{\u001b[0m\n  \u001b[1;34m\"greeting\"\u001b[0m: \n\u001b[32m\"\\u3053\\u3093\\u306b\\u3061\\u306f\"\u001b[0m\n\u001b[1m}\u001b[0m\n"
+      },
+      "notes": "Python Rich JSON passes ensure_ascii through to json.dumps."
     },
     {
       "id": "syntax/basic",

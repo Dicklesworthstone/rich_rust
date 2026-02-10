@@ -206,6 +206,38 @@ CASES = [
         "notes": "force_terminal=false disables ANSI; compare_ansi=true ensures no SGR leakage.",
     },
     {
+        "id": "markdown/fenced_code_rust",
+        "kind": "markdown",
+        "compare_ansi": False,
+        "render_options": {"width": 60},
+        "input": {"text": "```rust\nfn main() { println!(\"hi\"); }\n```"},
+        "notes": "Python Rich Markdown uses Pygments-based syntax highlighting for fenced code blocks; Rust uses syntect so ANSI differs. Plain output comparison guards layout/padding.",
+    },
+    {
+        "id": "markdown/link",
+        "kind": "markdown",
+        "compare_ansi": True,
+        "render_options": {"width": 60},
+        "input": {"text": "This is a [link](https://example.com)."},
+        "notes": "Default Markdown link behavior: OSC8 hyperlink with no URL suffix.",
+    },
+    {
+        "id": "markdown/link_hyperlinks_false",
+        "kind": "markdown",
+        "compare_ansi": True,
+        "render_options": {"width": 60},
+        "input": {"text": "[link](https://example.com)", "hyperlinks": False},
+        "notes": "Markdown hyperlinks disabled: render `text (url)` with styled URL suffix (no OSC8).",
+    },
+    {
+        "id": "markdown/image",
+        "kind": "markdown",
+        "compare_ansi": True,
+        "render_options": {"width": 60},
+        "input": {"text": "![alt text](https://example.com/img.png)"},
+        "notes": "Images render as an emoji + alt text; with hyperlinks enabled, the alt text is an OSC8 hyperlink.",
+    },
+    {
         "id": "json/basic",
         "kind": "json",
         "compare_ansi": True,
@@ -220,6 +252,34 @@ CASES = [
             "json": "{\"items\": [{\"id\": 1, \"name\": \"A\"}, {\"id\": 2, \"name\": \"B\"}]}"
         },
         "notes": "Nested structures with default JSON styling.",
+    },
+    {
+        "id": "json/compact_indent_none",
+        "kind": "json",
+        "compare_ansi": True,
+        "input": {"json": "{\"age\": 30, \"name\": \"Alice\"}", "indent": None},
+        "notes": "Python Rich JSON compact mode via indent=None.",
+    },
+    {
+        "id": "json/indent_tab",
+        "kind": "json",
+        "compare_ansi": True,
+        "input": {"json": "{\"age\": 30, \"name\": \"Alice\"}", "indent": "\t"},
+        "notes": "Python Rich JSON supports string indents (tabs are expanded in Text).",
+    },
+    {
+        "id": "json/bools_null",
+        "kind": "json",
+        "compare_ansi": True,
+        "input": {"json": "{\"b\": true, \"f\": false, \"n\": null}"},
+        "notes": "Boolean and null styling parity (true/false distinct colors + italic, null italic magenta).",
+    },
+    {
+        "id": "json/ensure_ascii",
+        "kind": "json",
+        "compare_ansi": True,
+        "input": {"json": "{\"greeting\": \"こんにちは\"}", "ensure_ascii": True},
+        "notes": "Python Rich JSON passes ensure_ascii through to json.dumps.",
     },
     {
         "id": "syntax/basic",
@@ -370,11 +430,21 @@ def build_renderable(case: Dict[str, Any]):
 
     if kind == "markdown":
         text = inp.get("text", "")
-        return Markdown(text)
+        hyperlinks = inp.get("hyperlinks", True)
+        return Markdown(text, hyperlinks=hyperlinks)
 
     if kind == "json":
         json_text = inp.get("json", "{}")
-        return JSON(json_text)
+        kwargs: Dict[str, Any] = {}
+        if "indent" in inp:
+            kwargs["indent"] = inp["indent"]
+        if "highlight" in inp:
+            kwargs["highlight"] = inp["highlight"]
+        if "ensure_ascii" in inp:
+            kwargs["ensure_ascii"] = inp["ensure_ascii"]
+        if "sort_keys" in inp:
+            kwargs["sort_keys"] = inp["sort_keys"]
+        return JSON(json_text, **kwargs)
 
     if kind == "syntax":
         code = inp.get("code", "")

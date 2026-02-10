@@ -114,14 +114,16 @@
 //!   per-token segment creation
 //! - **Streaming**: Does not support streaming JSON parsing; the entire document
 //!   must fit in memory
-//! - **Compact output**: Python Rich supports compact output via `indent=None`.
-//!   rich_rust currently only supports pretty output; tracked in `bd-2zpy`.
 //! - **Trailing commas**: Standard JSON only; no trailing comma support
-//! - **Python Rich option parity**: Python Rich `JSON` supports options such as
-//!   `indent: None|int|str`, `ensure_ascii`, and `from_data(...)`. Tracked in `bd-2zpy`.
+//! - **Python Rich JSON option parity**: `rich_rust` matches Python Rich JSON formatting
+//!   for the supported option set (`indent: None|int|str`, `sort_keys`, `ensure_ascii`,
+//!   `highlight`). Python-only options such as `check_circular`, `allow_nan`, and `default`
+//!   exist in Python's `json.dumps` API but don't map cleanly to Rust's `serde_json`
+//!   value model.
 
 use std::fmt::Write as _;
 
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::segment::Segment;
@@ -136,8 +138,10 @@ pub struct JsonTheme {
     pub string: Style,
     /// Style for number values.
     pub number: Style,
-    /// Style for boolean values (true/false).
-    pub boolean: Style,
+    /// Style for boolean `true`.
+    pub bool_true: Style,
+    /// Style for boolean `false`.
+    pub bool_false: Style,
     /// Style for null values.
     pub null: Style,
     /// Style for brackets and braces.
@@ -148,17 +152,75 @@ pub struct JsonTheme {
 
 impl Default for JsonTheme {
     fn default() -> Self {
+        // These defaults are intended to match Python Rich's theme defaults:
+        // - json.key: bold blue
+        // - json.str: green
+        // - json.number: bold cyan
+        // - json.bool_true: bright_green italic
+        // - json.bool_false: bright_red italic
+        // - json.null: magenta italic
+        // - json.brace: bold
         Self {
             key: Style::new().color_str("blue").unwrap_or_default().bold(),
             string: Style::new().color_str("green").unwrap_or_default(),
             number: Style::new().color_str("cyan").unwrap_or_default().bold(),
-            boolean: Style::new().color_str("yellow").unwrap_or_default().bold(),
             null: Style::new()
                 .color_str("magenta")
                 .unwrap_or_default()
                 .italic(),
+            bool_true: Style::new()
+                .color_str("bright_green")
+                .unwrap_or_default()
+                .italic(),
+            bool_false: Style::new()
+                .color_str("bright_red")
+                .unwrap_or_default()
+                .italic(),
             bracket: Style::new().bold(),
             punctuation: Style::new(),
+        }
+    }
+}
+
+/// JSON indentation configuration (Python Rich compatible).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JsonIndent {
+    /// Compact mode (`indent=None` in Python): no newlines; still uses `": "` and `", "` separators.
+    None,
+    /// Indent using N spaces (`indent=int` in Python).
+    Spaces(usize),
+    /// Indent using the given string (`indent=str` in Python).
+    ///
+    /// Note: Tabs in the indent string are expanded to spaces using the console tab size
+    /// when rendering, matching Rich's default `Text.expand_tabs` behavior.
+    String(String),
+}
+
+impl Default for JsonIndent {
+    fn default() -> Self {
+        Self::Spaces(2)
+    }
+}
+
+/// Formatting options for rendering JSON.
+///
+/// This is intentionally aligned with Python Rich's `rich.json.JSON` constructor options
+/// where they map cleanly to Rust.
+#[derive(Debug, Clone)]
+pub struct JsonOptions {
+    pub indent: JsonIndent,
+    pub highlight: bool,
+    pub sort_keys: bool,
+    pub ensure_ascii: bool,
+}
+
+impl Default for JsonOptions {
+    fn default() -> Self {
+        Self {
+            indent: JsonIndent::default(),
+            highlight: true,
+            sort_keys: false,
+            ensure_ascii: false,
         }
     }
 }
@@ -168,10 +230,12 @@ impl Default for JsonTheme {
 pub struct Json {
     /// The JSON value to render.
     value: Value,
-    /// Number of spaces for indentation.
-    indent: usize,
+    /// Indentation configuration (pretty vs compact).
+    indent: JsonIndent,
     /// Whether to sort object keys alphabetically.
     sort_keys: bool,
+    /// Whether to escape non-ASCII characters.
+    ensure_ascii: bool,
     /// Whether to apply syntax highlighting.
     highlight: bool,
     /// Theme for syntax highlighting.
@@ -184,9 +248,23 @@ impl Json {
     pub fn new(value: Value) -> Self {
         Self {
             value,
-            indent: 2,
+            indent: JsonIndent::default(),
             sort_keys: false,
+            ensure_ascii: false,
             highlight: true,
+            theme: JsonTheme::default(),
+        }
+    }
+
+    /// Create a new Json renderable from a `serde_json::Value` with explicit options.
+    #[must_use]
+    pub fn with_options(value: Value, options: JsonOptions) -> Self {
+        Self {
+            value,
+            indent: options.indent,
+            sort_keys: options.sort_keys,
+            ensure_ascii: options.ensure_ascii,
+            highlight: options.highlight,
             theme: JsonTheme::default(),
         }
     }
@@ -205,10 +283,44 @@ impl Json {
         Ok(Self::new(value))
     }
 
-    /// Set the number of spaces for indentation.
+    /// Create a Json renderable from a JSON string with explicit options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string is not valid JSON.
+    pub fn from_str_with_options(s: &str, options: JsonOptions) -> Result<Self, JsonError> {
+        let value: Value = serde_json::from_str(s).map_err(JsonError::Parse)?;
+        Ok(Self::with_options(value, options))
+    }
+
+    /// Encode JSON from serializable Rust data (Python Rich `JSON.from_data` equivalent).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails (e.g. non-finite floats).
+    pub fn from_data<T: Serialize>(data: &T) -> Result<Self, JsonError> {
+        let value = serde_json::to_value(data).map_err(JsonError::Serialize)?;
+        Ok(Self::new(value))
+    }
+
+    /// Set the number of spaces for indentation (pretty mode).
     #[must_use]
     pub fn indent(mut self, spaces: usize) -> Self {
-        self.indent = spaces;
+        self.indent = JsonIndent::Spaces(spaces);
+        self
+    }
+
+    /// Set a custom indentation string (pretty mode).
+    #[must_use]
+    pub fn indent_str(mut self, unit: impl Into<String>) -> Self {
+        self.indent = JsonIndent::String(unit.into());
+        self
+    }
+
+    /// Render JSON in compact mode (Python `indent=None`).
+    #[must_use]
+    pub fn compact(mut self) -> Self {
+        self.indent = JsonIndent::None;
         self
     }
 
@@ -216,6 +328,13 @@ impl Json {
     #[must_use]
     pub fn sort_keys(mut self, sort: bool) -> Self {
         self.sort_keys = sort;
+        self
+    }
+
+    /// Set whether to escape non-ASCII characters.
+    #[must_use]
+    pub fn ensure_ascii(mut self, ensure_ascii: bool) -> Self {
+        self.ensure_ascii = ensure_ascii;
         self
     }
 
@@ -242,32 +361,49 @@ impl Json {
         }
     }
 
+    fn is_compact(&self) -> bool {
+        matches!(self.indent, JsonIndent::None)
+    }
+
+    fn indent_prefix(&self, depth: usize, tab_size: usize) -> String {
+        match &self.indent {
+            JsonIndent::None => String::new(),
+            JsonIndent::Spaces(n) => " ".repeat(n.saturating_mul(depth)),
+            JsonIndent::String(unit) => expand_tabs_at_col0(&unit.repeat(depth), tab_size),
+        }
+    }
+
     /// Render a JSON value at the given depth.
-    fn render_value(&self, value: &Value, depth: usize) -> Vec<Segment<'_>> {
+    fn render_value(&self, value: &Value, depth: usize, tab_size: usize) -> Vec<Segment<'_>> {
         match value {
             Value::Null => vec![Segment::new("null", self.style(&self.theme.null))],
             Value::Bool(b) => {
                 let text = if *b { "true" } else { "false" };
-                vec![Segment::new(text, self.style(&self.theme.boolean))]
+                let style = if *b {
+                    self.style(&self.theme.bool_true)
+                } else {
+                    self.style(&self.theme.bool_false)
+                };
+                vec![Segment::new(text, style)]
             }
             Value::Number(n) => {
                 vec![Segment::new(n.to_string(), self.style(&self.theme.number))]
             }
             Value::String(s) => {
                 // Escape and quote the string
-                let escaped = escape_json_string(s);
+                let escaped = escape_json_string(s, self.ensure_ascii);
                 vec![Segment::new(
                     format!("\"{escaped}\""),
                     self.style(&self.theme.string),
                 )]
             }
-            Value::Array(arr) => self.render_array(arr, depth),
-            Value::Object(obj) => self.render_object(obj, depth),
+            Value::Array(arr) => self.render_array(arr, depth, tab_size),
+            Value::Object(obj) => self.render_object(obj, depth, tab_size),
         }
     }
 
     /// Render an array.
-    fn render_array(&self, arr: &[Value], depth: usize) -> Vec<Segment<'_>> {
+    fn render_array(&self, arr: &[Value], depth: usize, tab_size: usize) -> Vec<Segment<'_>> {
         const MAX_DEPTH: usize = 20;
         if depth > MAX_DEPTH {
             return vec![Segment::new("[...]", self.style(&self.theme.bracket))];
@@ -278,30 +414,33 @@ impl Json {
         }
 
         let mut segments = Vec::new();
-        let indent_str = " ".repeat(self.indent * (depth + 1));
-        let close_indent = " ".repeat(self.indent * depth);
 
         // Opening bracket
         segments.push(Segment::new("[", self.style(&self.theme.bracket)));
-        segments.push(Segment::new("\n", None));
-
-        for (i, item) in arr.iter().enumerate() {
-            // Indent
-            segments.push(Segment::new(indent_str.clone(), None));
-
-            // Value
-            segments.extend(self.render_value(item, depth + 1));
-
-            // Comma (except for last item)
-            if i < arr.len() - 1 {
-                segments.push(Segment::new(",", self.style(&self.theme.punctuation)));
+        if self.is_compact() {
+            for (i, item) in arr.iter().enumerate() {
+                segments.extend(self.render_value(item, depth + 1, tab_size));
+                if i < arr.len() - 1 {
+                    segments.push(Segment::new(", ", self.style(&self.theme.punctuation)));
+                }
             }
-            segments.push(Segment::new("\n", None));
-        }
+            segments.push(Segment::new("]", self.style(&self.theme.bracket)));
+        } else {
+            let indent_str = self.indent_prefix(depth + 1, tab_size);
+            let close_indent = self.indent_prefix(depth, tab_size);
 
-        // Closing bracket
-        segments.push(Segment::new(close_indent, None));
-        segments.push(Segment::new("]", self.style(&self.theme.bracket)));
+            segments.push(Segment::new("\n", None));
+            for (i, item) in arr.iter().enumerate() {
+                segments.push(Segment::new(indent_str.clone(), None));
+                segments.extend(self.render_value(item, depth + 1, tab_size));
+                if i < arr.len() - 1 {
+                    segments.push(Segment::new(",", self.style(&self.theme.punctuation)));
+                }
+                segments.push(Segment::new("\n", None));
+            }
+            segments.push(Segment::new(close_indent, None));
+            segments.push(Segment::new("]", self.style(&self.theme.bracket)));
+        }
 
         segments
     }
@@ -311,6 +450,7 @@ impl Json {
         &self,
         obj: &serde_json::Map<String, Value>,
         depth: usize,
+        tab_size: usize,
     ) -> Vec<Segment<'_>> {
         const MAX_DEPTH: usize = 20;
         if depth > MAX_DEPTH {
@@ -322,8 +462,6 @@ impl Json {
         }
 
         let mut segments = Vec::new();
-        let indent_str = " ".repeat(self.indent * (depth + 1));
-        let close_indent = " ".repeat(self.indent * depth);
 
         // Get keys, optionally sorted
         let keys: Vec<&String> = if self.sort_keys {
@@ -336,45 +474,59 @@ impl Json {
 
         // Opening brace
         segments.push(Segment::new("{", self.style(&self.theme.bracket)));
-        segments.push(Segment::new("\n", None));
-
-        for (i, key) in keys.iter().enumerate() {
-            let value = &obj[*key];
-
-            // Indent
-            segments.push(Segment::new(indent_str.clone(), None));
-
-            // Key (quoted)
-            let escaped_key = escape_json_string(key);
-            segments.push(Segment::new(
-                format!("\"{escaped_key}\""),
-                self.style(&self.theme.key),
-            ));
-
-            // Colon
-            segments.push(Segment::new(": ", self.style(&self.theme.punctuation)));
-
-            // Value
-            segments.extend(self.render_value(value, depth + 1));
-
-            // Comma (except for last item)
-            if i < keys.len() - 1 {
-                segments.push(Segment::new(",", self.style(&self.theme.punctuation)));
+        if self.is_compact() {
+            for (i, key) in keys.iter().enumerate() {
+                let value = &obj[*key];
+                let escaped_key = escape_json_string(key, self.ensure_ascii);
+                segments.push(Segment::new(
+                    format!("\"{escaped_key}\""),
+                    self.style(&self.theme.key),
+                ));
+                segments.push(Segment::new(": ", self.style(&self.theme.punctuation)));
+                segments.extend(self.render_value(value, depth + 1, tab_size));
+                if i < keys.len() - 1 {
+                    segments.push(Segment::new(", ", self.style(&self.theme.punctuation)));
+                }
             }
-            segments.push(Segment::new("\n", None));
-        }
+            segments.push(Segment::new("}", self.style(&self.theme.bracket)));
+        } else {
+            let indent_str = self.indent_prefix(depth + 1, tab_size);
+            let close_indent = self.indent_prefix(depth, tab_size);
 
-        // Closing brace
-        segments.push(Segment::new(close_indent, None));
-        segments.push(Segment::new("}", self.style(&self.theme.bracket)));
+            segments.push(Segment::new("\n", None));
+            for (i, key) in keys.iter().enumerate() {
+                let value = &obj[*key];
+                segments.push(Segment::new(indent_str.clone(), None));
+
+                let escaped_key = escape_json_string(key, self.ensure_ascii);
+                segments.push(Segment::new(
+                    format!("\"{escaped_key}\""),
+                    self.style(&self.theme.key),
+                ));
+                segments.push(Segment::new(": ", self.style(&self.theme.punctuation)));
+                segments.extend(self.render_value(value, depth + 1, tab_size));
+                if i < keys.len() - 1 {
+                    segments.push(Segment::new(",", self.style(&self.theme.punctuation)));
+                }
+                segments.push(Segment::new("\n", None));
+            }
+            segments.push(Segment::new(close_indent, None));
+            segments.push(Segment::new("}", self.style(&self.theme.bracket)));
+        }
 
         segments
     }
 
-    /// Render the JSON to segments.
+    /// Render the JSON to segments, using the given tab size for indentation expansion.
+    #[must_use]
+    pub fn render_with_tab_size(&self, tab_size: usize) -> Vec<Segment<'_>> {
+        self.render_value(&self.value, 0, tab_size)
+    }
+
+    /// Render the JSON to segments using the default tab size (8).
     #[must_use]
     pub fn render(&self) -> Vec<Segment<'_>> {
-        self.render_value(&self.value, 0)
+        self.render_with_tab_size(8)
     }
 
     /// Render to a plain string without ANSI codes.
@@ -385,15 +537,31 @@ impl Json {
 }
 
 /// Escape special characters in a JSON string.
-fn escape_json_string(s: &str) -> String {
+fn escape_json_string(s: &str, ensure_ascii: bool) -> String {
     let mut result = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
             '"' => result.push_str("\\\""),
             '\\' => result.push_str("\\\\"),
+            '\u{0008}' => result.push_str("\\b"),
+            '\u{000c}' => result.push_str("\\f"),
             '\n' => result.push_str("\\n"),
             '\r' => result.push_str("\\r"),
             '\t' => result.push_str("\\t"),
+            c if ensure_ascii && !c.is_ascii() => {
+                let code = c as u32;
+                if code <= 0xFFFF {
+                    let _ = write!(result, "\\u{code:04x}");
+                } else {
+                    // Encode as UTF-16 surrogate pair.
+                    let n = code - 0x1_0000;
+                    let high_bits = u16::try_from((n >> 10) & 0x03FF).unwrap_or_default();
+                    let low_bits = u16::try_from(n & 0x03FF).unwrap_or_default();
+                    let high = 0xD800u16 | high_bits;
+                    let low = 0xDC00u16 | low_bits;
+                    let _ = write!(result, "\\u{high:04x}\\u{low:04x}");
+                }
+            }
             c if c.is_control() => {
                 let _ = write!(result, "\\u{:04x}", c as u32);
             }
@@ -403,17 +571,35 @@ fn escape_json_string(s: &str) -> String {
     result
 }
 
+fn expand_tabs_at_col0(s: &str, tab_size: usize) -> String {
+    if tab_size == 0 || !s.contains('\t') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch == '\t' {
+            out.push_str(&" ".repeat(tab_size));
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 /// Error type for JSON parsing.
 #[derive(Debug)]
 pub enum JsonError {
     /// JSON parsing error.
     Parse(serde_json::Error),
+    /// JSON serialization error.
+    Serialize(serde_json::Error),
 }
 
 impl std::fmt::Display for JsonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Parse(e) => write!(f, "JSON parse error: {e}"),
+            Self::Serialize(e) => write!(f, "JSON serialize error: {e}"),
         }
     }
 }
@@ -422,6 +608,7 @@ impl std::error::Error for JsonError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Parse(e) => Some(e),
+            Self::Serialize(e) => Some(e),
         }
     }
 }
@@ -487,6 +674,13 @@ mod tests {
     }
 
     #[test]
+    fn test_json_string_ensure_ascii_surrogate_pair() {
+        let json = Json::new(serde_json::json!("😀")).ensure_ascii(true);
+        let text = json.to_plain_string();
+        assert_eq!(text, "\"\\ud83d\\ude00\"");
+    }
+
+    #[test]
     fn test_json_empty_array() {
         let json = Json::new(serde_json::json!([]));
         let segments = json.render();
@@ -524,6 +718,19 @@ mod tests {
     }
 
     #[test]
+    fn test_json_compact_object_has_spaces() {
+        let json = Json::new(serde_json::json!({"age": 30, "name": "Alice"})).compact();
+        let text = json.to_plain_string();
+        assert!(text.starts_with('{'));
+        assert!(text.ends_with('}'));
+        assert!(text.contains("\"age\": 30"));
+        assert!(text.contains(", \"name\""));
+        assert!(text.contains(": "));
+        assert!(text.contains(", "));
+        assert!(!text.contains('\n'));
+    }
+
+    #[test]
     fn test_json_nested_object() {
         let json = Json::new(serde_json::json!({
             "person": {
@@ -552,6 +759,16 @@ mod tests {
     fn test_json_from_str_invalid() {
         let result = Json::from_str("not valid json");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_json_from_data_round_trip() {
+        #[derive(Serialize)]
+        struct X {
+            a: i32,
+        }
+        let json = Json::from_data(&X { a: 1 }).unwrap();
+        assert!(json.to_plain_string().contains("\"a\""));
     }
 
     #[test]
@@ -629,11 +846,13 @@ mod tests {
 
     #[test]
     fn test_escape_json_string() {
-        assert_eq!(escape_json_string("hello"), "hello");
-        assert_eq!(escape_json_string("say \"hi\""), "say \\\"hi\\\"");
-        assert_eq!(escape_json_string("a\\b"), "a\\\\b");
-        assert_eq!(escape_json_string("line1\nline2"), "line1\\nline2");
-        assert_eq!(escape_json_string("tab\there"), "tab\\there");
+        assert_eq!(escape_json_string("hello", false), "hello");
+        assert_eq!(escape_json_string("say \"hi\"", false), "say \\\"hi\\\"");
+        assert_eq!(escape_json_string("a\\b", false), "a\\\\b");
+        assert_eq!(escape_json_string("line1\nline2", false), "line1\\nline2");
+        assert_eq!(escape_json_string("tab\there", false), "tab\\there");
+        assert_eq!(escape_json_string("\u{0008}", false), "\\b");
+        assert_eq!(escape_json_string("\u{000c}", false), "\\f");
     }
 
     #[test]
@@ -642,7 +861,8 @@ mod tests {
             key: Style::new().color_str("red").unwrap_or_default(),
             string: Style::new().color_str("blue").unwrap_or_default(),
             number: Style::new().color_str("green").unwrap_or_default(),
-            boolean: Style::new().color_str("yellow").unwrap_or_default(),
+            bool_true: Style::new().color_str("yellow").unwrap_or_default(),
+            bool_false: Style::new().color_str("yellow").unwrap_or_default(),
             null: Style::new().color_str("white").unwrap_or_default(),
             bracket: Style::new().color_str("cyan").unwrap_or_default(),
             punctuation: Style::new().color_str("magenta").unwrap_or_default(),

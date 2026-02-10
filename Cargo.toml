@@ -61,6 +61,7 @@ pulldown-cmark = { version = "0.13", optional = true }
 
 # JSON rendering (Phase 4)
 serde_json = { version = "1.0", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
 
 # Backtrace capture for automatic traceback rendering
 backtrace = { version = "0.3", optional = true }
@@ -89,7 +90,7 @@ default = []
 conformance_test = ["full"]
 syntax = ["syntect"]
 markdown = ["pulldown-cmark"]
-json = ["serde_json"]
+json = ["serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 backtrace = ["dep:backtrace"]
 full = ["syntax", "markdown", "json", "backtrace"]

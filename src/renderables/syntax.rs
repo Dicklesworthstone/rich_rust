@@ -76,10 +76,10 @@
 //!
 //! # Known Limitations
 //!
-//! - **Theme loading**: Only the default syntect themes are available. Loading custom `.tmTheme`
-//!   files is tracked in `bd-2tch`.
-//! - **Syntax definitions**: Only default syntect syntax definitions are available. Loading custom
-//!   `.sublime-syntax` files is tracked in `bd-2tch`.
+//! - **Theme loading**: Custom `.tmTheme` loading is opt-in and requires reading and parsing theme
+//!   files from disk. Prefer reusing loaded theme sets to avoid repeated parsing.
+//! - **Syntax definitions**: Custom `.sublime-syntax` loading is opt-in and requires reading and
+//!   parsing syntax definitions from disk. Prefer reusing loaded syntax sets to avoid repeated parsing.
 //! - **Large files**: Rendering very large files may be slow due to per-line highlighting.
 //! - **Word wrap**: Wrap is supported (use `word_wrap(Some(width))`), and is whitespace-preserving
 //!   (tuned for code rather than prose reflow).
@@ -92,6 +92,7 @@ use crate::text::Text;
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
 use syntect::easy::HighlightLines;
@@ -111,6 +112,8 @@ pub enum SyntaxError {
     UnknownTheme(String),
     /// Failed to read the file.
     IoError(String),
+    /// Failed to load syntect assets from disk.
+    LoadError(String),
 }
 
 impl std::fmt::Display for SyntaxError {
@@ -119,6 +122,7 @@ impl std::fmt::Display for SyntaxError {
             Self::UnknownLanguage(lang) => write!(f, "Unknown language: {lang}"),
             Self::UnknownTheme(theme) => write!(f, "Unknown theme: {theme}"),
             Self::IoError(msg) => write!(f, "IO error: {msg}"),
+            Self::LoadError(msg) => write!(f, "Load error: {msg}"),
         }
     }
 }
@@ -153,6 +157,10 @@ pub struct Syntax {
     line_number_style: Style,
     /// Padding around the code block.
     padding: (usize, usize),
+    /// Optional custom syntax set (loaded from user paths).
+    custom_syntax_set: Option<Arc<SyntaxSet>>,
+    /// Optional custom theme set (loaded from user paths).
+    custom_theme_set: Option<Arc<ThemeSet>>,
 }
 
 impl Default for Syntax {
@@ -169,6 +177,8 @@ impl Default for Syntax {
             word_wrap: None,
             line_number_style: Style::new().color_str("bright_black").unwrap_or_default(),
             padding: (0, 0),
+            custom_syntax_set: None,
+            custom_theme_set: None,
         }
     }
 }
@@ -205,6 +215,48 @@ impl Syntax {
             .map_or_else(|| String::from("text"), Self::extension_to_language);
 
         Ok(Self::new(code, language))
+    }
+
+    /// Load a syntect syntax set from a folder of `.sublime-syntax` definitions.
+    ///
+    /// Use this to opt-in to custom / user-provided syntax definitions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder can't be read or the definitions can't be parsed.
+    pub fn load_syntaxes_from_folder(
+        folder: impl AsRef<Path>,
+    ) -> Result<Arc<SyntaxSet>, SyntaxError> {
+        SyntaxSet::load_from_folder(folder)
+            .map(Arc::new)
+            .map_err(|e| SyntaxError::LoadError(e.to_string()))
+    }
+
+    /// Load a syntect theme set from a folder of `.tmTheme` files.
+    ///
+    /// Use this to opt-in to custom / user-provided themes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the folder can't be read or the themes can't be parsed.
+    pub fn load_themes_from_folder(folder: impl AsRef<Path>) -> Result<Arc<ThemeSet>, SyntaxError> {
+        ThemeSet::load_from_folder(folder)
+            .map(Arc::new)
+            .map_err(|e| SyntaxError::LoadError(e.to_string()))
+    }
+
+    /// Provide a custom syntect syntax set (e.g. loaded via [`Self::load_syntaxes_from_folder`]).
+    #[must_use]
+    pub fn syntax_set(mut self, syntax_set: Arc<SyntaxSet>) -> Self {
+        self.custom_syntax_set = Some(syntax_set);
+        self
+    }
+
+    /// Provide a custom syntect theme set (e.g. loaded via [`Self::load_themes_from_folder`]).
+    #[must_use]
+    pub fn theme_set(mut self, theme_set: Arc<ThemeSet>) -> Self {
+        self.custom_theme_set = Some(theme_set);
+        self
     }
 
     /// Map file extension to language name.
@@ -340,8 +392,8 @@ impl Syntax {
     ///
     /// Returns an error if the theme or language is not found.
     pub fn render(&self, max_width: Option<usize>) -> Result<Vec<Segment<'_>>, SyntaxError> {
-        let ps = &*SYNTAX_SET;
-        let ts = &*THEME_SET;
+        let ps: &SyntaxSet = self.custom_syntax_set.as_deref().unwrap_or(&*SYNTAX_SET);
+        let ts: &ThemeSet = self.custom_theme_set.as_deref().unwrap_or(&*THEME_SET);
 
         // Find the syntax definition
         let syntax = ps
@@ -751,6 +803,7 @@ fn pad_segments_to_width(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_syntax_new() {
@@ -1110,5 +1163,73 @@ mod tests {
                 .attributes
                 .contains(Attributes::BOLD)
         );
+    }
+
+    #[test]
+    fn test_custom_theme_and_syntax_loading_from_folder() {
+        // Create a unique temp folder (we don't delete it; this avoids any ambiguity
+        // about destructive filesystem operations in agent environments).
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("rich_rust_syntect_custom_{nonce}"));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+
+        // Minimal tmTheme (plist) that syntect can parse.
+        let theme_path = root.join("TestTheme.tmTheme");
+        let theme = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>TestTheme</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>background</key><string>#ffffff</string>
+        <key>foreground</key><string>#000000</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+"#;
+        std::fs::write(&theme_path, theme).expect("write theme");
+
+        // Minimal sublime-syntax definition.
+        let syntax_path = root.join("TestLang.sublime-syntax");
+        let syntax_def = r"%YAML 1.2
+---
+name: TestLang
+file_extensions:
+  - testlang
+scope: source.testlang
+contexts:
+  main:
+    - match: '.+'
+      scope: text.plain
+...
+";
+        std::fs::write(&syntax_path, syntax_def).expect("write syntax");
+
+        let theme_set = Syntax::load_themes_from_folder(&root).expect("load themes");
+        assert!(
+            theme_set.themes.contains_key("TestTheme"),
+            "expected TestTheme in loaded theme set"
+        );
+        let syntax_set = Syntax::load_syntaxes_from_folder(&root).expect("load syntaxes");
+
+        let code = "hello\n";
+        let syntax = Syntax::new(code, "testlang")
+            .syntax_set(syntax_set)
+            .theme_set(theme_set)
+            .theme("TestTheme");
+
+        let rendered = syntax.render(Some(40)).expect("render with custom assets");
+        let plain: String = rendered.iter().map(|s| s.text.as_ref()).collect();
+        assert!(plain.contains("hello"));
     }
 }

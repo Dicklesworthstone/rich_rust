@@ -1034,22 +1034,25 @@ impl Text {
 
                     if current_width + char_width > width {
                         // Need to wrap
-                        let wrap_at = if let Some(space_pos) = last_space {
-                            if space_pos > current_line_start {
-                                space_pos
+                        let (wrap_at, next_start) = if let Some(space_pos) = last_space {
+                            if space_pos > current_line_start && space_pos < i {
+                                // Preserve the whitespace we wrapped at on the previous line.
+                                // This matches Python Rich's wrapping behavior and matters for
+                                // renderables that include significant trailing spaces (e.g. `": "`).
+                                (space_pos + 1, space_pos + 1)
                             } else {
-                                i
+                                (i, i)
                             }
                         } else {
-                            i
+                            (i, i)
                         };
 
                         if wrap_at > current_line_start {
                             result.push(line.slice(current_line_start, wrap_at));
                         }
 
-                        // Skip whitespace at wrap point
-                        current_line_start = wrap_at;
+                        // Skip whitespace at wrap point (but keep the first break-space above if we chose it)
+                        current_line_start = next_start;
                         while current_line_start < chars.len()
                             && chars[current_line_start].is_whitespace()
                         {
@@ -1548,6 +1551,15 @@ mod tests {
         for line in &lines {
             assert!(line.cell_len() <= 10);
         }
+    }
+
+    #[test]
+    fn test_wrap_preserves_break_space() {
+        let text = Text::new("a b");
+        let lines = text.wrap(2);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].plain(), "a ");
+        assert_eq!(lines[1].plain(), "b");
     }
 
     #[test]

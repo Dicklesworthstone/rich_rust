@@ -80,29 +80,22 @@
 //! ```rust,ignore
 //! use rich_rust::renderables::markdown::Markdown;
 //!
-//! // Show URLs after link text (default)
+//! // Python Rich behavior:
+//! // - `hyperlinks=true` (default): render the link text only, with an OSC8 hyperlink.
+//! // - `hyperlinks=false`: render `text (url)` with a styled URL suffix (no OSC8).
 //! let md = Markdown::new("[Click here](https://example.com)")
-//!     .show_links(true);
-//! // Output: "Click here (https://example.com)"
-//!
-//! // Hide URLs, show only link text
-//! let md = Markdown::new("[Click here](https://example.com)")
-//!     .show_links(false);
-//! // Output: "Click here"
+//!     .hyperlinks(true);
 //! ```
 //!
 //! # Known Limitations
 //!
-//! - **Images**: rich_rust currently does not render images. Python Rich renders images as
-//!   an emoji + alt text with an OSC8 hyperlink to the image URL. Tracked in `bd-3d0j`.
+//! - **Images**: Rendered as an emoji + alt text. With `hyperlinks=true`, the alt text is an OSC8 hyperlink.
 //! - **HTML**: Inline HTML is ignored
 //! - **Footnotes**: Supported by the parser; rendering is minimal and may differ from Python Rich
 //! - **Task lists**: GitHub-style task lists (`- [ ]` / `- [x]`) render as checkboxes
-//! - **Fenced code blocks**: Language hints are parsed, but rich_rust currently renders fenced
-//!   blocks as styled text. Python Rich uses syntax highlighting for fenced code blocks.
-//!   Tracked in `bd-3nr3`.
-//! - **Hyperlinks**: rich_rust currently appends ` (url)` for links when `show_links=true`.
-//!   Python Rich uses OSC8 hyperlinks without appending the URL. Tracked in `bd-3d0j`.
+//! - **Fenced code blocks**: Language hints are parsed, but `rich_rust` renders fenced blocks as styled text
+//!   unless the `syntax` feature is enabled and a language is present (then it renders via `Syntax`).
+//! - **Hyperlinks**: Use `.hyperlinks(false)` to disable OSC8 and show a URL suffix (Python Rich-compatible).
 
 use std::fmt::Write;
 
@@ -110,7 +103,10 @@ use crate::cells;
 use crate::segment::Segment;
 use crate::style::Style;
 
-use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+
+#[cfg(feature = "syntax")]
+use crate::renderables::Syntax;
 
 /// A markdown document that can be rendered to the terminal.
 #[derive(Debug, Clone)]
@@ -137,6 +133,8 @@ pub struct Markdown {
     code_block_style: Style,
     /// Style for links.
     link_style: Style,
+    /// Style for link text when OSC8 hyperlinks are disabled (`hyperlinks=false`).
+    link_text_style: Style,
     /// Style for blockquotes.
     quote_style: Style,
     /// Style for table headers.
@@ -147,8 +145,8 @@ pub struct Markdown {
     bullet_char: char,
     /// Indent for nested lists.
     list_indent: usize,
-    /// Whether to show link URLs.
-    show_links: bool,
+    /// Whether to emit OSC8 hyperlinks for links and images.
+    hyperlinks: bool,
 }
 
 impl Default for Markdown {
@@ -180,9 +178,10 @@ impl Default for Markdown {
                 .bgcolor_str("bright_black")
                 .unwrap_or_default(),
             link_style: Style::new()
-                .color_str("bright_blue")
+                .color_str("blue")
                 .unwrap_or_default()
                 .underline(),
+            link_text_style: Style::new().color_str("bright_blue").unwrap_or_default(),
             quote_style: Style::new()
                 .italic()
                 .color_str("bright_black")
@@ -194,7 +193,7 @@ impl Default for Markdown {
             table_border_style: Style::new().color_str("bright_black").unwrap_or_default(),
             bullet_char: '•',
             list_indent: 2,
-            show_links: true,
+            hyperlinks: true,
         }
     }
 }
@@ -307,10 +306,14 @@ impl Markdown {
         self
     }
 
-    /// Set whether to show link URLs after link text.
+    /// Enable or disable OSC8 hyperlinks.
+    ///
+    /// Matches Python Rich's `Markdown(..., hyperlinks=...)` behavior:
+    /// - `true` (default): emit OSC8 hyperlinks and do not append ` (url)` for links.
+    /// - `false`: do not emit OSC8; render `text (url)` for links.
     #[must_use]
-    pub fn show_links(mut self, show: bool) -> Self {
-        self.show_links = show;
+    pub fn hyperlinks(mut self, enabled: bool) -> Self {
+        self.hyperlinks = enabled;
         self
     }
 
@@ -325,10 +328,15 @@ impl Markdown {
         let mut list_item_first_paragraph: Vec<bool> = Vec::new();
         let mut list_item_prefix_pending = false;
         let mut in_code_block = false;
+        let mut code_block_text = String::new();
+        let mut code_block_language: Option<String> = None;
+        let mut code_block_use_syntax = false;
+        let mut code_block_style_pushed = false;
         let mut in_blockquote = false;
         let mut blockquote_prefix_pending = false;
         let mut blockquote_first_paragraph = false;
         let mut current_link_url = String::new();
+        let mut image_style_pushed = false;
 
         // Table state
         let mut in_table = false;
@@ -355,6 +363,15 @@ impl Markdown {
                 combined = combined.combine(style);
             }
             Some(combined)
+        };
+
+        let parse_fence_language = |info: &str| -> Option<String> {
+            let lang = info.split_whitespace().next().unwrap_or("").trim();
+            if lang.is_empty() {
+                None
+            } else {
+                Some(lang.to_string())
+            }
         };
 
         // Helper macros to inline prefix logic (avoids borrow issues with closures)
@@ -431,16 +448,51 @@ impl Markdown {
                         Tag::Strikethrough => {
                             style_stack.push(self.strikethrough_style.clone());
                         }
-                        Tag::CodeBlock(_) => {
+                        Tag::CodeBlock(kind) => {
                             in_code_block = true;
+                            code_block_text.clear();
+                            code_block_language = None;
+                            code_block_style_pushed = false;
+
                             if !segments.is_empty() {
                                 segments.push(Segment::new("\n", None));
                             }
-                            style_stack.push(self.code_block_style.clone());
+
+                            // If this is a fenced code block with a language info string, and the
+                            // `syntax` feature is enabled, render through `Syntax` for parity with
+                            // Python Rich Markdown.
+                            if let CodeBlockKind::Fenced(info) = kind {
+                                code_block_language = parse_fence_language(info.as_ref());
+                            }
+                            code_block_use_syntax = cfg!(feature = "syntax")
+                                && code_block_language
+                                    .as_ref()
+                                    .is_some_and(|lang| !lang.is_empty());
+
+                            if !code_block_use_syntax {
+                                style_stack.push(self.code_block_style.clone());
+                                code_block_style_pushed = true;
+                            }
                         }
                         Tag::Link { dest_url, .. } => {
                             current_link_url = dest_url.to_string();
-                            style_stack.push(self.link_style.clone());
+                            if self.hyperlinks {
+                                style_stack
+                                    .push(self.link_style.clone().link(current_link_url.clone()));
+                            } else {
+                                style_stack.push(self.link_text_style.clone());
+                            }
+                        }
+                        Tag::Image { dest_url, .. } => {
+                            // Python Rich renders images as an emoji + alt text, optionally linked.
+                            ensure_blockquote_prefix!(segments);
+                            ensure_list_prefix!(segments);
+                            segments.push(Segment::new("🌆 ", None));
+                            image_style_pushed = false;
+                            if self.hyperlinks {
+                                style_stack.push(Style::new().link(dest_url.to_string()));
+                                image_style_pushed = true;
+                            }
                         }
                         Tag::BlockQuote(_) => {
                             in_blockquote = true;
@@ -516,20 +568,108 @@ impl Markdown {
                         }
                         TagEnd::CodeBlock => {
                             in_code_block = false;
-                            style_stack.pop();
-                            segments.push(Segment::new("\n", None));
+
+                            if code_block_use_syntax {
+                                // Render syntax-highlighted code block (plain layout parity; ANSI differs).
+                                #[cfg(feature = "syntax")]
+                                {
+                                    let lang = code_block_language
+                                        .take()
+                                        .filter(|l| !l.is_empty())
+                                        .unwrap_or_else(|| String::from("text"));
+
+                                    let syntax =
+                                        Syntax::new(code_block_text.clone(), lang).padding(1, 1);
+
+                                    // If the lexer name is unknown, fall back to plain text but keep the
+                                    // same layout/padding.
+                                    let mut syntax_segments: Vec<Segment<'static>> =
+                                        if let Ok(segs) = syntax.render(Some(max_width)) {
+                                            segs.into_iter().map(Segment::into_owned).collect()
+                                        } else {
+                                            let fallback =
+                                                Syntax::new(code_block_text.clone(), "text")
+                                                    .padding(1, 1);
+                                            fallback
+                                                .render(Some(max_width))
+                                                .unwrap_or_default()
+                                                .into_iter()
+                                                .map(Segment::into_owned)
+                                                .collect()
+                                        };
+
+                                    // Ensure blockquote/list indentation prefixes are applied per line,
+                                    // using the same mechanism as the non-syntax code block path.
+                                    let needs_quote_prefix = in_blockquote;
+                                    let needs_list_prefix = !list_item_prefix_len.is_empty();
+                                    let mut at_line_start = true;
+                                    for seg in syntax_segments.drain(..) {
+                                        if at_line_start {
+                                            blockquote_prefix_pending = needs_quote_prefix;
+                                            list_item_prefix_pending = needs_list_prefix;
+                                            ensure_blockquote_prefix!(segments);
+                                            ensure_list_prefix!(segments);
+                                            at_line_start = false;
+                                        }
+                                        let is_newline = seg.text == "\n";
+                                        segments.push(seg);
+                                        if is_newline {
+                                            at_line_start = true;
+                                        }
+                                    }
+
+                                    // If we're still inside a blockquote/list, the next block should
+                                    // start with the appropriate prefix.
+                                    if in_blockquote {
+                                        blockquote_prefix_pending = true;
+                                    }
+                                    if !list_item_prefix_len.is_empty() {
+                                        list_item_prefix_pending = true;
+                                    }
+                                }
+                                #[cfg(not(feature = "syntax"))]
+                                {
+                                    // Unreachable due to `code_block_use_syntax` gating above.
+                                }
+                            } else {
+                                let current_style = combined_style(&style_stack);
+                                for line in code_block_text.lines() {
+                                    ensure_blockquote_prefix!(segments);
+                                    ensure_list_prefix!(segments);
+                                    segments.push(Segment::new(
+                                        format!("  {line}"),
+                                        current_style.clone(),
+                                    ));
+                                    segments.push(Segment::new("\n", None));
+                                    if in_blockquote {
+                                        blockquote_prefix_pending = true;
+                                    }
+                                    if !list_item_prefix_len.is_empty() {
+                                        list_item_prefix_pending = true;
+                                    }
+                                }
+                                if code_block_style_pushed {
+                                    style_stack.pop();
+                                }
+                            }
                         }
                         TagEnd::Link => {
                             style_stack.pop();
-                            if self.show_links && !current_link_url.is_empty() && !in_table {
+                            if !self.hyperlinks && !current_link_url.is_empty() && !in_table {
+                                segments.push(Segment::new(" (", None));
                                 segments.push(Segment::new(
-                                    format!(" ({current_link_url})"),
-                                    Some(
-                                        Style::new().color_str("bright_black").unwrap_or_default(),
-                                    ),
+                                    current_link_url.clone(),
+                                    Some(self.link_style.clone()),
                                 ));
+                                segments.push(Segment::new(")", None));
                             }
                             current_link_url.clear();
+                        }
+                        TagEnd::Image => {
+                            if image_style_pushed {
+                                style_stack.pop();
+                            }
+                            image_style_pushed = false;
                         }
                         TagEnd::BlockQuote(_) => {
                             in_blockquote = false;
@@ -582,20 +722,9 @@ impl Markdown {
                     } else {
                         let current_style = combined_style(&style_stack);
                         if in_code_block {
-                            // Preserve code block formatting
-                            for line in text.lines() {
-                                ensure_blockquote_prefix!(segments);
-                                ensure_list_prefix!(segments);
-                                segments
-                                    .push(Segment::new(format!("  {line}"), current_style.clone()));
-                                segments.push(Segment::new("\n", None));
-                                if in_blockquote {
-                                    blockquote_prefix_pending = true;
-                                }
-                                if !list_item_prefix_len.is_empty() {
-                                    list_item_prefix_pending = true;
-                                }
-                            }
+                            // Preserve code block formatting (defer emission until TagEnd::CodeBlock so
+                            // we can render fenced blocks via Syntax when appropriate).
+                            code_block_text.push_str(&text);
                         } else {
                             ensure_blockquote_prefix!(segments);
                             ensure_list_prefix!(segments);
@@ -856,10 +985,10 @@ mod tests {
         let md = Markdown::new("test")
             .bullet_char('*')
             .list_indent(4)
-            .show_links(false);
+            .hyperlinks(false);
         assert_eq!(md.bullet_char, '*');
         assert_eq!(md.list_indent, 4);
-        assert!(!md.show_links);
+        assert!(!md.hyperlinks);
     }
 
     #[test]
@@ -988,16 +1117,17 @@ mod tests {
         let segments = md.render(80);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains("Click here"));
-        assert!(text.contains("example.com"));
+        assert!(!text.contains("example.com"));
     }
 
     #[test]
-    fn test_render_link_no_url() {
-        let md = Markdown::new("[Click here](https://example.com)").show_links(false);
+    fn test_render_link_hyperlinks_disabled_shows_url_suffix() {
+        let md = Markdown::new("[Click here](https://example.com)").hyperlinks(false);
         let segments = md.render(80);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains("Click here"));
-        assert!(!text.contains("example.com"));
+        assert!(text.contains("example.com"));
+        assert!(text.contains(" (https://example.com)"));
     }
 
     #[test]

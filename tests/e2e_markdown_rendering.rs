@@ -244,21 +244,22 @@ fn link_renders_text() {
 }
 
 #[test]
-fn link_shows_url_by_default() {
+fn link_hides_url_by_default() {
     let plain = render_md_plain("[Docs](https://docs.rs)");
     assert!(
-        plain.contains("docs.rs"),
-        "URL should be visible by default: {plain}"
+        !plain.contains("docs.rs"),
+        "URL should be hidden by default (hyperlinks=true): {plain}"
     );
 }
 
 #[test]
-fn link_hides_url_when_configured() {
-    let md = Markdown::new("[Hidden](https://secret.com)").show_links(false);
+fn link_shows_url_when_hyperlinks_disabled() {
+    let md = Markdown::new("[Hidden](https://secret.com)").hyperlinks(false);
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("Hidden"));
-    assert!(!text.contains("secret.com"), "URL should be hidden: {text}");
+    assert!(text.contains("secret.com"), "URL should be shown: {text}");
+    assert!(text.contains(" (https://secret.com)"));
 }
 
 #[test]

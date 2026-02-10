@@ -1,11 +1,12 @@
 ---
 source: src/renderables/pretty.rs
+assertion_line: 939
 expression: plain
 ---
 Outer {
     id: 42,
     inner: Inner {
-        name:
+        name: 
         "a-very-long-n
         ame-to-wrap",
         values: [

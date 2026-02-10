@@ -206,7 +206,35 @@ pub use json::{Json, JsonError, JsonTheme};
 
 #[cfg(feature = "json")]
 impl Renderable for Json {
-    fn render<'a>(&'a self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment<'a>> {
-        self.render().into_iter().map(Segment::into_owned).collect()
+    fn render<'a>(&'a self, console: &Console, options: &ConsoleOptions) -> Vec<Segment<'a>> {
+        // Python Rich's JSON output wraps at console width, including cases where `": "` becomes
+        // a line break. We render JSON to styled segments, then run it through `Text::wrap` so the
+        // wrapping behavior stays consistent with the rest of the library.
+        let width = options.max_width;
+        let segments = self.render_with_tab_size(console.tab_size());
+
+        let mut text = Text::new("");
+        text.tab_size = console.tab_size();
+        for segment in &segments {
+            if segment.is_control() {
+                continue;
+            }
+            if let Some(style) = segment.style.as_ref() {
+                text.append_styled(segment.text.as_ref(), style.clone());
+            } else {
+                text.append(segment.text.as_ref());
+            }
+        }
+
+        let lines = text.wrap(width);
+        let mut wrapped: Vec<Segment<'static>> = Vec::new();
+        for (idx, line) in lines.iter().enumerate() {
+            wrapped.extend(line.render("").into_iter().map(Segment::into_owned));
+            if idx + 1 < lines.len() {
+                wrapped.push(Segment::new("\n", None));
+            }
+        }
+
+        wrapped.into_iter().map(Segment::into_owned).collect()
     }
 }

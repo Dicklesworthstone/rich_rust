@@ -47,6 +47,20 @@ fn render_json_via_console(json: &Json) -> String {
     String::from_utf8_lossy(&guard).into_owned()
 }
 
+fn render_json_via_console_custom_tab_size(json: &Json, tab_size: usize) -> String {
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let writer = BufferWriter(Arc::clone(&buf));
+    let console = Console::builder()
+        .force_terminal(false)
+        .width(120)
+        .tab_size(tab_size)
+        .file(Box::new(writer))
+        .build();
+    console.print_renderable(json);
+    let guard = lock_recover(&buf);
+    String::from_utf8_lossy(&guard).into_owned()
+}
+
 fn render_json_no_color(json: &Json) -> String {
     let buf = Arc::new(Mutex::new(Vec::new()));
     let writer = BufferWriter(Arc::clone(&buf));
@@ -375,7 +389,8 @@ fn custom_theme_applies_to_output() {
         key: Style::parse("#ff0000").unwrap().bold(),
         string: Style::parse("#00ff00").unwrap(),
         number: Style::parse("#0000ff").unwrap(),
-        boolean: Style::parse("#ffff00").unwrap(),
+        bool_true: Style::parse("#ffff00").unwrap(),
+        bool_false: Style::parse("#ffff00").unwrap(),
         null: Style::parse("#ff00ff").unwrap(),
         bracket: Style::parse("#00ffff").unwrap(),
         punctuation: Style::new(),
@@ -493,6 +508,72 @@ fn indent_affects_nested_levels() {
     let has_6_space = lines.iter().any(|l| l.starts_with("      "));
     assert!(has_3_space, "should have 3-space indented lines: {plain}");
     assert!(has_6_space, "should have 6-space indented lines: {plain}");
+}
+
+#[test]
+fn compact_mode_has_no_newlines_and_has_spaces() {
+    let json = Json::from_str(r#"{"age": 30, "name": "Alice"}"#)
+        .unwrap()
+        .compact();
+    let plain = render_json_plain(&json);
+    assert!(
+        !plain.contains('\n'),
+        "compact output should be one line: {plain}"
+    );
+    assert!(plain.starts_with('{') && plain.ends_with('}'));
+    assert!(
+        plain.contains(": "),
+        "compact output should have ': ': {plain}"
+    );
+    assert!(
+        plain.contains(", "),
+        "compact output should have ', ': {plain}"
+    );
+}
+
+#[test]
+fn ensure_ascii_escapes_non_ascii_characters() {
+    let json = Json::from_str(r#"{"greeting": "こんにちは"}"#)
+        .unwrap()
+        .ensure_ascii(true);
+    let plain = render_json_plain(&json);
+    assert!(
+        !plain.contains("こんにちは"),
+        "ensure_ascii should escape unicode: {plain}"
+    );
+    assert!(
+        plain.contains("\\u"),
+        "ensure_ascii should contain unicode escapes: {plain}"
+    );
+}
+
+#[test]
+fn indent_str_tab_expands_using_console_tab_size() {
+    let json = Json::from_str(r#"{"key": "value"}"#)
+        .unwrap()
+        .indent_str("\t");
+    let out = render_json_via_console_custom_tab_size(&json, 4);
+    let lines: Vec<&str> = out.lines().collect();
+    assert!(lines.len() >= 3);
+    assert!(
+        lines[1].starts_with("    "),
+        "tab indent should expand to 4 spaces with tab_size=4: {:?}",
+        lines[1]
+    );
+}
+
+#[test]
+fn booleans_and_null_have_distinct_styles_in_ansi_output() {
+    let json = Json::from_str(r#"{"t": true, "f": false, "n": null}"#).unwrap();
+    let out = render_json_via_console(&json);
+    // True should be bright green italic (91/92) and False should be bright red italic.
+    // Style code ordering can vary, so allow both `3;92` and `92;3` forms.
+    let true_ok = out.contains("\x1b[3;92mtrue") || out.contains("\x1b[92;3mtrue");
+    let false_ok = out.contains("\x1b[3;91mfalse") || out.contains("\x1b[91;3mfalse");
+    let null_ok = out.contains("\x1b[3;35mnull") || out.contains("\x1b[35;3mnull");
+    assert!(true_ok, "expected styled true, got: {out}");
+    assert!(false_ok, "expected styled false, got: {out}");
+    assert!(null_ok, "expected styled null, got: {out}");
 }
 
 // ============================================================================

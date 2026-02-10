@@ -186,7 +186,8 @@ fn render_theme_demo(console: &Console) {
         key: Style::parse("bold #ff6b6b").unwrap_or_default(),
         string: Style::parse("#feca57").unwrap_or_default(),
         number: Style::parse("#48dbfb").unwrap_or_default(),
-        boolean: Style::parse("#ff9ff3").unwrap_or_default(),
+        bool_true: Style::parse("#ff9ff3").unwrap_or_default(),
+        bool_false: Style::parse("#ff9ff3").unwrap_or_default(),
         null: Style::parse("dim italic #c8d6e5").unwrap_or_default(),
         bracket: Style::parse("#576574").unwrap_or_default(),
         punctuation: Style::parse("#576574").unwrap_or_default(),
@@ -200,7 +201,7 @@ fn render_theme_demo(console: &Console) {
     }
 
     console.print("");
-    console.print("[dim]Default theme: [bold blue]keys[/], [green]strings[/], [cyan]numbers[/], [yellow]booleans[/], [magenta italic]null[/][/]");
+    console.print("[dim]Default theme: [bold blue]keys[/], [green]strings[/], [cyan]numbers[/], [bright_green italic]true[/]/[bright_red italic]false[/], [magenta italic]null[/][/]");
 }
 
 /// Show notice when json feature is disabled.

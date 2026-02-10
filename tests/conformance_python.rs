@@ -447,7 +447,11 @@ fn build_renderable(
             #[cfg(feature = "markdown")]
             {
                 let source = value_string(input, "text").unwrap_or_default();
-                Box::new(rich_rust::renderables::Markdown::new(source))
+                let mut md = rich_rust::renderables::Markdown::new(source);
+                if let Some(hyperlinks) = input.get("hyperlinks").and_then(|v| v.as_bool()) {
+                    md = md.hyperlinks(hyperlinks);
+                }
+                Box::new(md)
             }
             #[cfg(not(feature = "markdown"))]
             {
@@ -459,8 +463,26 @@ fn build_renderable(
             #[cfg(feature = "json")]
             {
                 let source = value_string(input, "json").unwrap_or_else(|| "{}".to_string());
-                let json = rich_rust::renderables::Json::from_str(&source)
+                let mut json = rich_rust::renderables::Json::from_str(&source)
                     .unwrap_or_else(|_| rich_rust::renderables::Json::new(serde_json::Value::Null));
+                if let Some(sort_keys) = input.get("sort_keys").and_then(|v| v.as_bool()) {
+                    json = json.sort_keys(sort_keys);
+                }
+                if let Some(ensure_ascii) = input.get("ensure_ascii").and_then(|v| v.as_bool()) {
+                    json = json.ensure_ascii(ensure_ascii);
+                }
+                if let Some(highlight) = input.get("highlight").and_then(|v| v.as_bool()) {
+                    json = json.highlight(highlight);
+                }
+                if let Some(indent_value) = input.get("indent") {
+                    if indent_value.is_null() {
+                        json = json.compact();
+                    } else if let Some(spaces) = indent_value.as_u64() {
+                        json = json.indent(spaces as usize);
+                    } else if let Some(unit) = indent_value.as_str() {
+                        json = json.indent_str(unit);
+                    }
+                }
                 Box::new(json)
             }
             #[cfg(not(feature = "json"))]

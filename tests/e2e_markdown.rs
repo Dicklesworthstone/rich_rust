@@ -393,29 +393,36 @@ fn test_md_custom_code_block_style() {
 // 4. Links
 // =============================================================================
 
-/// Test: Link text and URL both appear when show_links is true.
+/// Test: By default (`hyperlinks=true`), link text renders without a URL suffix.
 #[test]
-fn test_md_link_with_url() {
+fn test_md_link_default_hides_url_suffix() {
     init_test_logging();
 
     let text = render_md_text("[Click here](https://example.com)", 80);
     assert!(text.contains("Click here"), "link text");
-    assert!(text.contains("example.com"), "link URL");
+    assert!(
+        !text.contains("example.com"),
+        "URL suffix should not be rendered"
+    );
 }
 
-/// Test: Link URL hidden when show_links is false.
+/// Test: With `hyperlinks=false`, links render as `text (url)` (no OSC8).
 #[test]
-fn test_md_link_without_url() {
+fn test_md_link_hyperlinks_disabled_shows_url_suffix() {
     init_test_logging();
 
-    let md = Markdown::new("[Click here](https://example.com)").show_links(false);
+    let md = Markdown::new("[Click here](https://example.com)").hyperlinks(false);
     let segments = md.render(80);
     let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
     assert!(text.contains("Click here"), "link text should remain");
-    assert!(!text.contains("example.com"), "URL should be hidden");
+    assert!(
+        text.contains("example.com"),
+        "URL suffix should be rendered"
+    );
+    assert!(text.contains(" (https://example.com)"));
 }
 
-/// Test: Link text has link_style applied.
+/// Test: Link text has `link_style` applied and includes an OSC8 link when enabled.
 #[test]
 fn test_md_link_style() {
     init_test_logging();
@@ -431,6 +438,11 @@ fn test_md_link_style() {
         style.attributes.contains(Attributes::UNDERLINE),
         "link should be underlined"
     );
+    assert_eq!(
+        style.link.as_deref(),
+        Some("https://example.com"),
+        "link should carry OSC8 URL in style"
+    );
 }
 
 /// Test: Multiple links in one line.
@@ -442,8 +454,8 @@ fn test_md_multiple_links() {
     let text = render_md_text(source, 120);
     assert!(text.contains("First"));
     assert!(text.contains("Second"));
-    assert!(text.contains("first.com"));
-    assert!(text.contains("second.com"));
+    assert!(!text.contains("first.com"));
+    assert!(!text.contains("second.com"));
 }
 
 /// Test: Custom link style overrides default.
@@ -842,7 +854,8 @@ That's all!
     assert!(text.contains("Pass"));
     // Link
     assert!(text.contains("our site"));
-    assert!(text.contains("example.com"));
+    // Default behavior matches Python Rich: hide the URL suffix when OSC8 hyperlinks are enabled.
+    assert!(!text.contains("example.com"));
     // Horizontal rule
     assert!(text.contains("─"));
     // Closing text
@@ -927,8 +940,32 @@ fn test_md_export_svg() {
     console.print_renderable(&md);
     let svg = console.export_svg(true);
     assert!(svg.contains("<svg"), "should be SVG format");
-    assert!(svg.contains("Title"), "SVG should contain title");
-    assert!(svg.contains("Body text"), "SVG should contain body");
+
+    // `export_svg` may split words across multiple `<text>` / `<tspan>` nodes, so do a
+    // lightweight tag strip to assert on visible text rather than raw SVG markup.
+    fn strip_tags(input: &str) -> String {
+        let mut out = String::new();
+        let mut in_tag = false;
+        for ch in input.chars() {
+            match ch {
+                '<' => in_tag = true,
+                '>' => {
+                    in_tag = false;
+                    out.push(' ');
+                }
+                _ => {
+                    if !in_tag {
+                        out.push(ch);
+                    }
+                }
+            }
+        }
+        out.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    let visible = strip_tags(&svg);
+    assert!(visible.contains("Title"), "SVG should contain title text");
+    assert!(visible.contains("Body"), "SVG should contain body text");
 }
 
 /// Test: Console export_renderable_text produces plain text.
@@ -975,7 +1012,7 @@ fn test_md_full_builder_chain() {
         .table_border_style(Style::new().italic())
         .bullet_char('*')
         .list_indent(4)
-        .show_links(false);
+        .hyperlinks(false);
 
     let segments = md.render(80);
     assert!(!segments.is_empty(), "should produce output");

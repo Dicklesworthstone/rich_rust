@@ -1160,6 +1160,7 @@ dependencies = [
  "proptest",
  "pulldown-cmark",
  "regex",
+ "serde",
  "serde_json",
  "serial_test",
  "smallvec",

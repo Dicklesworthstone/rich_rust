@@ -199,13 +199,10 @@ fn test_unknown_theme_error() {
 
     let syntax = Syntax::new("code", "rust").theme("nonexistent-theme-xyz");
     let result = syntax.render(Some(80));
-    assert!(result.is_err());
-
-    if let Err(SyntaxError::UnknownTheme(name)) = result {
-        assert_eq!(name, "nonexistent-theme-xyz");
-    } else {
-        panic!("Expected UnknownTheme error");
-    }
+    assert!(matches!(
+        result,
+        Err(SyntaxError::UnknownTheme(name)) if name == "nonexistent-theme-xyz"
+    ));
 }
 
 /// Test: "InspiredGitHub" theme works.
@@ -229,14 +226,22 @@ fn test_line_numbers_enabled() {
 
     let code = "x = 1\ny = 2\nz = 3";
     let syntax = Syntax::new(code, "python").line_numbers(true);
-    let segments = syntax.render(Some(80)).expect("render");
+    let text = render_syntax_to_text(&syntax);
+    let mut lines = text.lines();
 
-    let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
-    // Line numbers should appear in segments (e.g., "1 │ ", "2 │ ", "3 │ ")
-    assert!(text.contains("1"), "Should contain line number 1");
-    assert!(text.contains("2"), "Should contain line number 2");
-    assert!(text.contains("3"), "Should contain line number 3");
-    assert!(text.contains("│"), "Should contain line number separator");
+    // Rich-style gutter: two spaces, line number (right-aligned), trailing space.
+    assert!(
+        lines.next().expect("first line").starts_with("  1 "),
+        "First line should start with line number gutter"
+    );
+    assert!(
+        lines.next().expect("second line").starts_with("  2 "),
+        "Second line should start with line number gutter"
+    );
+    assert!(
+        lines.next().expect("third line").starts_with("  3 "),
+        "Third line should start with line number gutter"
+    );
 }
 
 /// Test: line numbers disabled produces fewer segments.
@@ -248,20 +253,24 @@ fn test_line_numbers_disabled() {
     let syntax_no_nums = Syntax::new(code, "python").line_numbers(false);
     let syntax_with_nums = Syntax::new(code, "python").line_numbers(true);
 
-    let segs_no = syntax_no_nums.render(Some(80)).expect("render");
-    let segs_with = syntax_with_nums.render(Some(80)).expect("render");
+    let text_no = render_syntax_to_text(&syntax_no_nums);
+    let text_with = render_syntax_to_text(&syntax_with_nums);
 
-    let text_no: String = segs_no.iter().map(|s| s.text.as_ref()).collect();
-    let text_with: String = segs_with.iter().map(|s| s.text.as_ref()).collect();
-
-    // With line numbers should have the separator character
     assert!(
-        text_with.contains("│"),
-        "Should contain separator with line numbers"
+        text_with
+            .lines()
+            .next()
+            .expect("first line")
+            .starts_with("  1 "),
+        "With line numbers, first line should start with the gutter"
     );
     assert!(
-        !text_no.contains("│"),
-        "Should not contain separator without line numbers"
+        !text_no
+            .lines()
+            .next()
+            .expect("first line")
+            .starts_with("  1 "),
+        "Without line numbers, first line should not start with the gutter"
     );
 }
 
@@ -330,7 +339,7 @@ fn test_syntax_html_export_has_colors() {
 
     // Syntax highlighting should produce CSS color properties
     assert!(
-        html.contains("color:#"),
+        html.contains("color: #"),
         "HTML export should contain color styles from syntax highlighting"
     );
 }
@@ -412,13 +421,10 @@ fn test_unknown_language_error() {
 
     let syntax = Syntax::new("code", "nonexistent-language-xyz");
     let result = syntax.render(Some(80));
-    assert!(result.is_err());
-
-    if let Err(SyntaxError::UnknownLanguage(lang)) = result {
-        assert_eq!(lang, "nonexistent-language-xyz");
-    } else {
-        panic!("Expected UnknownLanguage error");
-    }
+    assert!(matches!(
+        result,
+        Err(SyntaxError::UnknownLanguage(lang)) if lang == "nonexistent-language-xyz"
+    ));
 }
 
 /// Test: python language works as a reliable language for plain content.
