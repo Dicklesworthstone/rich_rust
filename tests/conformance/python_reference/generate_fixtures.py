@@ -214,6 +214,14 @@ CASES = [
         "notes": "Python Rich Markdown uses Pygments-based syntax highlighting for fenced code blocks; Rust uses syntect so ANSI differs. Plain output comparison guards layout/padding.",
     },
     {
+        "id": "markdown/fenced_code_wrap",
+        "kind": "markdown",
+        "compare_ansi": False,
+        "render_options": {"width": 20},
+        "input": {"text": "```rust\nlet x = 1234567890; let y = 1234567890;\n```"},
+        "notes": "Narrow width exercises Python Rich `Syntax(word_wrap=True, padding=1)` behavior in Markdown fenced code blocks, including post-padding crop. Plain output comparison locks layout.",
+    },
+    {
         "id": "markdown/link",
         "kind": "markdown",
         "compare_ansi": True,

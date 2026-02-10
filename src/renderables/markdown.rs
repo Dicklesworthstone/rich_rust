@@ -578,8 +578,12 @@ impl Markdown {
                                         .filter(|l| !l.is_empty())
                                         .unwrap_or_else(|| String::from("text"));
 
-                                    let syntax =
-                                        Syntax::new(code_block_text.clone(), lang).padding(1, 1);
+                                    // Python Rich Markdown always enables `Syntax(word_wrap=True, padding=1)`.
+                                    // Model `word_wrap=True` by setting `word_wrap(Some(max_width))` so Syntax
+                                    // uses the available console width (it will clamp internally as needed).
+                                    let syntax = Syntax::new(code_block_text.clone(), lang)
+                                        .word_wrap(Some(max_width))
+                                        .padding(1, 1);
 
                                     // If the lexer name is unknown, fall back to plain text but keep the
                                     // same layout/padding.
@@ -589,6 +593,7 @@ impl Markdown {
                                         } else {
                                             let fallback =
                                                 Syntax::new(code_block_text.clone(), "text")
+                                                    .word_wrap(Some(max_width))
                                                     .padding(1, 1);
                                             fallback
                                                 .render(Some(max_width))

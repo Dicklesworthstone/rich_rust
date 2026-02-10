@@ -435,15 +435,20 @@ impl Syntax {
         };
         let line_number_style = base_bg_style.combine(&self.line_number_style);
 
-        // If enabled, wrap the *code content* to this cell width (excluding gutter + padding).
+        // If enabled, wrap the *code content* to this cell width (excluding gutter).
+        //
+        // Python Rich's `Syntax` wraps to the full available console width (minus any line number
+        // gutter) and then applies padding externally, which can crop a character that no longer
+        // fits once padding is added. To match that behavior, we *do not* subtract horizontal
+        // padding here; instead we crop/pad the final segment stream to `max_width` below.
+        //
         // Wrapping is whitespace-preserving (tuned for code rather than prose reflow).
         let wrap_width = self.word_wrap.and_then(|w| {
             if w == 0 {
                 return None;
             }
             let cap = max_width.unwrap_or(usize::MAX);
-            let available =
-                cap.saturating_sub(self.padding.1.saturating_mul(2) + line_prefix_width);
+            let available = cap.saturating_sub(line_prefix_width);
             if available == 0 {
                 None
             } else {
@@ -521,6 +526,14 @@ impl Syntax {
                     ));
                 }
 
+                // In Python Rich, horizontal padding is applied by an outer `Padding` renderable
+                // that crops/pads the *inner* content to `width - left - right`, and then appends
+                // the left/right pad segments. To match that behavior, we:
+                // 1) render the line content (gutter + code),
+                // 2) crop/pad it to the inner width (when a max width is known),
+                // 3) append right padding afterwards.
+                let mut content_line: Vec<Segment<'static>> = Vec::new();
+
                 // Line number gutter (Rich-style: two-space gutter, number, trailing space).
                 if self.line_numbers {
                     let gutter = if visual_idx == 0 {
@@ -533,11 +546,25 @@ impl Syntax {
                     } else {
                         " ".repeat(line_number_padding + line_num_width + 1)
                     };
-                    segments.push(Segment::new(gutter, Some(line_number_style.clone())));
+                    content_line.push(Segment::new(gutter, Some(line_number_style.clone())));
                 }
 
                 // Highlighted code for this visual line.
-                segments.extend(visual_line.render("").into_iter().map(Segment::into_owned));
+                content_line.extend(visual_line.render("").into_iter().map(Segment::into_owned));
+
+                if let Some(cap) = max_width.filter(|value| *value > 0)
+                    && self.padding.1 > 0
+                {
+                    let inner_width = cap.saturating_sub(self.padding.1.saturating_mul(2));
+                    content_line = crate::segment::adjust_line_length(
+                        content_line,
+                        inner_width,
+                        Some(base_bg_style.clone()),
+                        true,
+                    );
+                }
+
+                segments.extend(content_line);
 
                 // Right padding
                 if self.padding.1 > 0 {
@@ -749,13 +776,13 @@ fn pad_segments_to_width(
     width: usize,
     fill_style: Option<&Style>,
 ) -> Vec<Segment<'static>> {
-    let mut padded = Vec::new();
-    let mut line_width = 0usize;
     let fill_style = fill_style.cloned();
+    let mut out: Vec<Segment<'static>> = Vec::new();
+    let mut line: Vec<Segment<'static>> = Vec::new();
 
     for segment in segments {
         if segment.is_control() {
-            padded.push(segment);
+            line.push(segment);
             continue;
         }
 
@@ -768,36 +795,39 @@ fn pad_segments_to_width(
             if ch == '\n' {
                 let part = &text_ref[start..idx];
                 if !part.is_empty() {
-                    padded.push(Segment::new(part.to_string(), style.clone()));
-                    line_width += cells::cell_len(part);
+                    line.push(Segment::new(part.to_string(), style.clone()));
                 }
-                if line_width < width {
-                    padded.push(Segment::new(
-                        " ".repeat(width - line_width),
-                        fill_style.clone(),
-                    ));
-                }
-                padded.push(Segment::line());
-                line_width = 0;
+
+                // Python Rich uses `Segment.split_and_crop_lines(...)` downstream of padding; that
+                // has the effect of cropping any characters that no longer fit once padding is
+                // applied. We replicate that here by truncating/padding each final line to width.
+                let adjusted = crate::segment::adjust_line_length(
+                    std::mem::take(&mut line),
+                    width,
+                    fill_style.clone(),
+                    true,
+                );
+                out.extend(adjusted);
+                out.push(Segment::line());
                 start = idx + 1;
             }
         }
 
         let tail = &text_ref[start..];
         if !tail.is_empty() {
-            padded.push(Segment::new(tail.to_string(), style));
-            line_width += cells::cell_len(tail);
+            line.push(Segment::new(tail.to_string(), style));
         }
     }
 
-    if line_width > 0 {
-        if line_width < width {
-            padded.push(Segment::new(" ".repeat(width - line_width), fill_style));
-        }
-        padded.push(Segment::line());
+    // If there's a trailing partial line (no newline), match prior behavior by padding/truncating
+    // it to width and emitting a final newline.
+    if !line.is_empty() {
+        let adjusted = crate::segment::adjust_line_length(line, width, fill_style, true);
+        out.extend(adjusted);
+        out.push(Segment::line());
     }
 
-    padded
+    out
 }
 
 #[cfg(test)]

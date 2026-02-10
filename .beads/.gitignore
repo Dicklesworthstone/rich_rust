@@ -21,7 +21,7 @@ db.sqlite
 bd.db
 
 # Worktree redirect file (contains relative path to main repo's .beads/)
-# Must not be committed as paths would be wrong in other clones
+# Must not be committed as paths are wrong in other clones
 redirect
 
 # Merge artifacts (temporary files from 3-way merge)
@@ -38,7 +38,7 @@ beads.right.meta.json
 sync_base.jsonl
 
 # NOTE: Do NOT add negation patterns (e.g., !issues.jsonl) here.
-# They would override fork protection in .git/info/exclude, allowing
+# They can override fork protection in .git/info/exclude, allowing
 # contributors to accidentally commit upstream issue databases.
 # The JSONL files (issues.jsonl, interactions.jsonl) and config files
 # are tracked by git by default since no pattern above ignores them.
