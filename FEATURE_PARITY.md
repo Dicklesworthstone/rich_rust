@@ -40,6 +40,7 @@ This document is the source of truth. If code or docs change, update this file, 
 | Color | Named/ANSI/8-bit/truecolor | Implemented | `src/color.rs` | Unit tests + property tests |
 | Color | Auto downgrade by terminal | Implemented | `src/color.rs`, `src/terminal.rs` | Regression tests |
 | Markup | Rich markup parsing | Implemented | `src/markup/mod.rs` | E2E + regression tests |
+| Console | Highlighters (`rich.highlighter`) | Implemented | `src/highlighter.rs`, `src/console.rs` | Unit tests cover `NullHighlighter`, `RegexHighlighter`, `ReprHighlighter`, and Console integration; Python fixture conformance includes `text/highlighter_repr`. |
 | Emoji | Emoji code replacement (`:smile:`) | Implemented | `src/emoji.rs`, `src/console.rs` | Unit tests + Python fixture conformance |
 | Theme | Theme + named styles (`rule.line`, `[warning]`) | Implemented | `src/theme.rs`, `src/console.rs` | Unit tests + Python fixture conformance (`text/theme_named_style`) |
 | Text | Styled spans, wrapping | Implemented | `src/text.rs` | E2E + property tests |

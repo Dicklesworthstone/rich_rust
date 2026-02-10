@@ -68,6 +68,8 @@ fn test_export_html_pre_wrapper() {
         .width(80)
         .force_terminal(true)
         .markup(false)
+        // Keep this test focused on HTML escaping (not ReprHighlighter behavior).
+        .highlight(false)
         .build();
 
     console.begin_capture();
@@ -90,6 +92,7 @@ fn test_export_html_text_content() {
         .width(80)
         .force_terminal(true)
         .markup(false)
+        .highlight(false)
         .build();
 
     console.begin_capture();
@@ -344,6 +347,7 @@ fn test_export_html_no_span_for_unstyled() {
         .width(80)
         .force_terminal(true)
         .markup(false)
+        .highlight(false)
         .build();
 
     console.begin_capture();
@@ -401,6 +405,7 @@ fn test_export_html_entity_escaping() {
         .width(80)
         .force_terminal(true)
         .markup(false)
+        .highlight(false)
         .build();
 
     console.begin_capture();

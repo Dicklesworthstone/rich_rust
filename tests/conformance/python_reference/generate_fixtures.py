@@ -77,6 +77,15 @@ CASES = [
         "input": {"markup": "[bold]Bold[/]"},
     },
     {
+        "id": "text/highlighter_repr",
+        "kind": "text",
+        "render_options": {"width": 80},
+        "input": {
+            "markup": "True False None 123 0xFF 1+2j 'hi' \"dq\" (call()) ... https://example.com"
+        },
+        "notes": "Exercise default ReprHighlighter (Console highlight=True) ANSI output.",
+    },
+    {
         "id": "text/colors",
         "kind": "text",
         "input": {"markup": "[red]Red[/] and [green]Green[/]"},

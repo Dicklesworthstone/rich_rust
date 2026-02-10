@@ -89,6 +89,7 @@ use time::OffsetDateTime;
 
 use crate::color::{ColorSystem, DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME, TerminalTheme};
 use crate::emoji;
+use crate::highlighter::{Highlighter, ReprHighlighter};
 use crate::live::LiveInner;
 use crate::markup;
 use crate::renderables::Renderable;
@@ -201,7 +202,7 @@ impl ConsoleOptions {
 }
 
 /// Print options for controlling output.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct PrintOptions {
     /// String to separate multiple objects.
     pub sep: String,
@@ -219,8 +220,10 @@ pub struct PrintOptions {
     pub no_newline: bool,
     /// Parse markup.
     pub markup: Option<bool>,
-    /// Enable highlighting.
-    pub highlight: bool,
+    /// Enable/disable highlighting (None = inherit Console setting).
+    pub highlight: Option<bool>,
+    /// Override the highlighter used when highlighting is enabled.
+    pub highlighter: Option<Arc<dyn Highlighter>>,
     /// Override width.
     pub width: Option<usize>,
     /// Crop output to width.
@@ -299,7 +302,14 @@ impl PrintOptions {
     /// Enable/disable highlighting.
     #[must_use]
     pub fn with_highlight(mut self, highlight: bool) -> Self {
-        self.highlight = highlight;
+        self.highlight = Some(highlight);
+        self
+    }
+
+    /// Override the highlighter for this print call.
+    #[must_use]
+    pub fn with_highlighter<H: Highlighter + 'static>(mut self, highlighter: H) -> Self {
+        self.highlighter = Some(Arc::new(highlighter));
         self
     }
 
@@ -322,6 +332,29 @@ impl PrintOptions {
     pub fn with_soft_wrap(mut self, soft_wrap: bool) -> Self {
         self.soft_wrap = soft_wrap;
         self
+    }
+}
+
+impl std::fmt::Debug for PrintOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrintOptions")
+            .field("sep", &self.sep)
+            .field("end", &self.end)
+            .field("style", &self.style)
+            .field("justify", &self.justify)
+            .field("overflow", &self.overflow)
+            .field("no_wrap", &self.no_wrap)
+            .field("no_newline", &self.no_newline)
+            .field("markup", &self.markup)
+            .field("highlight", &self.highlight)
+            .field(
+                "highlighter",
+                &self.highlighter.as_ref().map(|_| "<Highlighter>"),
+            )
+            .field("width", &self.width)
+            .field("crop", &self.crop)
+            .field("soft_wrap", &self.soft_wrap)
+            .finish()
     }
 }
 
@@ -381,6 +414,8 @@ pub struct Console {
     emoji: bool,
     /// Enable syntax highlighting.
     highlight: bool,
+    /// Highlighter used when `highlight` is enabled (Python Rich `rich.highlighter` parity).
+    highlighter: Arc<dyn Highlighter>,
     /// Theme stack for named styles (Python Rich parity).
     theme_stack: Mutex<ThemeStack>,
     /// Override width.
@@ -449,6 +484,7 @@ impl Console {
             markup: true,
             emoji: true,
             highlight: true,
+            highlighter: Arc::new(ReprHighlighter::default()),
             theme_stack: Mutex::new(ThemeStack::new(Theme::default())),
             width: None,
             height: None,
@@ -860,6 +896,12 @@ impl Console {
         } else {
             Text::new(content.as_ref())
         };
+
+        let highlight_enabled = options.highlight.unwrap_or(self.highlight);
+        if highlight_enabled {
+            let highlighter = options.highlighter.as_ref().unwrap_or(&self.highlighter);
+            highlighter.highlight(self, &mut text);
+        }
 
         if let Some(justify) = options.justify {
             text.justify = justify;
@@ -1954,6 +1996,7 @@ pub struct ConsoleBuilder {
     markup: Option<bool>,
     emoji: Option<bool>,
     highlight: Option<bool>,
+    highlighter: Option<Arc<dyn Highlighter>>,
     width: Option<usize>,
     height: Option<usize>,
     safe_box: Option<bool>,
@@ -1970,6 +2013,10 @@ impl std::fmt::Debug for ConsoleBuilder {
             .field("markup", &self.markup)
             .field("emoji", &self.emoji)
             .field("highlight", &self.highlight)
+            .field(
+                "highlighter",
+                &self.highlighter.as_ref().map(|_| "<Highlighter>"),
+            )
             .field("width", &self.width)
             .field("height", &self.height)
             .field("safe_box", &self.safe_box)
@@ -2026,6 +2073,13 @@ impl ConsoleBuilder {
     #[must_use]
     pub fn highlight(mut self, enabled: bool) -> Self {
         self.highlight = Some(enabled);
+        self
+    }
+
+    /// Set the console's default highlighter.
+    #[must_use]
+    pub fn highlighter<H: Highlighter + 'static>(mut self, highlighter: H) -> Self {
+        self.highlighter = Some(Arc::new(highlighter));
         self
     }
 
@@ -2094,6 +2148,9 @@ impl ConsoleBuilder {
         if let Some(h) = self.highlight {
             console.highlight = h;
         }
+        if let Some(highlighter) = self.highlighter {
+            console.highlighter = highlighter;
+        }
         if let Some(w) = self.width {
             console.width = Some(w);
         }
@@ -2117,6 +2174,7 @@ impl ConsoleBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::highlighter::NullHighlighter;
 
     #[test]
     fn test_console_new() {
@@ -2136,6 +2194,52 @@ mod tests {
         assert_eq!(console.width(), 100);
         assert_eq!(console.height(), 50);
         assert!(!console.markup);
+    }
+
+    #[test]
+    fn test_console_default_highlighter_applies_when_enabled() {
+        let console = Console::builder().markup(false).build();
+        let opts = PrintOptions::new().with_markup(false).with_no_newline(true);
+        let segments = console.render_str_segments("True", &opts);
+        let expected = console.get_style("repr.bool_true");
+        assert!(segments.iter().any(|s| s.style.as_ref() == Some(&expected)));
+    }
+
+    #[test]
+    fn test_console_highlight_override_off_disables_highlighter() {
+        let console = Console::builder().markup(false).build();
+        let opts = PrintOptions::new()
+            .with_markup(false)
+            .with_no_newline(true)
+            .with_highlight(false);
+        let segments = console.render_str_segments("True", &opts);
+        let expected = console.get_style("repr.bool_true");
+        assert!(!segments.iter().any(|s| s.style.as_ref() == Some(&expected)));
+    }
+
+    #[test]
+    fn test_console_builder_highlighter_override() {
+        let console = Console::builder()
+            .markup(false)
+            .highlighter(NullHighlighter)
+            .build();
+        let opts = PrintOptions::new().with_markup(false).with_no_newline(true);
+        let segments = console.render_str_segments("True", &opts);
+        let expected = console.get_style("repr.bool_true");
+        assert!(!segments.iter().any(|s| s.style.as_ref() == Some(&expected)));
+    }
+
+    #[test]
+    fn test_console_print_options_highlighter_override() {
+        let console = Console::builder().markup(false).build();
+        let opts = PrintOptions::new()
+            .with_markup(false)
+            .with_no_newline(true)
+            .with_highlight(true)
+            .with_highlighter(NullHighlighter);
+        let segments = console.render_str_segments("True", &opts);
+        let expected = console.get_style("repr.bool_true");
+        assert!(!segments.iter().any(|s| s.style.as_ref() == Some(&expected)));
     }
 
     #[test]
@@ -2715,6 +2819,7 @@ mod tests {
         assert_eq!(options.end, "\n");
         assert_eq!(options.no_wrap, None);
         assert!(!options.no_newline);
+        assert_eq!(options.highlight, None);
     }
 
     #[test]
@@ -2772,7 +2877,7 @@ mod tests {
         assert_eq!(options.overflow, Some(OverflowMethod::Ellipsis));
         assert_eq!(options.no_wrap, Some(true));
         assert!(options.no_newline);
-        assert!(options.highlight);
+        assert_eq!(options.highlight, Some(true));
         assert_eq!(options.width, Some(40));
         assert!(options.crop);
         assert!(options.soft_wrap);

@@ -23,7 +23,7 @@ fn lock_recover_preserves_mutated_state_after_poison() {
     let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         let mut guard = mutex.lock().unwrap();
         guard.push(4);
-        panic!("poison after mutation");
+        panic::panic_any("poison after mutation");
     }));
     assert!(mutex.is_poisoned());
     // Recovered state should include the mutation that happened before the panic
@@ -37,7 +37,7 @@ fn lock_recover_debug_works_after_poison() {
     let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         let mut guard = mutex.lock().unwrap();
         guard.push_str("_modified");
-        panic!("poison");
+        panic::panic_any("poison");
     }));
     let guard = lock_recover_debug(&mutex, "test_integration");
     assert_eq!(*guard, "original_modified");
@@ -49,7 +49,7 @@ fn write_recover_preserves_state_after_poison() {
     let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         let mut guard = rwlock.write().unwrap();
         *guard = 200;
-        panic!("poison during write");
+        panic::panic_any("poison during write");
     }));
     // Write recovery should see the mutated value
     let guard = read_recover(&rwlock);
@@ -67,6 +67,8 @@ fn buffered_console() -> (Console, Arc<Mutex<Vec<u8>>>) {
     let console = Console::builder()
         .force_terminal(true)
         .color_system(ColorSystem::Standard)
+        // Keep these tests focused on mutex poison recovery, not highlighting side effects.
+        .highlight(false)
         .file(Box::new(writer))
         .build();
     (console, buf)
@@ -119,7 +121,7 @@ fn console_survives_thread_panic() {
     let c = Arc::clone(&console);
     let handle = thread::spawn(move || {
         c.print_plain("before panic");
-        panic!("intentional thread panic");
+        panic::panic_any("intentional thread panic");
     });
     let _ = handle.join(); // expect Err since the thread panicked
 
@@ -207,7 +209,7 @@ fn concurrent_style_parse_with_panic_survivor() {
     handles.push(thread::spawn(move || {
         b.wait();
         let _ = Style::parse("underline blue");
-        panic!("intentional panic in style thread");
+        panic::panic_any("intentional panic in style thread");
     }));
 
     let mut panicked = 0;
