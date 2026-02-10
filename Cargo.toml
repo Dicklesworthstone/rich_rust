@@ -19,6 +19,9 @@ bitflags = "2.10"
 # Regular expressions for markup parsing
 regex = "1.12"
 
+# Advanced regex features (look-around) for Rich parity highlighters
+fancy-regex = "0.14.0"
+
 # Terminal detection and raw terminal manipulation
 crossterm = "0.29"
 

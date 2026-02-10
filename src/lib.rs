@@ -173,6 +173,7 @@ pub mod color;
 pub mod console;
 pub mod emoji;
 pub mod filesize;
+pub mod highlighter;
 pub mod interactive;
 pub mod live;
 pub mod logging;
@@ -202,6 +203,7 @@ pub mod prelude {
         SizeUnit, binary, binary_speed, binary_with_precision, decimal, decimal_speed,
         decimal_with_precision, format_size, format_speed,
     };
+    pub use crate::highlighter::{Highlighter, NullHighlighter, RegexHighlighter, ReprHighlighter};
     pub use crate::interactive::{Pager, Prompt, PromptError, Status};
     pub use crate::live::{Live, LiveOptions, VerticalOverflowMethod};
     pub use crate::logging::RichLogger;
