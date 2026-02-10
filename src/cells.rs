@@ -80,7 +80,7 @@ pub fn cell_len_uncached(text: &str) -> usize {
 /// Truncate a string to fit within a maximum cell width.
 ///
 /// Returns the truncated string, padded with spaces if a wide character
-/// would exceed the limit.
+/// exceeds the limit.
 #[must_use]
 pub fn set_cell_size(text: &str, total: usize) -> String {
     let current = cell_len(text);
@@ -128,7 +128,7 @@ fn truncate_to_width(text: &str, max_width: usize) -> (String, usize) {
 /// Split a string at a cell position.
 ///
 /// Returns (left, right) where left has the specified width (or less if
-/// a wide character would exceed it).
+/// a wide character exceeds it).
 #[must_use]
 pub fn chop_cells(text: &str, max_size: usize) -> (&str, &str) {
     let mut width = 0;
@@ -249,7 +249,7 @@ mod tests {
     fn test_chop_cells_cjk() {
         // Chopping in the middle of wide characters
         let (left, right) = chop_cells("日本語", 3);
-        // Should stop at 2 (one character) since next would be 4
+        // Should stop at 2 (one character) since next is 4
         assert_eq!(cell_len(left), 2);
         assert_eq!(left, "日");
         assert_eq!(right, "本語");
@@ -396,7 +396,7 @@ mod tests {
 
         // CJK chopping - stops before exceeding width
         let (left, right) = chop_cells("日本語", 3);
-        assert_eq!(left, "日"); // 2 cells, next would be 4
+        assert_eq!(left, "日"); // 2 cells, next is 4
         assert_eq!(right, "本語");
         assert_eq!(cell_len(left), 2);
 
@@ -711,7 +711,7 @@ mod tests {
 
     // Test: Surrogate pair handling (not applicable in Rust, but test boundary)
     // Note: Rust strings are valid UTF-8, so surrogate pairs don't exist.
-    // However, we test characters that would be represented as surrogate pairs in UTF-16.
+    // However, we test characters that are represented as surrogate pairs in UTF-16.
     #[test]
     fn test_unicode_supplementary_planes() {
         // Characters from Supplementary Multilingual Plane (SMP)

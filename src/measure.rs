@@ -12,7 +12,7 @@ use crate::console::{Console, ConsoleOptions};
 ///
 /// A `Measurement` captures the minimum and maximum cell widths that a
 /// renderable needs. The minimum is the tightest the content can be
-/// compressed, while maximum is how wide it would be unconstrained.
+/// compressed, while maximum is how wide it is when unconstrained.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Measurement {
     /// Minimum cells required (cannot render narrower).

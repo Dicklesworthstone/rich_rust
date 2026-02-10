@@ -83,7 +83,7 @@
 //! applies uniformly for defense-in-depth.
 //!
 //! No global `Console`-level override is needed: per-prompt is sufficient, and a
-//! global setting would add complexity without clear benefit. If a future use case
+//! global setting adds complexity without clear benefit. If a future use case
 //! demands it, a `ConsoleBuilder::default_max_input()` can be added non-breakingly.
 //!
 //! ## Decision 4: Limit Enforcement Point
