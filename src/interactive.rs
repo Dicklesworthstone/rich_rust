@@ -527,7 +527,7 @@ impl Prompt {
     /// Defaults to [`DEFAULT_MAX_INPUT_LENGTH`] (64 KiB).
     #[must_use]
     pub const fn max_length(mut self, max_bytes: usize) -> Self {
-        self.max_length = max_bytes;
+        self.max_length = if max_bytes == 0 { 1 } else { max_bytes };
         self
     }
 
@@ -907,7 +907,7 @@ impl Select {
     /// Defaults to [`DEFAULT_MAX_INPUT_LENGTH`] (64 KiB).
     #[must_use]
     pub const fn max_length(mut self, max_bytes: usize) -> Self {
-        self.max_length = max_bytes;
+        self.max_length = if max_bytes == 0 { 1 } else { max_bytes };
         self
     }
 
@@ -1077,7 +1077,7 @@ impl Confirm {
     /// Defaults to [`DEFAULT_MAX_INPUT_LENGTH`] (64 KiB).
     #[must_use]
     pub const fn max_length(mut self, max_bytes: usize) -> Self {
-        self.max_length = max_bytes;
+        self.max_length = if max_bytes == 0 { 1 } else { max_bytes };
         self
     }
 
@@ -2038,6 +2038,12 @@ mod tests {
     }
 
     #[test]
+    fn test_prompt_max_length_zero_clamped_to_one() {
+        let prompt = Prompt::new("Test").max_length(0);
+        assert_eq!(prompt.max_length, 1);
+    }
+
+    #[test]
     fn test_prompt_default_max_length() {
         let prompt = Prompt::new("Test");
         assert_eq!(prompt.max_length, super::DEFAULT_MAX_INPUT_LENGTH);
@@ -2096,6 +2102,23 @@ mod tests {
     }
 
     #[test]
+    fn test_prompt_zero_max_length_still_accepts_newline_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let prompt = Prompt::new("Name").default("fallback").max_length(0);
+        let input = b"\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = prompt.ask_from(&console, &mut reader).expect("prompt");
+        assert_eq!(answer, "fallback");
+    }
+
+    #[test]
     fn test_prompt_max_length_chaining() {
         let prompt = Prompt::new("Test")
             .default("default")
@@ -2116,6 +2139,12 @@ mod tests {
     fn test_select_max_length_builder() {
         let select = Select::new("Pick").choices(["a", "b"]).max_length(128);
         assert_eq!(select.max_length, 128);
+    }
+
+    #[test]
+    fn test_select_max_length_zero_clamped_to_one() {
+        let select = Select::new("Pick").choices(["a", "b"]).max_length(0);
+        assert_eq!(select.max_length, 1);
     }
 
     #[test]
@@ -2145,9 +2174,35 @@ mod tests {
     }
 
     #[test]
+    fn test_select_zero_max_length_still_accepts_newline_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let select = Select::new("Pick")
+            .choices(["alpha", "beta"])
+            .default("alpha")
+            .max_length(0);
+        let input = b"\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = select.ask_from(&console, &mut reader).expect("select");
+        assert_eq!(answer, "alpha");
+    }
+
+    #[test]
     fn test_confirm_max_length_builder() {
         let confirm = Confirm::new("Continue?").max_length(32);
         assert_eq!(confirm.max_length, 32);
+    }
+
+    #[test]
+    fn test_confirm_max_length_zero_clamped_to_one() {
+        let confirm = Confirm::new("Continue?").max_length(0);
+        assert_eq!(confirm.max_length, 1);
     }
 
     #[test]
@@ -2174,6 +2229,23 @@ mod tests {
             matches!(result, Err(PromptError::InputTooLong { limit: 3, .. })),
             "Expected InputTooLong, got: {result:?}"
         );
+    }
+
+    #[test]
+    fn test_confirm_zero_max_length_still_accepts_newline_default() {
+        let buffer = SharedBuffer(Arc::new(Mutex::new(Vec::new())));
+        let console = Console::builder()
+            .force_terminal(true)
+            .markup(false)
+            .file(Box::new(buffer.clone()))
+            .build()
+            .shared();
+
+        let confirm = Confirm::new("Continue?").default(true).max_length(0);
+        let input = b"\n";
+        let mut reader = io::Cursor::new(&input[..]);
+        let answer = confirm.ask_from(&console, &mut reader).expect("confirm");
+        assert!(answer);
     }
 
     #[test]
