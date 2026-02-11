@@ -64,7 +64,7 @@ use crate::cells;
 use crate::console::{Console, ConsoleOptions};
 use crate::markup;
 use crate::renderables::Renderable;
-use crate::segment::Segment;
+use crate::segment::{Segment, adjust_line_length};
 use crate::style::Style;
 use crate::text::{JustifyMethod, OverflowMethod, Text};
 use num_rational::Ratio;
@@ -1350,6 +1350,8 @@ impl Table {
                     .into_iter()
                     .map(Segment::into_owned)
                     .collect();
+                let segs = adjust_line_length(segs, width, None, false);
+                let segs = adjust_line_length(segs, width, Some(combined_style.clone()), true);
                 cell_lines_segments.push(segs);
             }
 
