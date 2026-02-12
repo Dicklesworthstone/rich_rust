@@ -313,6 +313,24 @@ impl Tree {
         segments
     }
 
+    fn sanitize_label(label: &Text) -> Text {
+        if !label.plain().contains('\n') {
+            return label.clone();
+        }
+
+        let mut sanitized = Text::new(label.plain().replace('\n', " "));
+        sanitized.set_style(label.style().clone());
+        sanitized.justify = label.justify;
+        sanitized.overflow = label.overflow;
+        sanitized.no_wrap = label.no_wrap;
+        sanitized.end.clone_from(&label.end);
+        sanitized.tab_size = label.tab_size;
+        for span in label.spans() {
+            sanitized.stylize(span.start, span.end, span.style.clone());
+        }
+        sanitized
+    }
+
     /// Render a single node and its children recursively.
     #[expect(
         clippy::cast_possible_wrap,
@@ -359,42 +377,8 @@ impl Tree {
             ));
         }
 
-        // Add the label (preserve spans)
-        // Sanitize label to prevent broken tree structure from newlines
-        let mut label_text = node.label.clone();
-        if label_text.plain().contains('\n') {
-            let sanitized = label_text.plain().replace('\n', " ");
-            label_text = Text::new(sanitized);
-            // Note: Styles on original text spans might be lost/misaligned if we just replace plain text
-            // and recreate. But Text::new() creates a new text with no spans.
-            // If we want to preserve spans while sanitizing... simple replace on plain string invalidates spans indices?
-            // Actually, replacing '\n' (1 char) with ' ' (1 char) preserves indices!
-            // So we can just mutate the plain string in place?
-            // Text struct: plain is String.
-            // But we don't have mutable access to internals easily via public API.
-            // Text has `plain` field but it is private? No, in `src/text.rs`:
-            // `plain: String, spans: Vec<Span>`.
-            // We can't mutate plain directly from here if fields are private.
-            // But I am in `rich_rust`, so I can see if fields are public.
-            // `src/text.rs` shows `plain` is private.
-            // But wait, `render_node` is in `src/renderables/tree.rs`. Same crate.
-            // Rust visibility: `plain` is private to `text` module?
-            // `pub struct Text { plain: String ... }`. No `pub` on `plain`.
-            // So I can't mutate it.
-            //
-            // However, `Table` fix used:
-            // if cell_text.plain().contains('\n') {
-            //    let sanitized = cell_text.plain().replace('\n', " ");
-            //    cell_text = Text::new(sanitized);
-            // }
-            // This drops styles!
-            // In Table, `cell_text` had style applied via `set_style` *after* sanitization?
-            // `cell_text.set_style(combined_style.clone())`.
-            // But `Cell` can have its own rich text spans (from `Cell::from_markup`).
-            // My previous Table fix *dropped* internal spans of multi-line cells!
-            // That is a trade-off. Layout integrity > Rich styling of broken content.
-            // I will do the same here.
-        }
+        // Sanitize label newlines to avoid broken tree line structure.
+        let label_text = Self::sanitize_label(&node.label);
 
         let mut label_segments: Vec<Segment<'static>> = label_text
             .render("")
@@ -577,6 +561,30 @@ mod tests {
         });
 
         assert!(has_bold);
+    }
+
+    #[test]
+    fn test_tree_render_preserves_spans_after_newline_sanitization() {
+        use crate::style::Attributes;
+
+        let mut label = Text::new("root\nnode");
+        label.stylize_all(Style::new().bold());
+        label.stylize(5, 9, Style::new().italic());
+        let tree = Tree::new(TreeNode::new(label));
+
+        let rendered = tree.render_plain();
+        assert!(rendered.contains("root node"));
+        assert!(!rendered.contains("root\nnode"));
+
+        let segments = tree.render();
+        let has_italic_node = segments.iter().any(|seg| {
+            seg.text.contains("node")
+                && seg
+                    .style
+                    .as_ref()
+                    .is_some_and(|style| style.attributes.contains(Attributes::ITALIC))
+        });
+        assert!(has_italic_node);
     }
 
     #[test]
