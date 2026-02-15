@@ -1156,7 +1156,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "rich_rust"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "backtrace",
  "bitflags",
