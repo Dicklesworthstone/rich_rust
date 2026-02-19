@@ -155,8 +155,6 @@
 //! console.print_renderable(&tree);
 //! ```
 
-#![allow(stable_features)]
-#![feature(let_chains)]
 #![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
