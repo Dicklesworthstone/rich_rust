@@ -10,7 +10,7 @@
 [![codecov](https://codecov.io/gh/Dicklesworthstone/rich_rust/graph/badge.svg)](https://codecov.io/gh/Dicklesworthstone/rich_rust)
 [![Crates.io](https://img.shields.io/crates/v/rich_rust.svg)](https://crates.io/crates/rich_rust)
 [![Documentation](https://docs.rs/rich_rust/badge.svg)](https://docs.rs/rich_rust)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Dicklesworthstone/rich_rust/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT%2BOpenAI%2FAnthropic%20Rider-blue.svg)](https://github.com/Dicklesworthstone/rich_rust/blob/master/LICENSE)
 
 </div>
 
@@ -915,7 +915,7 @@ Please don't take this the wrong way, but I do not accept outside contributions 
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License (with OpenAI/Anthropic Rider). See [LICENSE](LICENSE) for details.
 
 ---
 
