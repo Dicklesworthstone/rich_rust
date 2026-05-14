@@ -420,8 +420,8 @@ fn style_with_bg(color: Color) -> Style {
 
 fn parse_csi(line: &str, esc_pos: usize) -> Option<(usize, u8, &str)> {
     let bytes = line.as_bytes();
-    debug_assert!(bytes.get(esc_pos) == Some(&0x1b));
-    debug_assert!(bytes.get(esc_pos + 1) == Some(&b'['));
+    debug_assert_eq!(bytes.get(esc_pos), Some(&0x1b));
+    debug_assert_eq!(bytes.get(esc_pos + 1), Some(&b'['));
 
     let mut j = esc_pos + 2;
     while j < bytes.len() {
@@ -438,8 +438,8 @@ fn parse_csi(line: &str, esc_pos: usize) -> Option<(usize, u8, &str)> {
 
 fn parse_osc(line: &str, esc_pos: usize) -> Option<(usize, &str)> {
     let bytes = line.as_bytes();
-    debug_assert!(bytes.get(esc_pos) == Some(&0x1b));
-    debug_assert!(bytes.get(esc_pos + 1) == Some(&b']'));
+    debug_assert_eq!(bytes.get(esc_pos), Some(&0x1b));
+    debug_assert_eq!(bytes.get(esc_pos + 1), Some(&b']'));
 
     let mut j = esc_pos + 2;
     while j + 1 < bytes.len() {

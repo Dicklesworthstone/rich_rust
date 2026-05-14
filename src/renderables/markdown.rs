@@ -329,7 +329,7 @@ impl Markdown {
         let mut list_item_prefix_pending = false;
         let mut in_code_block = false;
         let mut code_block_text = String::new();
-        let mut code_block_language: Option<String> = None;
+        let mut code_block_language = String::new();
         let mut code_block_use_syntax = false;
         let mut code_block_style_pushed = false;
         let mut in_blockquote = false;
@@ -365,13 +365,12 @@ impl Markdown {
             Some(combined)
         };
 
-        let parse_fence_language = |info: &str| -> Option<String> {
-            let lang = info.split_whitespace().next().unwrap_or("").trim();
-            if lang.is_empty() {
-                None
-            } else {
-                Some(lang.to_string())
-            }
+        let parse_fence_language = |info: &str| -> String {
+            info.split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string()
         };
 
         // Helper macros to inline prefix logic (avoids borrow issues with closures)
@@ -451,7 +450,7 @@ impl Markdown {
                         Tag::CodeBlock(kind) => {
                             in_code_block = true;
                             code_block_text.clear();
-                            code_block_language = None;
+                            code_block_language.clear();
                             code_block_style_pushed = false;
 
                             if !segments.is_empty() {
@@ -464,10 +463,8 @@ impl Markdown {
                             if let CodeBlockKind::Fenced(info) = kind {
                                 code_block_language = parse_fence_language(info.as_ref());
                             }
-                            code_block_use_syntax = cfg!(feature = "syntax")
-                                && code_block_language
-                                    .as_ref()
-                                    .is_some_and(|lang| !lang.is_empty());
+                            code_block_use_syntax =
+                                cfg!(feature = "syntax") && !code_block_language.is_empty();
 
                             if !code_block_use_syntax {
                                 style_stack.push(self.code_block_style.clone());
@@ -573,10 +570,11 @@ impl Markdown {
                                 // Render syntax-highlighted code block (plain layout parity; ANSI differs).
                                 #[cfg(feature = "syntax")]
                                 {
-                                    let lang = code_block_language
-                                        .take()
-                                        .filter(|l| !l.is_empty())
-                                        .unwrap_or_else(|| String::from("text"));
+                                    let lang = if code_block_language.is_empty() {
+                                        String::from("text")
+                                    } else {
+                                        std::mem::take(&mut code_block_language)
+                                    };
 
                                     // Python Rich Markdown always enables `Syntax(word_wrap=True, padding=1)`.
                                     // Model `word_wrap=True` by setting `word_wrap(Some(max_width))` so Syntax
@@ -656,6 +654,7 @@ impl Markdown {
                                 if code_block_style_pushed {
                                     style_stack.pop();
                                 }
+                                code_block_language.clear();
                             }
                         }
                         TagEnd::Link => {

@@ -3667,7 +3667,7 @@ mod tests {
 
         let text = String::from_utf8(output).expect("invalid utf8");
         assert!(text.ends_with("Right"));
-        assert!(text.len() == 20);
+        assert_eq!(text.len(), 20);
     }
 
     // ========== ConsoleDimensions Tests ==========

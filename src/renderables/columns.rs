@@ -684,7 +684,7 @@ mod tests {
 
         // Without equal_width, columns can have different widths based on content
         // Both should be within bounds
-        assert!(widths.len() == 2);
+        assert_eq!(widths.len(), 2);
     }
 
     #[test]
