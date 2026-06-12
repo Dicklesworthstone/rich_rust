@@ -1,6 +1,6 @@
 [package]
 name = "rich_rust"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "A Rust port of Python's Rich library for beautiful terminal output"
 authors = ["Jeffrey Emanuel"]
@@ -43,8 +43,14 @@ stdio-override = "0.2.0"
 # Logging integration (std feature required for set_boxed_logger)
 log = { version = "0.4", features = ["std"] }
 
-# Time formatting for logging
-time = { version = "0.3.47", features = ["local-offset", "formatting"] }
+# Time formatting for logging.
+# Upper bound: time 0.3.48's modifier! macro emits `impl From<$name> for
+# <$name as ModifierValue>::Type` (associated-type projection in the impl
+# header), which makes rustc's coherence check reject this crate's blanket
+# `impl<T: Into<...>> From<T>` impls (E0119) — rich_rust cannot compile
+# against 0.3.48. See time-rs/time#783/#785 (fix PRs #784/#786). Relax the
+# bound once a fixed time release ships.
+time = { version = ">=0.3.47, <0.3.48", features = ["local-offset", "formatting"] }
 
 # Optional tracing integration
 tracing = { version = "0.1", optional = true }
