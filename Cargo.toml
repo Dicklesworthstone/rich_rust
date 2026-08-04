@@ -44,13 +44,10 @@ stdio-override = "0.2.0"
 log = { version = "0.4", features = ["std"] }
 
 # Time formatting for logging.
-# Upper bound: time 0.3.48's modifier! macro emits `impl From<$name> for
-# <$name as ModifierValue>::Type` (associated-type projection in the impl
-# header), which makes rustc's coherence check reject this crate's blanket
-# `impl<T: Into<...>> From<T>` impls (E0119) — rich_rust cannot compile
-# against 0.3.48. See time-rs/time#783/#785 (fix PRs #784/#786). Relax the
-# bound once a fixed time release ships.
-time = { version = ">=0.3.47, <0.3.48", features = ["local-offset", "formatting"] }
+# Historical note: 0.3.48's modifier! macro broke coherence for this crate's
+# blanket From impls (time-rs/time#783/#785); fixed upstream, and 0.3.55
+# verified to compile clean here, so the former `<0.3.48` upper bound is gone.
+time = { version = "0.3.55", features = ["local-offset", "formatting"] }
 
 # Optional tracing integration
 tracing = { version = "0.1", optional = true }

@@ -60,7 +60,7 @@ impl RichLogger {
     pub fn new(console: Arc<Console>) -> Self {
         let time_format = time::format_description::parse_owned::<2>("[%F %T]")
             .or_else(|_| time::format_description::parse_owned::<2>("[hour]:[minute]:[second]"))
-            .unwrap_or_else(|_| OwnedFormatItem::Literal(Vec::<u8>::new().into_boxed_slice()));
+            .unwrap_or_else(|_| OwnedFormatItem::StringLiteral(String::new().into_boxed_str()));
         Self {
             console,
             level: LevelFilter::Info,
