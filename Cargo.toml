@@ -20,7 +20,7 @@ bitflags = "2.11"
 regex = "1.12"
 
 # Advanced regex features (look-around) for Rich parity highlighters
-fancy-regex = "0.17.0"
+fancy-regex = "0.18"
 
 # Terminal detection and raw terminal manipulation
 crossterm = "0.29"
@@ -44,10 +44,14 @@ stdio-override = "0.2.0"
 log = { version = "0.4", features = ["std"] }
 
 # Time formatting for logging.
-# Historical note: 0.3.48's modifier! macro broke coherence for this crate's
-# blanket From impls (time-rs/time#783/#785); fixed upstream, and 0.3.55
-# verified to compile clean here, so the former `<0.3.48` upper bound is gone.
-time = { version = "0.3.55", features = ["local-offset", "formatting"] }
+# History: this was pinned to `>=0.3.47, <0.3.48` because time 0.3.48's
+# modifier! macro emitted `impl From<$name> for <$name as ModifierValue>::Type`
+# (associated-type projection in the impl header), which made rustc's coherence
+# check reject this crate's blanket `impl<T: Into<...>> From<T>` impls (E0119).
+# See time-rs/time#783/#785 (fix PRs #784/#786). Those fixes have shipped: the
+# bound is relaxed as that comment instructed, and 0.3.54 compiles clean here
+# (verified with cargo check --all-targets, no E0119).
+time = { version = "0.3.54", features = ["local-offset", "formatting"] }
 
 # Optional tracing integration
 tracing = { version = "0.1", optional = true }
