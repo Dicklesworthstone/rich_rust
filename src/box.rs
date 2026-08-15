@@ -470,7 +470,7 @@ mod tests {
     fn test_build_row_widths() {
         let widths = [4, 4];
         let row = SQUARE.build_row(&widths, RowLevel::HeadRow, true);
-        assert!(!row.is_empty());
+        assert_ne!(row, "");
         assert!(row.contains('\u{253C}')); // ┼
     }
 

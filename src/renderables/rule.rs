@@ -263,7 +263,7 @@ mod tests {
     fn test_rule_no_title() {
         let rule = Rule::new();
         let segments = rule.render(10);
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains('\u{2500}')); // ─
     }
@@ -329,7 +329,7 @@ mod tests {
         let rule = Rule::new();
         let segments = rule.render(0);
         // Should handle zero width gracefully
-        assert!(!segments.is_empty()); // At least a newline segment
+        assert_ne!(segments.len(), 0); // At least a newline segment
     }
 
     #[test]
@@ -347,7 +347,7 @@ mod tests {
         let segments = rule.render(10);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         // Should handle narrow width without panicking
-        assert!(!text.is_empty());
+        assert_ne!(text, "");
     }
 
     #[test]
@@ -357,7 +357,7 @@ mod tests {
         let segments = rule.render(5);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         // Should handle gracefully
-        assert!(!text.is_empty());
+        assert_ne!(text, "");
     }
 
     #[test]

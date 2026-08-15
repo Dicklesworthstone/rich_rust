@@ -229,7 +229,7 @@ mod tests {
         let options = console.options();
 
         let segments = g.render(&console, &options);
-        assert!(segments.is_empty());
+        assert_eq!(segments.len(), 0);
     }
 
     #[test]
@@ -522,8 +522,8 @@ mod tests {
         let segs_normal = g.render(&console, &options);
         let segs_narrow = g.render(&console, &narrowed);
 
-        assert!(!segs_normal.is_empty());
-        assert!(!segs_narrow.is_empty());
+        assert_ne!(segs_normal.len(), 0);
+        assert_ne!(segs_narrow.len(), 0);
     }
 
     // =========================================================================

@@ -700,7 +700,7 @@ mod tests {
     fn test_wrap_line_width_too_small() {
         let wrapped = wrap_line_preserving_indent("    some text", 2);
         // When width is too small, should return original
-        assert!(!wrapped.is_empty());
+        assert_ne!(wrapped.len(), 0);
     }
 
     // =========================================================================

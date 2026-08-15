@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn test_traceback_new_empty_frames() {
         let traceback = Traceback::new(Vec::new(), "Error", "message");
-        assert!(traceback.frames.is_empty());
+        assert_eq!(traceback.frames.len(), 0);
         assert_eq!(traceback.exception_type, "Error");
         assert_eq!(traceback.exception_message, "message");
     }
@@ -802,7 +802,7 @@ mod tests {
     #[test]
     fn test_traceback_push_frame() {
         let mut traceback = Traceback::new(vec![], "Error", "test");
-        assert!(traceback.frames.is_empty());
+        assert_eq!(traceback.frames.len(), 0);
 
         traceback.push_frame(TracebackFrame::new("added", 1));
         assert_eq!(traceback.frames.len(), 1);
@@ -927,7 +927,7 @@ mod tests {
 
         // Even width=1 should work (max(1) in implementation)
         let output = render_to_text(&traceback, 1);
-        assert!(!output.is_empty());
+        assert_ne!(output, "");
     }
 
     #[test]
@@ -978,7 +978,7 @@ mod tests {
 
         // Should render without panic even with very long lines
         let output = render_to_text(&traceback, 60);
-        assert!(!output.is_empty());
+        assert_ne!(output, "");
     }
 
     #[test]

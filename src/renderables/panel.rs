@@ -711,7 +711,7 @@ mod tests {
     fn test_panel_render() {
         let panel = Panel::from_text("Hello").width(20);
         let segments = panel.render(80);
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
 
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains("Hello"));

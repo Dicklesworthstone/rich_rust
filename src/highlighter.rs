@@ -249,6 +249,6 @@ mod tests {
         let console = Console::new();
         let mut text = Text::new("123");
         NullHighlighter.highlight(&console, &mut text);
-        assert!(text.spans().is_empty());
+        assert_eq!(text.spans().len(), 0);
     }
 }

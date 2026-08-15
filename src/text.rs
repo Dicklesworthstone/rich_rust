@@ -1420,7 +1420,7 @@ mod tests {
         let text = Text::styled("", Style::new().bold());
         assert!(text.is_empty());
         // Empty styled text should have no spans
-        assert!(text.spans().is_empty());
+        assert_eq!(text.spans().len(), 0);
     }
 
     // --- Overlapping Spans Tests ---
@@ -1437,7 +1437,7 @@ mod tests {
         // Both spans should be stored
         let segments = text.render("");
         // Should render with combined styles where spans overlap
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
     }
 
     #[test]
@@ -1463,7 +1463,7 @@ mod tests {
 
         let segments = text.render("");
         // "hello " should be bold only, "world" should be bold+red
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
     }
 
     // --- Text Rendering Tests ---
@@ -1472,7 +1472,7 @@ mod tests {
     fn test_render_empty() {
         let text = Text::new("");
         let segments = text.render("");
-        assert!(segments.is_empty());
+        assert_eq!(segments.len(), 0);
     }
 
     #[test]
@@ -1490,7 +1490,7 @@ mod tests {
         text.set_style(Style::new().bold());
         let segments = text.render("");
         // Base style should be applied
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
         let style = segments[0].style.as_ref().unwrap();
         assert!(style.attributes.contains(crate::style::Attributes::BOLD));
     }
@@ -1679,7 +1679,7 @@ mod tests {
         text.stylize(0, 5, Style::new().bold());
         let lines = text.wrap(6);
         // First line should contain span
-        assert!(!lines[0].spans().is_empty());
+        assert_ne!(lines[0].spans().len(), 0);
     }
 
     #[test]
@@ -1836,7 +1836,7 @@ mod tests {
         text.stylize(0, 1, Style::new().bold()); // Just "a"
         let expanded = text.expand_tabs(4);
         // Span should still exist
-        assert!(!expanded.spans().is_empty());
+        assert_ne!(expanded.spans().len(), 0);
     }
 
     #[test]
@@ -1966,7 +1966,7 @@ mod tests {
     fn test_highlight_words_empty_word_ignored() {
         let mut text = Text::new("Hello");
         text.highlight_words(&[""], &Style::new().bold(), false);
-        assert!(text.spans().is_empty());
+        assert_eq!(text.spans().len(), 0);
     }
 
     #[test]

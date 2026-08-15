@@ -463,7 +463,7 @@ mod tests {
         let (left, right) = chop_cells("", 5);
         assert_eq!(left, "");
         assert_eq!(right, "");
-        assert!(cell_positions("").is_empty());
+        assert_eq!(cell_positions("").len(), 0);
     }
 
     // Edge case: Full-width punctuation
@@ -825,7 +825,7 @@ mod tests {
         // cell_positions with mixed content
         let mixed = "a日\u{0301}b"; // a, CJK, combining, b
         let positions = cell_positions(mixed);
-        assert!(!positions.is_empty());
+        assert_ne!(positions.len(), 0);
 
         // has_wide_chars with emoji
         assert!(has_wide_chars("Hello 😀"));

@@ -535,7 +535,7 @@ mod tests {
             .child(TreeNode::new("child2"));
 
         let segments = tree.render();
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
 
         let plain = tree.render_plain();
         assert!(plain.contains("root"));

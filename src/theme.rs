@@ -804,7 +804,7 @@ mod tests {
         let err: Box<dyn std::error::Error> = Box::new(ThemeError::MissingStylesSection);
         // ThemeError implements std::error::Error with no source
         assert!(err.source().is_none());
-        assert!(!err.to_string().is_empty());
+        assert_ne!(err.to_string(), "");
     }
 
     #[test]

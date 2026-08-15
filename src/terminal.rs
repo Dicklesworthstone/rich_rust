@@ -81,7 +81,7 @@ fn force_color_forces_terminal(force_color: Option<&str>) -> bool {
 /// Check if TERM is set to "dumb".
 #[must_use]
 pub fn is_dumb_terminal() -> bool {
-    std::env::var("TERM").ok().is_some_and(|term| {
+    std::env::var("TERM").is_ok_and(|term| {
         let term = term.to_lowercase();
         term == "dumb" || term == "unknown"
     })

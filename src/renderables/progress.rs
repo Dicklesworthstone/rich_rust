@@ -1233,7 +1233,7 @@ mod tests {
         let mut bar = ProgressBar::new().width(20).show_brackets(true);
         bar.set_progress(0.5);
         let segments = bar.render(80);
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains('['));
         assert!(text.contains(']'));
@@ -1245,7 +1245,7 @@ mod tests {
         let mut bar = ProgressBar::new().width(10).show_brackets(false);
         bar.set_progress(0.5);
         let plain = bar.render_plain(40);
-        assert!(!plain.is_empty());
+        assert_ne!(plain, "");
     }
 
     #[test]
@@ -1259,7 +1259,7 @@ mod tests {
             let mut bar = ProgressBar::new().bar_style(style).width(10);
             bar.set_progress(0.5);
             let segments = bar.render(40);
-            assert!(!segments.is_empty());
+            assert_ne!(segments.len(), 0);
         }
     }
 

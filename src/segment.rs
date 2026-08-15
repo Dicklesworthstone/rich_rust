@@ -876,7 +876,7 @@ mod tests {
         let segments = vec![Segment::new("text\n", None)];
         let lines = split_lines(segments.into_iter());
         assert_eq!(lines.len(), 2);
-        assert!(lines[1].is_empty());
+        assert_eq!(lines[1].len(), 0);
 
         // Control segments stay on current line
         let segments = vec![

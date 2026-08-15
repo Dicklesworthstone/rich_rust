@@ -1409,8 +1409,8 @@ mod tests {
         let style = Style::null();
         let ansi = style.render_ansi(ColorSystem::TrueColor);
         let (prefix, suffix) = &*ansi;
-        assert!(prefix.is_empty());
-        assert!(suffix.is_empty());
+        assert_eq!(prefix, "");
+        assert_eq!(suffix, "");
     }
 
     #[test]
@@ -1419,8 +1419,8 @@ mod tests {
         let style = Style::new();
         let ansi = style.render_ansi(ColorSystem::TrueColor);
         let (prefix, suffix) = &*ansi;
-        assert!(prefix.is_empty());
-        assert!(suffix.is_empty());
+        assert_eq!(prefix, "");
+        assert_eq!(suffix, "");
     }
 
     #[test]
@@ -1604,7 +1604,7 @@ mod tests {
     fn test_style_make_ansi_codes_empty() {
         let style = Style::new();
         let codes = style.make_ansi_codes(ColorSystem::TrueColor);
-        assert!(codes.is_empty());
+        assert_eq!(codes, "");
     }
 
     #[test]

@@ -308,7 +308,7 @@ mod tests {
     fn test_render_plain() {
         let text = render("hello world").unwrap();
         assert_eq!(text.plain(), "hello world");
-        assert!(text.spans().is_empty());
+        assert_eq!(text.spans().len(), 0);
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod tests {
     fn test_empty_string() {
         let text = render("").unwrap();
         assert_eq!(text.plain(), "");
-        assert!(text.spans().is_empty());
+        assert_eq!(text.spans().len(), 0);
     }
 
     #[test]

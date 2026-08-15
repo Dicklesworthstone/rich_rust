@@ -833,7 +833,7 @@ mod tests {
         let refs: Vec<&Layout> = children.iter().collect();
         let sizes = ratio_resolve(10, &refs);
 
-        assert!(sizes.is_empty());
+        assert_eq!(sizes.len(), 0);
     }
 
     #[test]

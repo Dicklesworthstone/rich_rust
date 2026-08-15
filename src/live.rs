@@ -1423,7 +1423,7 @@ mod tests {
     fn test_live_render_position_cursor_no_shape() {
         let render = LiveRender::default();
         let controls = render.position_cursor_controls();
-        assert!(controls.is_empty());
+        assert_eq!(controls.len(), 0);
     }
 
     #[test]
@@ -1432,7 +1432,7 @@ mod tests {
             shape: Some((10, 0)),
         };
         let controls = render.position_cursor_controls();
-        assert!(controls.is_empty());
+        assert_eq!(controls.len(), 0);
     }
 
     #[test]
@@ -1442,7 +1442,7 @@ mod tests {
         };
         let controls = render.position_cursor_controls();
         // Should have CarriageReturn and EraseInLine
-        assert!(!controls.is_empty());
+        assert_ne!(controls.len(), 0);
         assert_eq!(controls.len(), 2);
     }
 
@@ -1461,7 +1461,7 @@ mod tests {
     fn test_live_render_restore_cursor_no_shape() {
         let render = LiveRender::default();
         let controls = render.restore_cursor_controls();
-        assert!(controls.is_empty());
+        assert_eq!(controls.len(), 0);
     }
 
     #[test]
@@ -1470,7 +1470,7 @@ mod tests {
             shape: Some((10, 0)),
         };
         let controls = render.restore_cursor_controls();
-        assert!(controls.is_empty());
+        assert_eq!(controls.len(), 0);
     }
 
     #[test]

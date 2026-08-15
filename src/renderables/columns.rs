@@ -464,7 +464,7 @@ mod tests {
     fn test_columns_render_empty() {
         let cols = Columns::new(vec![]);
         let lines = cols.render(40);
-        assert!(lines.is_empty());
+        assert_eq!(lines.len(), 0);
     }
 
     #[test]
@@ -586,7 +586,7 @@ mod tests {
         // Even with narrow width, should not panic
         let total_width = 5;
         let lines = cols.render(total_width);
-        assert!(!lines.is_empty());
+        assert_ne!(lines.len(), 0);
         for line in lines {
             let width: usize = line.iter().map(Segment::cell_length).sum();
             assert!(width <= total_width);

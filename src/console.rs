@@ -3004,7 +3004,7 @@ mod tests {
         let console = Console::new();
         console.begin_capture();
         let segments = console.end_capture();
-        assert!(segments.is_empty());
+        assert_eq!(segments.len(), 0);
     }
 
     #[test]
@@ -3036,7 +3036,7 @@ mod tests {
         let segments = console.end_capture();
 
         // Should have captured at least one segment
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
     }
 
     #[test]

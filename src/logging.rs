@@ -1021,7 +1021,7 @@ mod tests {
 
         let text = logger.format_record(&record);
         let plain = text.plain();
-        assert!(plain.trim().is_empty());
+        assert_eq!(plain.trim(), "");
     }
 
     #[test]
