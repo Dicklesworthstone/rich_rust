@@ -29,7 +29,7 @@ crossterm = "0.29"
 unicode-width = ">=0.2.0, <0.3"
 
 # LRU cache for color parsing and style computation
-lru = "0.16"
+lru = "0.18"
 
 # Stack-allocated small vectors for performance
 smallvec = "1.13"
