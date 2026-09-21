@@ -372,28 +372,13 @@
       "env": null,
       "theme": null,
       "input": {
-        "columns": [
-          "Name",
-          "Age"
-        ],
-        "rows": [
-          [
-            "Alice",
-            "30"
-          ],
-          [
-            "Bob",
-            "25"
-          ]
-        ],
+        "columns": ["Name", "Age"],
+        "rows": [["Alice", "30"], ["Bob", "25"]],
         "show_header": true,
         "show_lines": false,
         "title": "Users",
         "caption": null,
-        "column_justifies": [
-          "left",
-          "right"
-        ]
+        "column_justifies": ["left", "right"]
       },
       "expected": {
         "plain": "     Users     \n┏━━━━━━━┳━━━━━┓\n┃ Name  ┃ Age ┃\n┡━━━━━━━╇━━━━━┩\n│ Alice │  30 │\n│ Bob   │  25 │\n└───────┴─────┘\n",
@@ -411,28 +396,13 @@
       "env": null,
       "theme": null,
       "input": {
-        "columns": [
-          "A",
-          "B"
-        ],
-        "rows": [
-          [
-            "1",
-            "2"
-          ],
-          [
-            "3",
-            "4"
-          ]
-        ],
+        "columns": ["A", "B"],
+        "rows": [["1", "2"], ["3", "4"]],
         "show_header": true,
         "show_lines": true,
         "title": null,
         "caption": null,
-        "column_justifies": [
-          "left",
-          "left"
-        ]
+        "column_justifies": ["left", "left"]
       },
       "expected": {
         "plain": "┏━━━┳━━━┓\n┃ A ┃ B ┃\n┡━━━╇━━━┩\n│ 1 │ 2 │\n├───┼───┤\n│ 3 │ 4 │\n└───┴───┘\n",
@@ -497,12 +467,7 @@
       "env": null,
       "theme": null,
       "input": {
-        "items": [
-          "One",
-          "Two",
-          "Three",
-          "Four"
-        ]
+        "items": ["One", "Two", "Three", "Four"]
       },
       "expected": {
         "plain": "One Two Three Four\n",
@@ -521,12 +486,7 @@
       "theme": null,
       "input": {
         "text": "Padded",
-        "pad": [
-          1,
-          2,
-          1,
-          2
-        ]
+        "pad": [1, 2, 1, 2]
       },
       "expected": {
         "plain": "            \n  Padded    \n            \n",
