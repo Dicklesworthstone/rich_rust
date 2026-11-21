@@ -296,11 +296,7 @@ impl Traceback {
         }
 
         // Filter Traceback's own capture functions
-        if name.contains("Traceback::capture") || name.contains("Traceback::from_backtrace") {
-            return true;
-        }
-
-        false
+        name.contains("Traceback::capture") || name.contains("Traceback::from_backtrace")
     }
 
     /// Simplify/demangle a function name for display.

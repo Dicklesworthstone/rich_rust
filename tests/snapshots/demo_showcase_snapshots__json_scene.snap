@@ -77,6 +77,6 @@ Customize colors for different JSON elements:
   "name": "test"
 }
 
-Default theme: keys, strings, numbers, booleans, null
+Default theme: keys, strings, numbers, true/false, null
 
 Json automatically highlights keys, strings, numbers, booleans, and null values.

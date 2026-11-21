@@ -404,10 +404,21 @@ impl Syntax {
         let use_python_rich_theme = self.uses_python_rich_theme();
         let use_python_rich_rust = use_python_rich_theme && Self::is_rust_language(&self.language);
 
-        // Find the syntax definition
+        // Find the syntax definition (recognize common plain-text lexer aliases
+        // such as Python Rich/Pygments' `"text"` in addition to syntect tokens/extensions).
         let syntax = ps
             .find_syntax_by_token(&self.language)
             .or_else(|| ps.find_syntax_by_extension(&self.language))
+            .or_else(|| {
+                if matches!(
+                    self.language.to_ascii_lowercase().as_str(),
+                    "text" | "plaintext" | "plain" | "txt"
+                ) {
+                    Some(ps.find_syntax_plain_text())
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| SyntaxError::UnknownLanguage(self.language.clone()))?;
 
         // Get the theme. The Python-Rich compatibility theme name is an alias; use a built-in
@@ -1199,14 +1210,14 @@ mod tests {
     #[test]
     fn test_available_themes() {
         let themes = Syntax::available_themes();
-        assert!(!themes.is_empty());
+        assert_ne!(themes.len(), 0);
         assert!(themes.iter().any(|t| t.contains("base16")));
     }
 
     #[test]
     fn test_available_languages() {
         let langs = Syntax::available_languages();
-        assert!(!langs.is_empty());
+        assert_ne!(langs.len(), 0);
     }
 
     #[test]
@@ -1218,7 +1229,7 @@ mod tests {
         let result = syntax.render(None);
         assert!(result.is_ok());
         let segments = result.unwrap();
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
     }
 
     #[test]
@@ -1241,6 +1252,21 @@ mod tests {
         assert!(
             matches!(result, Err(SyntaxError::UnknownLanguage(ref lang)) if lang == "nonexistent_lang_xyz")
         );
+    }
+
+    #[test]
+    fn test_render_plain_text_aliases() {
+        for alias in ["text", "plaintext", "plain", "txt", "TEXT"] {
+            let syntax = Syntax::new("hello = 1\nworld = 2", alias);
+            let segments = syntax
+                .render(None)
+                .unwrap_or_else(|e| panic!("plain-text alias {alias:?} should render: {e}"));
+            let rendered: String = segments.iter().map(|s| s.text.as_ref()).collect();
+            assert!(
+                rendered.contains("hello = 1") && rendered.contains("world = 2"),
+                "alias {alias:?} lost content: {rendered:?}"
+            );
+        }
     }
 
     #[test]

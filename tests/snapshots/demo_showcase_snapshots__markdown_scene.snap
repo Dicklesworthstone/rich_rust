@@ -32,13 +32,14 @@ Bug Fixes
 Upgrade Instructions
 
 Update your deployment config:
-  [deployment]
-  version = "2.4.1"
-  strategy = "rolling"
+
+ [deployment]
+ version = "2.4.1"
+ strategy = "rolling"
 
 
 
-For more details, see the migration guide (https://docs.nebula.io/migrate).
+For more details, see the migration guide.
 
 
 Deployment Runbook (Excerpt)
@@ -62,20 +63,23 @@ Post in  #deployments :
 2. Execute Deployment
 
 Run the deployment command:
-  kubectl apply -f k8s/production/
-  kubectl rollout status deployment/nebula-api
+
+ kubectl apply -f k8s/production/
+ kubectl rollout status deployment/nebula-api
 
 
 
 3. Verify Health
 
 Check the health endpoint:
-  curl -s https://api.nebula.io/health | jq .
+
+ curl -s https://api.nebula.io/health | jq .
 
 
 
 Expected response:
-  {"status": "healthy", "version": "2.4.1"}
+
+ {"status": "healthy", "version": "2.4.1"}
 
 
 ────────────────────────────────────────────────────────────────────────────

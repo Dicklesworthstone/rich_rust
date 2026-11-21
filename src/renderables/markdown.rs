@@ -583,8 +583,8 @@ impl Markdown {
                                         .word_wrap(Some(max_width))
                                         .padding(1, 1);
 
-                                    // If the lexer name is unknown, fall back to plain text but keep the
-                                    // same layout/padding.
+                                    // If the lexer name is unknown, fall back to plain text while keeping the
+                                    // same layout/padding; never silently drop code block content.
                                     let mut syntax_segments: Vec<Segment<'static>> =
                                         if let Ok(segs) = syntax.render(Some(max_width)) {
                                             segs.into_iter().map(Segment::into_owned).collect()
@@ -593,12 +593,22 @@ impl Markdown {
                                                 Syntax::new(code_block_text.clone(), "text")
                                                     .word_wrap(Some(max_width))
                                                     .padding(1, 1);
-                                            fallback
-                                                .render(Some(max_width))
-                                                .unwrap_or_default()
-                                                .into_iter()
-                                                .map(Segment::into_owned)
-                                                .collect()
+                                            if let Ok(segs) = fallback.render(Some(max_width)) {
+                                                segs.into_iter().map(Segment::into_owned).collect()
+                                            } else {
+                                                code_block_text
+                                                    .lines()
+                                                    .flat_map(|line| {
+                                                        [
+                                                            Segment::new(
+                                                                format!("  {line}"),
+                                                                Some(self.code_block_style.clone()),
+                                                            ),
+                                                            Segment::new("\n", None),
+                                                        ]
+                                                    })
+                                                    .collect()
+                                            }
                                         };
 
                                     // Ensure blockquote/list indentation prefixes are applied per line,
@@ -999,7 +1009,7 @@ mod tests {
     fn test_render_heading() {
         let md = Markdown::new("# Title");
         let segments = md.render(80);
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains("Title"));
     }
@@ -1018,7 +1028,7 @@ mod tests {
     fn test_render_emphasis() {
         let md = Markdown::new("This is *italic* and **bold**.");
         let segments = md.render(80);
-        assert!(!segments.is_empty());
+        assert_ne!(segments.len(), 0);
         let text: String = segments.iter().map(|s| s.text.as_ref()).collect();
         assert!(text.contains("italic"));
         assert!(text.contains("bold"));

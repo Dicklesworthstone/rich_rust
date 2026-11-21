@@ -493,7 +493,7 @@ mod tracing_integration {
         fn test_event_visitor_default() {
             let visitor = EventVisitor::default();
             assert!(visitor.message.is_none());
-            assert!(visitor.fields.is_empty());
+            assert_eq!(visitor.fields.len(), 0);
         }
 
         #[test]

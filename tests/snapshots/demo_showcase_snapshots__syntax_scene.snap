@@ -31,48 +31,48 @@ Deployment Config (TOML)
 
 CI/CD Pipeline (YAML)
 
- 1 │ name: deploy-nebula
- 2 │ on:
- 3 │   push:
- 4 │     branches: [main]
- 5 │
- 6 │ jobs:
- 7 │   deploy:
- 8 │     runs-on: ubuntu-latest
- 9 │     steps:
-10 │       - uses: actions/checkout@v4
-11 │       - name: Build container
-12 │         run: docker build -t nebula-api .
-13 │       - name: Run tests
-14 │         run: cargo test --release
-15 │       - name: Deploy to production
-16 │         if: github.ref == 'refs/heads/main'
-17 │         run: |
-18 │           kubectl apply -f k8s/
-19 │           kubectl rollout status deployment/nebula-api
+   1 name: deploy-nebula
+   2 on:
+   3   push:
+   4     branches: [main]
+   5
+   6 jobs:
+   7   deploy:
+   8     runs-on: ubuntu-latest
+   9     steps:
+  10       - uses: actions/checkout@v4
+  11       - name: Build container
+  12         run: docker build -t nebula-api .
+  13       - name: Run tests
+  14         run: cargo test --release
+  15       - name: Deploy to production
+  16         if: github.ref == 'refs/heads/main'
+  17         run: |
+  18           kubectl apply -f k8s/
+  19           kubectl rollout status deployment/nebula-api
 
 Request Handler (Rust)
 
-42 │ /// Handle deployment requests
-43 │ async fn deploy_handler(
-44 │     State(ctx): State<AppContext>,
-45 │     Json(req): Json<DeployRequest>,
-46 │ ) -> Result<Json<DeployResponse>, ApiError> {
-47 │     // Validate the deployment config
-48 │     req.validate()?;
-49 │
-50 │     // Start the deployment
-51 │     let deployment = ctx.deployer
-52 │         .deploy(&req.service, &req.version)
-53 │         .await?;
-54 │
-55 │     // Return the deployment status
-56 │     Ok(Json(DeployResponse {
-57 │         status: "success".into(),
-58 │         deployment_id: deployment.id,
-59 │         timestamp: Utc::now(),
-60 │     }))
-61 │ }
+  42 /// Handle deployment requests
+  43 async fn deploy_handler(
+  44     State(ctx): State<AppContext>,
+  45     Json(req): Json<DeployRequest>,
+  46 ) -> Result<Json<DeployResponse>, ApiError> {
+  47     // Validate the deployment config
+  48     req.validate()?;
+  49
+  50     // Start the deployment
+  51     let deployment = ctx.deployer
+  52         .deploy(&req.service, &req.version)
+  53         .await?;
+  54
+  55     // Return the deployment status
+  56     Ok(Json(DeployResponse {
+  57         status: "success".into(),
+  58         deployment_id: deployment.id,
+  59         timestamp: Utc::now(),
+  60     }))
+  61 }
 Lines 42-60 of src/handlers/deploy.rs
 
 Theme Comparison

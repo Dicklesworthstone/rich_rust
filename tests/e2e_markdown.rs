@@ -1198,3 +1198,34 @@ fn test_md_hard_break() {
     assert!(text.contains("Line one"));
     assert!(text.contains("Line two"));
 }
+
+/// Regression test: fenced code blocks with unknown languages (e.g. `toml`) or
+/// explicit `text`/`plaintext` info strings must render their content rather than
+/// disappearing when the `syntax` feature is enabled.
+#[test]
+fn test_md_fenced_code_block_unknown_language_fallback() {
+    init_test_logging();
+
+    let source = "\
+```toml
+[deployment]
+version = \"2.4.1\"
+strategy = \"rolling\"
+```
+
+```text
+plain fallback line
+```
+";
+    let text = render_md_text(source, 80);
+    assert!(
+        text.contains("[deployment]")
+            && text.contains("version = \"2.4.1\"")
+            && text.contains("strategy = \"rolling\""),
+        "unknown-language fenced block (toml) must not be dropped: {text:?}"
+    );
+    assert!(
+        text.contains("plain fallback line"),
+        "text-language fenced block must render: {text:?}"
+    );
+}
