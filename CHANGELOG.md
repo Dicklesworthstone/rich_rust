@@ -6,23 +6,83 @@ Organized by capabilities, not raw diff order. Each version links to its
 GitHub Release (where one exists) and includes representative commit links
 (`https://github.com/Dicklesworthstone/rich_rust/commit/<hash>`).
 
-Tag types: v0.1.0 and v0.1.1 are annotated tags with release messages;
-v0.2.0 and v0.2.1 are lightweight tags. All four have corresponding
-GitHub Releases.
+Tag types: v0.1.0, v0.1.1, v0.2.3, and v0.2.4 are annotated tags with release
+messages; v0.2.0 and v0.2.1 are lightweight tags. All tagged releases have
+corresponding GitHub Releases (distribution is via crates.io).
 
 ---
 
 ## [Unreleased]
 
-Work merged to `main` after the v0.2.1 tag.
+---
 
-- Documentation: add cass (Cross-Agent Session Search) tool reference to AGENTS.md ([478c1be](https://github.com/Dicklesworthstone/rich_rust/commit/478c1be6bb701d583608057e1f1b882119fbaf56))
+## [0.2.4] -- 2026-11-21
+
+[GitHub Release](https://github.com/Dicklesworthstone/rich_rust/releases/tag/v0.2.4) (Latest) · annotated tag · crates.io library release
+
+Patch release fixing silent omission of unknown-language fenced code blocks in
+Markdown when syntax highlighting is enabled, resolving three security/unsound
+RustSec advisories via dependency upgrades, cleaning up all-features clippy
+lints, and switching `[profile.release]` to `opt-level = 3` for significantly
+faster rendering throughput.
+
+### Bug Fixes
+
+- **Markdown / Syntax fallback**: Recognize plain-text lexer aliases
+  (`"text"`, `"plaintext"`, `"plain"`, `"txt"`) in `Syntax::render` via
+  `syntect`'s plain-text syntax definition while preserving
+  `SyntaxError::UnknownLanguage` for unrecognized language names, and harden
+  `Markdown::render`'s unknown-language fenced code block fallback so fenced
+  blocks (such as `toml` or `text`) render with plain styling instead of being
+  silently dropped. Added unit and end-to-end regression tests.
+  ([7aef687](https://github.com/Dicklesworthstone/rich_rust/commit/7aef6871981edc373076b3176a7749a4e00b7610))
+- **All-features lints and snapshots**: Resolve `clippy::needless_bool` under
+  the `backtrace` feature and `clippy::assert_is_empty` in feature-gated unit
+  tests, and refresh `demo_showcase` snapshots to match current Python Rich
+  parity and restored TOML fenced code blocks.
+  ([7aef687](https://github.com/Dicklesworthstone/rich_rust/commit/7aef6871981edc373076b3176a7749a4e00b7610))
+
+### Performance
+
+- **Release profile**: Switch `[profile.release]` from `opt-level = "z"` to
+  `opt-level = 3` (retaining `lto = true`, `codegen-units = 1`,
+  `panic = "abort"`, `strip = true`). Verified across all 38 Criterion
+  benchmarks (38/38 improved, ~1.5x–1.9x geometric mean speedup; up to
+  3.6x–7.6x on 10 KB text wrapping/rendering) and the showcase demo
+  (-17.6% median wall time; +1.07 MiB stripped binary size).
+  ([52412f8](https://github.com/Dicklesworthstone/rich_rust/commit/52412f8b55aafde6d3bbd0f78502a57e07347eab))
+
+### Security and Dependencies
+
+- Bump `pulldown-cmark` to `0.13.6` (resolves `RUSTSEC-2026-0433` and
+  `RUSTSEC-2026-0414`) and update transitive `rustix` to `1.1.6` (resolves
+  `RUSTSEC-2026-0486`). `cargo audit` reports 0 vulnerabilities and 0 unsound
+  warnings.
+  ([52412f8](https://github.com/Dicklesworthstone/rich_rust/commit/52412f8b55aafde6d3bbd0f78502a57e07347eab))
+- Upgrade `fancy-regex` (`0.18` → `0.20.2`), `lru` (`0.18` → `0.19.1`, removing
+  `allocator-api2`), `serial_test` (`3.5` → `4.0.1`), `time` (`0.3.54` →
+  `0.3.55`), and compatible minor/patch dependencies (`backtrace`, `bitflags`,
+  `insta`, `log`, `proptest`, `regex`, `serde_json`, `smallvec`,
+  `unicode-width`).
+  ([52412f8](https://github.com/Dicklesworthstone/rich_rust/commit/52412f8b55aafde6d3bbd0f78502a57e07347eab))
+
+---
+
+## [0.2.3] -- 2026-08-19
+
+[GitHub Release](https://github.com/Dicklesworthstone/rich_rust/releases/tag/v0.2.3) · annotated tag (created 2026-08-25) · includes 0.2.2
+
+Maintenance releases updating dependencies (`lru` 0.16 → 0.18 collapsing dual
+`hashbrown` pins, `fancy-regex` 0.17 → 0.18, relaxing `time` bound after
+upstream coherence fix), relaxing byte-level parser assertions to
+`debug_assert_eq!`, and fixing nightly clippy lints in test assertions.
+([60ca9a0](https://github.com/Dicklesworthstone/rich_rust/commit/60ca9a06697b79378b6569b678405d3121194114))
 
 ---
 
 ## [0.2.1] -- 2026-02-22
 
-[GitHub Release](https://github.com/Dicklesworthstone/rich_rust/releases/tag/v0.2.1) (Latest) · lightweight tag · 9 commits since v0.2.0
+[GitHub Release](https://github.com/Dicklesworthstone/rich_rust/releases/tag/v0.2.1) · lightweight tag · 9 commits since v0.2.0
 
 Patch release that removes the nightly-only feature gate (enabling stable
 Rust edition 2024 builds), upgrades dependencies, fixes syntax
@@ -430,7 +490,9 @@ for beautiful terminal output. Approximately 11,800 lines of idiomatic,
 ---
 
 <!-- version comparison links -->
-[Unreleased]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.2.1...v0.2.3
 [0.2.1]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Dicklesworthstone/rich_rust/compare/v0.1.0...v0.1.1
