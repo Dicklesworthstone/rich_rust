@@ -52,3 +52,8 @@ sync_base.jsonl
 # br concurrent-writer locks (`.write.lock`, `.br-db-write-*.lock`)
 *.lock
 .write.lock
+.br-wal-index-*/
+.br_recovery/
+*.tmp
+*.bad_*
+*.rebuild_*
